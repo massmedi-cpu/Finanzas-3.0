@@ -87,6 +87,13 @@ function lineItems(value: unknown) {
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
+    // The document identity must be unique: URLSearchParams.get() silently
+    // ignores a second, conflicting ID, and arbitrary query keys are unsafe
+    // for an authenticated private evidence history.
+    if (url.searchParams.getAll("id").length !== 1
+      || [...url.searchParams.keys()].some((key) => key !== "id")) {
+      throw new Error("invalid_document_review_query");
+    }
     const id = uuid(url.searchParams.get("id"), "document_id");
     const result = await callPersistenceGateway("document.ocr_history", { id });
     return Response.json(result, { headers: HEADERS });
