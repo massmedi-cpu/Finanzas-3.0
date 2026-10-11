@@ -130,6 +130,7 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
     const warnings: string[] = [];
     let nativePageCount = 0;
     let visualOcrPageCount = 0;
+    let visualOcrAttempted = 0;
 
     try {
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -157,6 +158,7 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
             continue;
           }
 
+          visualOcrAttempted += 1;
           // A PDF with only selectable boilerplate may otherwise bypass OCR
           // on a fully scanned invoice. Keep the original native words if
           // the visual pass fails or produces less usable content.
@@ -208,13 +210,16 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
       }
       if (pdf.numPages > MAX_PAGES) warnings.push("pdf_page_limit_reached");
 
+      // A fully scanned PDF whose visual OCR produced no words is NOT a PDF
+      // with usable native text. Preserve that distinction when displaying
+      // diagnostics; the page warnings still require human review.
       let source: OcrSource = "pdf_text";
       if (visualOcrPageCount && nativePageCount) source = "hybrid";
-      else if (visualOcrPageCount) source = "pdf_ocr";
+      else if (visualOcrPageCount || (visualOcrAttempted > 0 && nativePageCount === 0)) source = "pdf_ocr";
 
       return {
         source,
-        extractor: visualOcrPageCount ? EXTRACTOR_HYBRID : EXTRACTOR_NATIVE,
+        extractor: visualOcrAttempted > 0 ? EXTRACTOR_HYBRID : EXTRACTOR_NATIVE,
         pages,
         warnings,
       };
