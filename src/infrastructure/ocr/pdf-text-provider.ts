@@ -107,6 +107,17 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
     return mimeType.toLowerCase() === "application/pdf";
   }
 
+  // Keep native extraction isolatable per page. PDF.js can fail to parse a
+  // damaged text stream even when the page can still be rasterized. One bad
+  // text stream must not erase other pages or suppress visual recovery.
+  protected async readNativeItems(
+    page: { getTextContent(): Promise<{ items: unknown[] }> },
+    _pageNumber: number,
+  ): Promise<unknown[]> {
+    const content = await page.getTextContent();
+    return content.items;
+  }
+
   async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }) {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const task = pdfjs.getDocument({
@@ -125,12 +136,20 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
         const page = await pdf.getPage(pageNumber);
         try {
           const viewport = page.getViewport({ scale: 1 });
-          const content = await page.getTextContent();
-          const nativeWords = wordsFromContent(
-            content.items as unknown[],
-            { width: viewport.width, height: viewport.height, transform: [...viewport.transform] },
-            pdfjs.Util.transform,
-          );
+          let nativeWords: OcrWord[] = [];
+          try {
+            const items = await this.readNativeItems(page, pageNumber);
+            nativeWords = wordsFromContent(
+              items,
+              { width: viewport.width, height: viewport.height, transform: [...viewport.transform] },
+              pdfjs.Util.transform,
+            );
+          } catch {
+            // The text stream is not proof that the raster is unusable.
+            // Preserve the page number, mark native extraction uncertain,
+            // and attempt the same bounded visual OCR used for scanned pages.
+            warnings.push(`pdf_page_native_text_failed:${pageNumber}`);
+          }
 
           if (!pdfNativeTextNeedsVisualOcr(nativeWords)) {
             nativePageCount += 1;
