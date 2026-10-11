@@ -116,6 +116,44 @@ type DocumentList = {
   principles: DocumentPrinciples;
 };
 
+// Trust neither HTTP 200 nor TypeScript assertions as proof that this is a
+// valid personal document list. Refuse to render malformed/partial responses
+// as a genuine empty archive, and do not discard the previous list.
+function validatedDocumentList(payload: unknown): DocumentList {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("document_list_invalid");
+  const row = payload as Partial<DocumentList>;
+  if (![1, 2, 3].includes(row.contractVersion as number)
+    || !Array.isArray(row.items)
+    || !Number.isSafeInteger(row.total) || (row.total ?? -1) < 0
+    || !Number.isSafeInteger(row.limit) || (row.limit ?? -1) < 1 || (row.limit ?? 101) > 100
+    || !Number.isSafeInteger(row.offset) || (row.offset ?? -1) < 0
+    || !row.principles || row.principles.bankSource !== "read_only"
+    || row.principles.getHasSideEffects !== false
+    || row.principles.suggestionsPersisted !== false
+    || row.principles.associationsRequireConfirmation !== true
+    || row.items.length > (row.limit ?? 0)
+    || row.items.length > (row.total ?? 0)) {
+    throw new Error("document_list_invalid");
+  }
+  const ids = new Set<string>();
+  for (const raw of row.items) {
+    if (!raw || typeof raw !== "object") throw new Error("document_list_invalid");
+    const item = raw as Partial<DocumentItem>;
+    if (typeof item.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(item.id)
+      || ids.has(item.id)
+      || !["ticket", "invoice", "other"].includes(item.type ?? "")
+      || !["imported", "pending_review", "confirmed", "archived"].includes(item.status ?? "")
+      || typeof item.originalFileName !== "string" || !item.originalFileName.trim()
+      || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
+      || (item.documentDate !== null && typeof item.documentDate !== "string")
+      || !Number.isSafeInteger(item.associationCount) || (item.associationCount ?? -1) < 0) {
+      throw new Error("document_list_invalid");
+    }
+    ids.add(item.id);
+  }
+  return row as DocumentList;
+}
+
 type Candidate = {
   transactionId: string;
   date: string;
@@ -290,6 +328,7 @@ function friendlyError(error: unknown) {
     document_request_failed: "No se ha podido completar la consulta documental. Comprueba tu conexión y pulsa Reintentar lista.",
     document_filter_limit: "La búsqueda abarca demasiados documentos. Reduce los filtros antes de volver a cargarla.",
     document_filter_incomplete: "La lista recibida está incompleta. No mostramos un resultado parcial como si fuera el definitivo; reintenta la carga.",
+    document_list_invalid: "El servidor ha devuelto una lista documental incompleta o incompatible. No se mostrará como si estuviera vacía; reintenta la consulta.",
   };
   return labels[code] ?? "No se pudo completar la operación documental.";
 }
@@ -396,7 +435,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!silent) setLoadingList(true);
     setError(null);
     try {
-      const first = await getDocumentJson(url) as DocumentList;
+      const first = validatedDocumentList(await getDocumentJson(url));
       let data = first;
       if (unassociatedOnly && first.contractVersion < 3) {
         const all = [...first.items];
@@ -405,7 +444,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           if (all.length >= 10_000) throw new Error("document_filter_limit");
           parsed.searchParams.set("limit", "100");
           parsed.searchParams.set("offset", String(all.length));
-          const next = await getDocumentJson(parsed.toString()) as DocumentList;
+          const next = validatedDocumentList(await getDocumentJson(parsed.toString()));
           if (!next.items.length) throw new Error("document_filter_incomplete");
           all.push(...next.items);
         }
