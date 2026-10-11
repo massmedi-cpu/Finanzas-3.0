@@ -8,7 +8,7 @@ const documentId = "93000000-0000-4000-8000-000000000093";
 const transactionId = "94000000-0000-4000-8000-000000000094";
 const uploadedDocumentId = "98000000-0000-4000-8000-000000000097";
 const signedUploadPath = "uploads/97000000-0000-4000-8000-000000000097/" + uploadedDocumentId + ".pdf";
-const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/${signedUploadPath}`;
+const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/${signedUploadPath}?token=token`;
 
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
 const item = {
@@ -120,7 +120,7 @@ async function mockDocumentApi(
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     if (method === "POST" && body.action === "upload_sign") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640 }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
       detail = {
@@ -1489,4 +1489,63 @@ test("REC-DOC-072 · una nueva subida no descarta los metadatos pendientes de ot
   await dialog.getByRole("button", { name: "Descartar cambios" }).click();
   await expect(page.getByRole("heading", { name: "segunda-factura.pdf" })).toBeVisible();
   expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+});
+
+
+test("REC-DOC-073 · token firmado alterado bloquea el envío antes de tocar Storage", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const uploaded: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/storage/v1/object/upload/sign/")) uploaded.push(request.url());
+  });
+  await page.route("**/api/documents", async (route) => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action !== "upload_sign") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        bucket: "financial-app-documents", path: signedUploadPath,
+        token: "expected-token", signedUrl: signedUploadUrl,
+        originalFileName: body.originalFileName, mimeType: body.mimeType,
+        sizeBytes: body.sizeBytes, maxFileBytes: 15728640,
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "privada.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no pertenece al almacenamiento privado autorizado");
+  expect(uploaded).toHaveLength(0);
+  expect(writes.some((write) => write.action === "upload_finalize")).toBe(false);
+});
+
+test("REC-DOC-074 · firma válida para otro archivo no puede reemplazar el original elegido", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signedUploads = 0;
+  await page.route("**/api/documents", async (route) => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action !== "upload_sign") return route.fallback();
+    signedUploads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        bucket: "financial-app-documents", path: signedUploadPath,
+        token: "token", signedUrl: signedUploadUrl,
+        originalFileName: "otro-documento.pdf", mimeType: body.mimeType,
+        sizeBytes: body.sizeBytes, maxFileBytes: 15728640,
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "factura-correcta.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no pertenece al almacenamiento privado autorizado");
+  expect(signedUploads).toBe(1);
+  expect(writes.some((write) => write.action === "upload_finalize")).toBe(false);
 });
