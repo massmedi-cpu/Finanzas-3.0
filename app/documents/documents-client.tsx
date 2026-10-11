@@ -15,6 +15,7 @@ import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
+import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
@@ -408,6 +409,8 @@ function friendlyError(error: unknown) {
     invalid_document_date: "La fecha del documento no es válida.",
     invalid_document_total: "El importe del documento no es válido.",
     document_upload_not_found: "La subida no llegó a completarse en el almacenamiento privado.",
+    document_upload_unsafe_url: "El servidor ha devuelto un destino de subida que no pertenece al almacenamiento privado autorizado. No se ha enviado el archivo.",
+    document_upload_unverified: "No se ha podido comprobar la identidad del documento guardado. Comprueba la lista antes de volver a subir el archivo.",
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
@@ -499,6 +502,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
+  const uploadInFlight = useRef(false);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
@@ -727,6 +731,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
+    if (busy || uploadInFlight.current) return;
     if (!file) {
       setError("Selecciona un PDF, una imagen o haz una foto.");
       return;
@@ -735,6 +740,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setError("El archivo debe ocupar entre 1 byte y 15 MB.");
       return;
     }
+    uploadInFlight.current = true;
     setBusy("upload");
     setError(null);
     setNotice(null);
@@ -745,10 +751,24 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         body: JSON.stringify({ action: "upload_sign", type: uploadType, originalFileName: file.name, mimeType: file.type, sizeBytes: file.size }),
       }));
 
+      // Never send an original invoice or ticket to an arbitrary URL returned
+      // by a malformed/upstream response. Upload only to the configured,
+      // private Supabase Storage bucket via its signed upload endpoint.
+      if (sign?.bucket !== "financial-app-documents"
+        || typeof sign.path !== "string" || !/^uploads\\/[a-z0-9-]+\\/[a-z0-9-]+\\.[a-z0-9]+$/i.test(sign.path)
+        || typeof sign.signedUrl !== "string") throw new Error("document_upload_unsafe_url");
+      let uploadUrl: URL;
+      try { uploadUrl = new URL(sign.signedUrl); }
+      catch { throw new Error("document_upload_unsafe_url"); }
+      if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== SUPABASE_ORIGIN
+        || !uploadUrl.pathname.startsWith("/storage/v1/object/upload/sign/financial-app-documents/")
+        || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
+        throw new Error("document_upload_unsafe_url");
+      }
       const body = new FormData();
       body.append("cacheControl", "3600");
       body.append("", file);
-      const upload = await fetch(sign.signedUrl, { method: "PUT", headers: { "x-upsert": "false" }, body });
+      const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
       if (!upload.ok) throw new Error("document_upload_not_found");
 
       const finalized = await readJson(await fetch("/api/documents", {
@@ -757,18 +777,46 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         body: JSON.stringify({ action: "upload_finalize", type: uploadType, originalFileName: file.name, mimeType: file.type, path: sign.path }),
       })) as DocumentDetail;
       const id = finalized?.document?.id;
-      if (!id) throw new Error("document_upload_not_found");
+      if (typeof id !== "string" || !DOCUMENT_UUID.test(id)
+        || ![1, 2, 3].includes(finalized?.contractVersion)
+        || finalized.document.storageProvider !== "supabase"
+        || finalized.document.originalFileName !== file.name
+        || finalized.document.type !== uploadType
+        || !finalized.principles || finalized.principles.bankSource !== "read_only"
+        || finalized.principles.getHasSideEffects !== false
+        || finalized.principles.suggestionsPersisted !== false) {
+        throw new Error("document_upload_unverified");
+      }
       setFile(null);
       for (const inputId of ["document-file", "document-camera"]) {
         const input = document.getElementById(inputId) as HTMLInputElement | null;
         if (input) input.value = "";
       }
-      selectDocument(id);
-      await loadList();
-      setNotice("Original guardado de forma privada e intacta. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+      // Reset filters before reloading so an ordinary new upload isn't
+      // invisible in Pruebas, search, status or a stale pagination page.
+      setScope("ordinary");
+      setStatusFilter("");
+      setUnassociatedOnly(false);
+      setQuery("");
+      setDebouncedQuery("");
+      setOffset(0);
+      await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+      if (metadataDirtyRef.current) {
+        // Uploading another file must never discard an unrelated unsaved
+        // metadata draft. Let the existing save/discard dialog arbitrate.
+        setPendingExit({ type: "document", id });
+        setNotice("Original guardado. Antes de abrirlo, decide qué hacer con los metadatos pendientes del documento anterior.");
+      } else {
+        // selectDocument() rejects while busy === "upload": advance directly
+        // after verification and let the detail effect fetch the new original.
+        selectedIdRef.current = id;
+        setSelectedId(id);
+        setNotice("Original guardado de forma privada. Abriendo su ficha; el OCR sólo se ejecutará cuando lo solicites.");
+      }
     } catch (caught) {
       setError(friendlyError(caught));
     } finally {
+      uploadInFlight.current = false;
       setBusy(null);
     }
   }
