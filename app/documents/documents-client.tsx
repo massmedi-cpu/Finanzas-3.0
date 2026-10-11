@@ -542,6 +542,7 @@ function friendlyError(error: unknown) {
     document_upload_not_found: "La subida no llegó a completarse en el almacenamiento privado.",
     document_upload_unsafe_url: "El servidor ha devuelto un destino de subida que no pertenece al almacenamiento privado autorizado. No se ha enviado el archivo.",
     document_upload_unverified: "No se ha podido comprobar la identidad del documento guardado. Recupera la misma ruta antes de volver a subir el archivo.",
+    document_upload_integrity_unsupported: "El servidor documental aún no admite la verificación segura SHA-256. El original no se ha enviado; es necesario actualizar el backend de la candidata antes de permitir subidas.",
     document_upload_recovery_unavailable: "El navegador no permite guardar de forma segura la referencia de recuperación. No se ha enviado el original. Comprueba los permisos de almacenamiento de esta pestaña antes de reintentarlo.",
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
@@ -1057,6 +1058,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // Never send an original invoice or ticket to an arbitrary URL returned
       // by a malformed/upstream response. Upload only to the configured,
       // private Supabase Storage bucket via its signed upload endpoint.
+      if (sign?.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256") {
+        throw new Error("document_upload_integrity_unsupported");
+      }
       if (sign?.bucket !== "financial-app-documents"
         || typeof sign.path !== "string" || !/^uploads[/][0-9a-f-]+[/][0-9a-f-]+[.](?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
         || typeof sign.signedUrl !== "string"
