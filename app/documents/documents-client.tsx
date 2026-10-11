@@ -23,10 +23,81 @@ type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
 type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string };
 type PendingPrivateUpload = PendingFinalize & {
-  signedUrl: string;
-  file: File;
+  signedUrl: string | null;
+  file: File | null;
   storagePutConfirmed: boolean;
 };
+
+const PENDING_PRIVATE_UPLOAD_KEY = "financial-app:documents:pending-private-upload:v1";
+
+// Only minimal metadata is journaled per tab. Original bytes, signed URLs
+// and Storage tokens NEVER enter web storage. After refresh we can safely
+// re-finalize the exact same object, but cannot silently upload a second one.
+function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivateUpload | null } {
+  let raw: string | null;
+  try {
+    raw = sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+  } catch {
+    // When storage cannot be inspected, fail closed; no new upload can be
+    // proven safe against a previously interrupted write in this tab.
+    return { present: true, pending: null };
+  }
+  if (raw === null) return { present: false, pending: null };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.version !== 1 || value.action !== "upload_finalize"
+      || !["ticket", "invoice", "other"].includes(value.type)
+      || typeof value.originalFileName !== "string"
+      || !value.originalFileName.trim() || value.originalFileName.length > 500
+      || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(value.mimeType)
+      || typeof value.path !== "string"
+      || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(value.path)
+      || typeof value.storagePutConfirmed !== "boolean") {
+      return { present: true, pending: null };
+    }
+    return {
+      present: true,
+      pending: {
+        action: "upload_finalize",
+        type: value.type as DocumentType,
+        originalFileName: value.originalFileName,
+        mimeType: value.mimeType,
+        path: value.path,
+        storagePutConfirmed: value.storagePutConfirmed,
+        signedUrl: null,
+        file: null,
+      },
+    };
+  } catch {
+    // Never discard malformed recovery data and enable a new signed upload.
+    return { present: true, pending: null };
+  }
+}
+
+function writePrivateUploadJournal(pending: PendingPrivateUpload) {
+  // Writing must succeed BEFORE bytes leave the browser; otherwise a reload
+  // could lose the only deduplication/recovery handle for an uncertain PUT.
+  try {
+    sessionStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, JSON.stringify({
+      version: 1, action: pending.action, type: pending.type,
+      originalFileName: pending.originalFileName, mimeType: pending.mimeType,
+      path: pending.path, storagePutConfirmed: pending.storagePutConfirmed,
+    }));
+  } catch {
+    throw new Error("document_upload_recovery_unavailable");
+  }
+}
+
+function clearPrivateUploadJournal() {
+  try {
+    sessionStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
+    if (sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null) {
+      throw new Error("document_upload_recovery_unavailable");
+    }
+  } catch {
+    throw new Error("document_upload_recovery_unavailable");
+  }
+}
 type StorageProvider = "supabase" | "google_drive";
 type MetadataEditor = {
   type: DocumentType;
@@ -434,7 +505,8 @@ function friendlyError(error: unknown) {
     invalid_document_total: "El importe del documento no es válido.",
     document_upload_not_found: "La subida no llegó a completarse en el almacenamiento privado.",
     document_upload_unsafe_url: "El servidor ha devuelto un destino de subida que no pertenece al almacenamiento privado autorizado. No se ha enviado el archivo.",
-    document_upload_unverified: "No se ha podido comprobar la identidad del documento guardado. Comprueba la lista antes de volver a subir el archivo.",
+    document_upload_unverified: "No se ha podido comprobar la identidad del documento guardado. Recupera la misma ruta antes de volver a subir el archivo.",
+    document_upload_recovery_unavailable: "El navegador no permite guardar de forma segura la referencia de recuperación. No se ha enviado el original. Comprueba los permisos de almacenamiento de esta pestaña antes de reintentarlo.",
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
@@ -528,9 +600,19 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
   const uploadInFlight = useRef(false);
-  // A failed response does not prove finalize failed. Preserve the original
-  // signed object path; repeating finalize is idempotent on (provider, key).
+  // An in-memory File and its signed URL are used only in the current tab
+  // lifecycle. The minimal journal survives reloads to prevent duplicates.
   const unverifiedFinalizeRef = useRef<PendingPrivateUpload | null>(null);
+
+  useEffect(() => {
+    const recovery = readPrivateUploadJournal();
+    if (!recovery.present) return;
+    unverifiedFinalizeRef.current = recovery.pending;
+    setUploadUnverified(true);
+    setNotice(recovery.pending
+      ? "Hay un envío anterior sin confirmar en esta pestaña. Recupera el mismo original; no hace falta seleccionar otro archivo."
+      : "La referencia de recuperación no es legible. Se bloquean nuevos envíos para proteger tus documentos.");
+  }, []);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
@@ -817,7 +899,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!uploadUnverified || busy || uploadInFlight.current) return;
     const pending = unverifiedFinalizeRef.current;
     if (!pending) {
-      setError("La sesión no conserva la referencia de la subida anterior. No repitas el envío: comprueba el archivo de documentos.");
+      setError("La referencia de recuperación es ilegible. No vuelvas a enviar el original; comprueba los documentos y solicita una revisión antes de generar otra subida.");
       return;
     }
     // A list of the first 50 documents cannot prove an uncertain finalize
@@ -828,11 +910,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setError(null);
     setNotice(null);
     try {
-      if (!pending.storagePutConfirmed) {
-        // A broken PUT response may have committed the bytes or not. Reuse
-        // only the already-validated, same-object signature and the same File.
-        // A conflict (object already present) is inconclusive, so in both
-        // cases the server's finalize readback must establish the truth.
+      if (!pending.storagePutConfirmed && pending.file && pending.signedUrl) {
+        // Within the original page lifetime, re-try the same object only.
+        // After a reload these sensitive values are not persisted: instead,
+        // ask the server to verify whether the prior PUT reached Storage.
         try {
           const form = new FormData();
           form.append("cacheControl", "3600");
@@ -840,9 +921,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           const put = await fetch(pending.signedUrl, {
             method: "PUT", headers: { "x-upsert": "false" }, body: form,
           });
-          if (put.ok) pending.storagePutConfirmed = true;
+          if (put.ok) {
+            pending.storagePutConfirmed = true;
+            writePrivateUploadJournal(pending);
+          }
         } catch {
-          // Do not infer that the private object is missing from a network error.
+          // Network uncertainty does not establish that the object is absent.
         }
       }
       const result = await readJson(await fetch("/api/documents", {
@@ -855,6 +939,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         }),
       }));
       const confirmed = validatedFinalizedUpload(result, pending);
+      clearPrivateUploadJournal();
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
@@ -879,7 +964,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
     } catch {
       setUploadUnverified(true);
-      setError("No se ha podido confirmar la misma ruta privada. Sigue bloqueada para evitar copias duplicadas; puedes reintentar su recuperación sin crear otro archivo.");
+      setError(pending.file
+        ? "No se ha podido confirmar la misma ruta privada. Sigue bloqueada para evitar copias duplicadas; puedes reintentar su recuperación sin crear otro archivo."
+        : "El servidor aún no ha confirmado el archivo de la sesión anterior. La referencia privada sigue protegida; no se creará otra subida. Si no llegó al almacenamiento, hará falta resolver la incidencia sin duplicar el original.");
     } finally {
       uploadInFlight.current = false;
       setBusy(null);
@@ -889,7 +976,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
     if (busy || uploadInFlight.current) return;
-    if (uploadUnverified) {
+    // Read the journal synchronously as well: no event can sign a new path
+    // before the mount effect restores a pending upload on hydration.
+    if (uploadUnverified || readPrivateUploadJournal().present) {
+      setUploadUnverified(true);
       setError("La subida anterior no está confirmada. Recupera primero esa misma ruta privada antes de intentar otra.");
       return;
     }
@@ -944,12 +1034,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const body = new FormData();
       body.append("cacheControl", "3600");
       body.append("", file);
-      // Set BEFORE fetch: a network interruption does not establish that the
-      // object was not created. Subsequent recovery always uses this path.
+      // Journal before sending any byte: a reload after PUT started cannot
+      // bypass recovery. A browser refusing session storage must not upload.
+      writePrivateUploadJournal(attemptedPrivateUpload);
       privatePutAttempted = true;
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
       if (!upload.ok) throw new Error("document_upload_unverified");
       attemptedPrivateUpload.storagePutConfirmed = true;
+      writePrivateUploadJournal(attemptedPrivateUpload);
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -960,6 +1052,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         }),
       }));
       const id = validatedFinalizedUpload(finalized, attemptedPrivateUpload).document.id;
+      clearPrivateUploadJournal();
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
@@ -1341,7 +1434,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
             {uploadUnverified ? (
               <div role="status" data-testid="document-upload-unverified">
-                <p>Subida sin confirmar. Recupera el mismo archivo y su ruta privada; no selecciones ni envíes una copia nueva.</p>
+                <p>Subida sin confirmar. La ruta privada se conserva en esta pestaña incluso al recargar; no selecciones ni envíes una copia nueva.</p>
                 <button className={styles.secondaryButton} type="button" disabled={busy !== null}
                   onClick={() => void verifyUncertainUpload()}>
                   {busy === "upload-verify" ? "Recuperando subida…" : "Recuperar el mismo original"}
