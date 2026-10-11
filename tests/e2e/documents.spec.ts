@@ -1725,7 +1725,7 @@ test("REC-DOC-074 · finalize incierto impide una segunda subida privada automá
   await expect(submit).toBeDisabled();
   expect(signCalls).toBe(1);
   expect(finalizeCalls).toBe(1);
-  await page.getByRole("button", { name: "He comprobado la lista; permitir nuevo envío" }).click();
+  await page.getByRole("button", { name: "Comprobar lista antes de permitir otro envío" }).click();
   await expect(submit).toBeEnabled();
   await submit.click();
   await expect(page.getByRole("heading", { name: "pago-sin-confirmar.pdf" })).toBeVisible();
