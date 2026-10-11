@@ -126,7 +126,7 @@ async function mockDocumentApi(
     }
     if (method === "POST" && body.action === "upload_sign") {
       signedSizeBytes = body.sizeBytes;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640, hashVerificationVersion: 1, hashAlgorithm: "sha256" }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640, hashVerificationVersion: 1, hashAlgorithm: "sha256", contentAddressVersion: 1 }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
       detail = {
