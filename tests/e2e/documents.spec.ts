@@ -1934,6 +1934,189 @@ test("REC-DOC-085 · ni PUT ni finalize comprobables mantienen bloqueada la copi
   expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
 });
 
+const pendingPrivateUploadKey = "financial-app:documents:pending-private-upload:v1";
+
+test("REC-DOC-086 · recargar tras finalize 503 conserva la ruta sin guardar tokens ni originales", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signatures = 0;
+  let finalizes = 0;
+  let puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signatures += 1;
+    if (body.action === "upload_finalize" && ++finalizes === 1) {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "contrato-solo-en-memoria.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 BYTES-ORIGINALES-SENSIBLES"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  const journal = await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey);
+  expect(journal).toBeTruthy();
+  expect(JSON.parse(journal!)).toMatchObject({
+    version: 1, action: "upload_finalize",
+    originalFileName: "contrato-solo-en-memoria.pdf",
+    path: signedUploadPath, storagePutConfirmed: true,
+  });
+  expect(journal).not.toContain("BYTES-ORIGINALES-SENSIBLES");
+  expect(journal).not.toContain("signedUrl");
+  expect(journal).not.toContain("token");
+  await page.reload();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "contrato-solo-en-memoria.pdf" })).toBeVisible();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+  expect(signatures).toBe(1);
+  expect(finalizes).toBe(2);
+  expect(puts).toBe(1);
+});
+
+test("REC-DOC-087 · PUT incierto tras recarga consulta solo la ruta existente sin nueva firma ni PUT", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signs = 0;
+  let puts = 0;
+  let finalize = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 503, body: "conexión interrumpida" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const action = route.request().postDataJSON()?.action;
+    if (action === "upload_sign") signs += 1;
+    if (action === "upload_finalize") finalize += 1;
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "archivo-almacenado-sin-respuesta.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 almacenado"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  expect((await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), pendingPrivateUploadKey)).storagePutConfirmed).toBe(false);
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "archivo-almacenado-sin-respuesta.pdf" })).toBeVisible();
+  expect(signs).toBe(1);
+  expect(puts).toBe(1);
+  expect(finalize).toBe(1);
+  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+});
+
+test("REC-DOC-088 · PUT no encontrado tras recarga mantiene bloqueo hasta constatar el mismo objeto", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  let missing = true;
+  let signs = 0;
+  let puts = 0;
+  let finalizes = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 503, body: "sin certeza" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signs += 1;
+    if (body.action === "upload_finalize") {
+      finalizes += 1;
+      if (missing) {
+        await route.fulfill({ status: 404, json: { error: "document_upload_not_found" } });
+        return;
+      }
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "factura-pendiente-servidor.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 pendiente"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("aún no ha confirmado");
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).not.toBeNull();
+  missing = false;
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "factura-pendiente-servidor.pdf" })).toBeVisible();
+  expect(signs).toBe(1);
+  expect(puts).toBe(1);
+  expect(finalizes).toBe(2);
+});
+
+test("REC-DOC-089 · una referencia malformada bloquea cargas nuevas tras recarga", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.addInitScript(key => sessionStorage.setItem(key, '{"version":1,"path":"invalido"}'), pendingPrivateUploadKey);
+  await page.goto("/documents");
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("ilegible");
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
+});
+
+test("REC-DOC-090 · sin almacenamiento de sesión se rechaza el PUT antes de enviar bytes", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.addInitScript(key => {
+    const originalSet = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(name, value) {
+      if (name === key) throw new DOMException("Access denied", "SecurityError");
+      return originalSet.call(this, name, value);
+    };
+  }, pendingPrivateUploadKey);
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "privado-no-journal.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 no-envio"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no permite guardar de forma segura");
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(1);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+  expect(puts).toBe(0);
+});
+
+test("REC-DOC-091 · una subida confirmada elimina el journal antes de recargar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "original-validado.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 valido"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByRole("heading", { name: "original-validado.pdf" })).toBeVisible();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+  await page.reload();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(1);
+});
+
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
