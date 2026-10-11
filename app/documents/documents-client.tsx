@@ -38,16 +38,23 @@ async function fileSha256(file: File) {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-// Only minimal metadata is journaled per tab. Original bytes, signed URLs
-// and Storage tokens NEVER enter web storage. After refresh we can safely
-// re-finalize the exact same object, but cannot silently upload a second one.
+// A minimal same-origin recovery handle remains after closing/reopening a
+// tab. No document bytes, signed URLs, tokens or auth credentials are stored.
+// The old session-only journal is migrated without changing its private path.
+// The server still enforces workspace ownership for every finalize request.
 function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivateUpload | null } {
   let raw: string | null;
   try {
-    raw = sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+    const durable = localStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+    const previousSession = sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+    if (durable === null && previousSession !== null) {
+      // Migrate the legacy in-tab handle before accepting a new upload.
+      localStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, previousSession);
+    }
+    raw = durable ?? previousSession;
   } catch {
-    // When storage cannot be inspected, fail closed; no new upload can be
-    // proven safe against a previously interrupted write in this tab.
+    // No durable recovery means a page or browser restart could lose an
+    // uncertain write. Fail closed rather than sign a duplicate object.
     return { present: true, pending: null };
   }
   if (raw === null) return { present: false, pending: null };
@@ -91,13 +98,16 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
   // Writing must succeed BEFORE bytes leave the browser; otherwise a reload
   // could lose the only deduplication/recovery handle for an uncertain PUT.
   try {
-    sessionStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, JSON.stringify({
+    const value = JSON.stringify({
       version: 1, action: pending.action, type: pending.type,
       originalFileName: pending.originalFileName, mimeType: pending.mimeType,
       path: pending.path, sizeBytes: pending.sizeBytes,
       expectedSha256: pending.expectedSha256,
       storagePutConfirmed: pending.storagePutConfirmed,
-    }));
+    });
+    // Write shared durable storage FIRST; a failure prevents the PUT.
+    localStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, value);
+    sessionStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, value);
   } catch {
     throw new Error("document_upload_recovery_unavailable");
   }
@@ -105,8 +115,12 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
 
 function clearPrivateUploadJournal() {
   try {
+    // Never permit another upload until both the old and durable handles
+    // are cleared after verified server-side registration.
+    localStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
     sessionStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
-    if (sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null) {
+    if (localStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null
+      || sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null) {
       throw new Error("document_upload_recovery_unavailable");
     }
   } catch {
@@ -632,7 +646,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     unverifiedFinalizeRef.current = recovery.pending;
     setUploadUnverified(true);
     setNotice(recovery.pending
-      ? "Hay un envío anterior sin confirmar en esta pestaña. Recupera el mismo original; no hace falta seleccionar otro archivo."
+      ? "Hay un envío privado sin confirmar en este navegador. Puedes recuperar la misma ruta aunque hayas cerrado la pestaña."
       : "La referencia de recuperación no es legible. Se bloquean nuevos envíos para proteger tus documentos.");
   }, []);
   const associationMutationInFlight = useRef(false);
@@ -1009,7 +1023,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (busy || uploadInFlight.current) return;
     // Read the journal synchronously as well: no event can sign a new path
     // before the mount effect restores a pending upload on hydration.
-    if (uploadUnverified || readPrivateUploadJournal().present) {
+    const existingUpload = readPrivateUploadJournal();
+    if (uploadUnverified || existingUpload.present) {
+      unverifiedFinalizeRef.current ??= existingUpload.pending;
       setUploadUnverified(true);
       setError("La subida anterior no está confirmada. Recupera primero esa misma ruta privada antes de intentar otra.");
       return;
@@ -1066,8 +1082,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const body = new FormData();
       body.append("cacheControl", "3600");
       body.append("", file);
-      // Journal before sending any byte: a reload after PUT started cannot
-      // bypass recovery. A browser refusing session storage must not upload.
+      // A different tab may have started while this tab awaited a signed URL.
+      // Never overwrite its pending path with a second upload.
+      const otherUpload = readPrivateUploadJournal();
+      if (otherUpload.present) {
+        unverifiedFinalizeRef.current = otherUpload.pending;
+        setUploadUnverified(true);
+        throw new Error("document_upload_pending");
+      }
+      // Durable journal before sending any byte, including across tab close.
       writePrivateUploadJournal(attemptedPrivateUpload);
       privatePutAttempted = true;
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
@@ -1467,7 +1490,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
             {uploadUnverified ? (
               <div role="status" data-testid="document-upload-unverified">
-                <p>Subida sin confirmar. La ruta privada se conserva en esta pestaña incluso al recargar; no selecciones ni envíes una copia nueva.</p>
+                <p>Subida sin confirmar. La referencia de recuperación se conserva en este navegador tras cerrar la pestaña; no selecciones ni envíes una copia nueva.</p>
                 <button className={styles.secondaryButton} type="button" disabled={busy !== null}
                   onClick={() => void verifyUncertainUpload()}>
                   {busy === "upload-verify" ? "Recuperando subida…" : "Recuperar el mismo original"}
