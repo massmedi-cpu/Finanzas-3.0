@@ -717,7 +717,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
       const base = tableRows.reduce((sum, row) => sum + (row.baseCents ?? 0), 0);
       const taxes = tableRows.reduce((sum, row) => sum + (row.taxCents ?? 0), 0);
       if (Number.isSafeInteger(base) && Number.isSafeInteger(taxes)
-        && Math.abs(base + taxes - totalCents.value) <= 1) {
+        && base + taxes === totalCents.value) {
         const evidence = tableRows.flatMap((row) => row.evidence);
         const confidence = tableRows.reduce<number | null>((minimum, row) =>
           row.confidence === null ? minimum : minimum === null ? row.confidence : Math.min(minimum, row.confidence), null);
