@@ -638,6 +638,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
   const uploadInFlight = useRef(false);
+  // Close the microtask gap between a click and acquisition of Web Locks.
+  const uploadLockPendingRef = useRef(false);
   // An in-memory File and its signed URL are used only in the current tab
   // lifecycle. The minimal journal survives reloads to prevent duplicates.
   const unverifiedFinalizeRef = useRef<PendingPrivateUpload | null>(null);
@@ -881,14 +883,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // on full page unload with either a write or unresolved journal.
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const recoveryPresent = readPrivateUploadJournal().present;
-      if (bypassUnloadOnceRef.current && !uploadInFlight.current && !recoveryPresent) return;
-      if (!metadataDirtyRef.current && !uploadInFlight.current && !recoveryPresent) return;
+      if (bypassUnloadOnceRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
+      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
       event.preventDefault();
       event.returnValue = "";
     };
     const protectInternalNavigation = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (!metadataDirtyRef.current && !uploadInFlight.current) return;
+      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const anchor = target.closest("a[href]");
@@ -900,7 +902,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
       event.preventDefault();
       event.stopPropagation();
-      if (uploadInFlight.current) {
+      if (uploadLockPendingRef.current || uploadInFlight.current) {
         setError("Hay un envío de documento en curso. Termina o recupera esa misma subida antes de cambiar de página; así no se pierde el original ni se crea una copia.");
         return;
       }
@@ -1041,6 +1043,35 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
+    if (busy || uploadInFlight.current || uploadLockPendingRef.current) return;
+    // localStorage is not atomic across browser tabs: two tabs can both read
+    // an empty journal and sign independent private objects before either
+    // writes. Acquire an exclusive same-origin Web Lock BEFORE reading it.
+    // Without that primitive we do not risk sending a second original.
+    if (!navigator.locks?.request) {
+      setError("Este navegador no dispone del bloqueo seguro entre pestañas. No se ha enviado el archivo; utiliza un navegador actualizado para evitar duplicados.");
+      return;
+    }
+    uploadLockPendingRef.current = true;
+    try {
+      await navigator.locks.request(PENDING_PRIVATE_UPLOAD_KEY, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          setError("Otra pestaña está gestionando un documento. Termina ese envío antes de iniciar otro; no se ha firmado ni subido este archivo.");
+          return;
+        }
+        // Holding the lock until the private PUT and verified finalize finish
+        // makes the initial journal read/sign/write critical section atomic
+        // with respect to all other cooperating tabs of this origin.
+        await uploadDocumentExclusive();
+      });
+    } catch {
+      setError("No se ha podido asegurar el bloqueo entre pestañas. No se iniciará un nuevo envío hasta que puedas comprobar el original anterior.");
+    } finally {
+      uploadLockPendingRef.current = false;
+    }
+  }
+
+  async function uploadDocumentExclusive() {
     if (busy || uploadInFlight.current) return;
     // Read the journal synchronously as well: no event can sign a new path
     // before the mount effect restores a pending upload on hydration.
