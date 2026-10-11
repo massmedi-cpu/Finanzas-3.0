@@ -432,21 +432,33 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
         `;
         if (registered.length) {
           const old = registered[0];
-          if (!matchesPrivateDocumentReplay({
+          const exactReplay = matchesPrivateDocumentReplay({
             type: old.type, originalFileName: old.original_file_name,
             mimeType: old.mime_type, sizeBytes: old.size_bytes === null ? null : Number(old.size_bytes),
-          }, { type, originalFileName, mimeType: mime, sizeBytes: actualSize })) {
-            // An HTTP 200 may only certify exactly the SAME registered file
-            // and classification. A mismatch is not a reason to mutate it.
-            return { conflict: true, result: null };
+          }, { type, originalFileName, mimeType: mime, sizeBytes: actualSize });
+          // Two devices can sign the SAME SHA-derived path simultaneously
+          // before either finishes storing it. If their chosen filenames or
+          // classification differ, the SAME verified bytes still refer to
+          // the ONE original. Preserve the first canonical metadata instead
+          // of overwriting it or blocking recovery forever.
+          const sameContentDifferentLabel = !exactReplay
+            && expectedSha256 !== null
+            && path === `uploads/${workspaceId}/${privateDocumentContentId(expectedSha256)}.${MIME_EXTENSIONS.get(mime)}`
+            && old.mime_type === mime
+            && Number(old.size_bytes) === actualSize;
+          if (!exactReplay && !sameContentDifferentLabel) {
+            return { conflict: true, contentDuplicate: false, result: null };
           }
           const unchanged = await tx`select financial_app.document_detail(${old.id}::uuid) as result`;
-          return { conflict: false, result: unchanged[0]?.result ?? null };
+          return {
+            conflict: false, contentDuplicate: sameContentDifferentLabel,
+            result: unchanged[0]?.result ?? null,
+          };
         }
         const inserted = await tx`
           select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
         `;
-        return { conflict: false, result: inserted[0]?.result ?? null };
+        return { conflict: false, contentDuplicate: false, result: inserted[0]?.result ?? null };
       });
       if (result.conflict) return json({ error: "document_upload_replay_conflict" }, 409);
       if (!result.result || typeof result.result !== "object" || Array.isArray(result.result)) {
@@ -456,6 +468,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
       // attestation, not trust a generic HTTP 200 with plausible metadata.
       return json({
         ...result.result,
+        ...(result.contentDuplicate ? { contentDuplicate: true } : {}),
         ...(expectedSha256 === null ? {} : {
           uploadIntegrity: { sha256: expectedSha256, sizeBytes: actualSize, verified: true },
         }),
