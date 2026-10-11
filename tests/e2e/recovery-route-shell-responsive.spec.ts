@@ -143,12 +143,18 @@ test("REC-HOME-021 · cobertura completa requiere inicio, final y sincronizació
   expect(resolveHomeBankCoverage({ ...range, freshness: withoutSync }).state).toBe("partial");
 });
 
-for (const verifiedBank of [false, true]) {
-  test(`REC-HOME-022 · Inicio ${verifiedBank ? "muestra" : "oculta"} importes con fuente ${verifiedBank ? "verificada" : "no disponible"}`, async ({ page }) => {
+for (const bankingState of ["available", "unavailable", "conflict"] as const) {
+  const verifiedBank = bankingState === "available";
+  const bankUnavailable = bankingState === "unavailable";
+  test(`${bankingState === "conflict" ? "REC-HOME-023" : "REC-HOME-022"} · Inicio ${bankingState === "available" ? "muestra importes con fuente verificada" : bankingState === "conflict" ? "bloquea importes con fechas bancarias discrepantes" : "oculta importes con fuente no disponible"}`, async ({ page }) => {
     const today = new Intl.DateTimeFormat("en-CA", {
       timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit",
     }).format(new Date());
     const monthStart = today.slice(0, 7) + "-01";
+    const previousDate = new Date(`${today}T12:00:00Z`);
+    previousDate.setUTCDate(previousDate.getUTCDate() - 1);
+    const lastActivityDate = bankingState === "conflict"
+      ? previousDate.toISOString().slice(0, 10) : today;
     const financial = {
       period: {
         dateFrom: monthStart, dateTo: today, incomeCents: 5000,
@@ -164,7 +170,7 @@ for (const verifiedBank of [false, true]) {
     };
     const transactions = { totalCount: 1, rows: [{
       id: "aa000000-0000-4000-8000-000000000001",
-      bankDate: today, amountCents: 5000,
+      bankDate: lastActivityDate, amountCents: 5000,
       account: { id: "aa000000-0000-4000-8000-000000000002", name: "Cuenta sintética" },
       concept: { effective: "Movimiento de prueba" },
       category: { effectiveId: null, effectiveName: null },
@@ -185,7 +191,7 @@ for (const verifiedBank of [false, true]) {
     } }));
     await page.route("**/api/analysis/source-freshness", route => route.fulfill({
       json: {
-        available: verifiedBank,
+        available: !bankUnavailable,
         earliestMovementDate: monthStart, latestMovementDate: today,
         sync: completeHomeSync,
       },
@@ -199,7 +205,7 @@ for (const verifiedBank of [false, true]) {
       };
       return route.fulfill({ json: {
         contractVersion: 1, scope, asOfDate: today,
-        dataThroughDate: scope === "activity" ? today : null,
+        dataThroughDate: scope === "activity" ? lastActivityDate : null,
         generatedAt: new Date().toISOString(),
         requestedSources: scope === "critical" ? ["financial"] : scope === "activity" ? ["transactions"] : ["monthly", "budgets", "forecast"],
         failedSources: scope === "secondary" ? ["budgets", "forecast"] : [],
@@ -216,14 +222,20 @@ for (const verifiedBank of [false, true]) {
       await expect(page.getByText("El balance del mes está en negativo")).toBeVisible();
       await expect(evolution.locator('button[data-month-coverage="covered"]')).toHaveCount(1);
     } else {
-      await expect(card).toContainText("Fuente bancaria no disponible");
+      await expect(card).toContainText(bankUnavailable
+        ? "Fuente bancaria no disponible" : "Fechas bancarias discordantes");
       await expect(card.locator("strong")).toHaveText("—");
       await expect(card).not.toContainText("-100,00");
-      await expect(bankHealth).toContainText("Fuente bancaria no disponible");
+      await expect(bankHealth).toContainText(bankUnavailable
+        ? "Fuente bancaria no disponible" : "Fechas bancarias discordantes");
       await expect(bankHealth).not.toContainText("Datos bancarios actualizados");
       await expect(page.getByText("El balance del mes está en negativo")).toHaveCount(0);
       await expect(evolution.locator('button[data-month-coverage="unknown"]')).toHaveCount(1);
       await expect(evolution.getByRole("button", { name: /sin cobertura bancaria confirmada/ })).toHaveCount(1);
+      if (!bankUnavailable) {
+        await expect(page.getByText("La fecha bancaria no coincide con los movimientos")).toBeVisible();
+        await expect(page.getByRole("region", { name: "Resumen inteligente" })).not.toContainText("Datos hasta");
+      }
     }
   });
 }
