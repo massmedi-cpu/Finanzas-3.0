@@ -243,6 +243,37 @@ type TransactionSearch = {
   totalCount: number;
 };
 
+// Never display an untrusted HTTP payload as selectable bank transactions.
+// An invalid account/category shape could otherwise render a misleading
+// association target or crash the document detail.
+function validatedTransactionSearch(value: unknown): TransactionSearch {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("document_transactions_invalid");
+  const result = value as Partial<TransactionSearch>;
+  if (!Array.isArray(result.rows) || result.rows.length > 20 || !Number.isSafeInteger(result.totalCount)
+    || (result.totalCount ?? -1) < 0 || result.rows.length > (result.totalCount ?? -1)) {
+    throw new Error("document_transactions_invalid");
+  }
+  const seen = new Set<string>();
+  for (const raw of result.rows) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("document_transactions_invalid");
+    const row = raw as Partial<TransactionRow>;
+    if (typeof row.id !== "string" || !DOCUMENT_UUID.test(row.id) || seen.has(row.id)
+      || typeof row.bankDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(row.bankDate)
+      || !Number.isSafeInteger(row.amountCents)
+      || !row.account || typeof row.account.id !== "string" || !DOCUMENT_UUID.test(row.account.id)
+      || typeof row.account.name !== "string"
+      || !row.concept || typeof row.concept.effective !== "string"
+      || !row.category || (row.category.effectiveId !== null
+        && (typeof row.category.effectiveId !== "string" || !DOCUMENT_UUID.test(row.category.effectiveId)))
+      || (row.category.effectiveName !== null && typeof row.category.effectiveName !== "string")
+      || !row.kind || typeof row.kind.effective !== "string") {
+      throw new Error("document_transactions_invalid");
+    }
+    seen.add(row.id);
+  }
+  return result as TransactionSearch;
+}
+
 const DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1UCUZSmOWfGM5VyvhDcx7ExeBw3LS872t";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const DOCUMENT_READ_TIMEOUT_MS = 20_000;
@@ -361,6 +392,7 @@ function friendlyError(error: unknown) {
     document_open_failed: "No se ha podido abrir el original. Reintenta desde la ficha del documento.",
     document_open_unsafe_url: "Se ha rechazado un enlace de archivo no seguro. El original no se ha abierto.",
     document_suggestions_invalid: "Las sugerencias no corresponden a este documento o no cumplen los requisitos de seguridad. No se ha asociado ningún movimiento.",
+    document_transactions_invalid: "La búsqueda de movimientos ha devuelto datos incompletos. No se puede asociar un resultado sin verificar; vuelve a buscar.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -426,6 +458,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
+  const [transactionResultQuery, setTransactionResultQuery] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
@@ -456,6 +489,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
+  const associationMutationInFlight = useRef(false);
+  const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
@@ -546,6 +581,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!silent) {
       setCandidates(null);
       setTransactions(null);
+      setTransactionResultQuery(null);
+      manualSearchSequence.current += 1;
     }
     try {
       const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
@@ -900,7 +937,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function associate(transactionId: string, method: "manual" | "suggested") {
-    if (!detail) return;
+    if (!detail || busy || associationMutationInFlight.current || (method === "suggested" && metadataDirtyRef.current)) return;
+    associationMutationInFlight.current = true;
     setBusy(`associate-${transactionId}`);
     setError(null);
     try {
@@ -916,11 +954,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setTransactions(null);
       setNotice(method === "suggested" ? "Sugerencia confirmada explícitamente." : "Movimiento asociado manualmente.");
     } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+    finally { associationMutationInFlight.current = false; setBusy(null); }
   }
 
   async function unassociate(transactionId: string) {
-    if (!detail) return;
+    if (!detail || busy || associationMutationInFlight.current) return;
+    associationMutationInFlight.current = true;
     setBusy(`unassociate-${transactionId}`);
     setError(null);
     try {
@@ -934,28 +973,37 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
       setNotice("Asociación eliminada. El movimiento bancario no se ha modificado.");
     } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+    finally { associationMutationInFlight.current = false; setBusy(null); }
   }
 
   async function searchTransactions(event: FormEvent) {
     event.preventDefault();
     const term = manualQuery.trim();
-    if (!term) {
-      setTransactions(null);
-      return;
-    }
+    const documentId = selectedIdRef.current;
+    const sequence = ++manualSearchSequence.current;
+    setTransactions(null);
+    setTransactionResultQuery(null);
+    if (!term || !documentId || busy) return;
     setBusy("manual-search");
     setError(null);
     try {
-      const data = await readJson(await fetch(`/api/transactions?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" })) as TransactionSearch;
+      const data = validatedTransactionSearch(
+        await readJson(await fetch(`/api/transactions?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" })),
+      );
+      if (sequence !== manualSearchSequence.current || selectedIdRef.current !== documentId) return;
       setTransactions(data);
-    } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+      setTransactionResultQuery(term);
+    } catch (caught) {
+      if (sequence === manualSearchSequence.current && selectedIdRef.current === documentId) setError(friendlyError(caught));
+    } finally {
+      if (sequence === manualSearchSequence.current) setBusy(null);
+    }
   }
 
   // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
   const currentList = query === debouncedQuery && loadedListKey === listUrl ? list : null;
   const listPending = query !== debouncedQuery || loadingList || (!currentList && !listLoadFailed);
+  const visibleTransactions = transactionResultQuery === manualQuery.trim() ? transactions : null;
 
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0] ?? null;
@@ -1212,13 +1260,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Sugerencias del motor financiero</h3><p>Se calculan en servidor por fecha e importe y nunca se guardan hasta que confirmes.</p></div><button className={styles.secondaryButton} onClick={() => void findCandidates()} disabled={busy !== null}>Buscar sugerencias</button></div>
-                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p>{candidate.categoryId ? <CategoryIdentity categoryId={candidate.categoryId} name={null} /> : null}<small>{formatMoneyCents(candidate.amountCents)} · diferencia {formatMoneyCents(candidate.amountDifferenceCents)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
+                  {metadataDirty && candidates?.ready && candidates.candidates.length ? <p className={styles.muted}>Guarda los cambios del documento antes de confirmar una sugerencia calculada con sus datos anteriores.</p> : null}
+                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p>{candidate.categoryId ? <CategoryIdentity categoryId={candidate.categoryId} name={null} /> : null}<small>{formatMoneyCents(candidate.amountCents)} · diferencia {formatMoneyCents(candidate.amountDifferenceCents)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null || metadataDirty}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
                 </section>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Asociación manual</h3><p>Busca por concepto en los movimientos efectivos.</p></div></div>
                   <form className={styles.manualSearch} onSubmit={searchTransactions}><label>Buscar movimiento<input value={manualQuery} maxLength={200} onChange={(event) => setManualQuery(event.target.value)} placeholder="Ej. comunidad, seguro, supermercado" /></label><button className={styles.secondaryButton} type="submit" disabled={busy === "manual-search"}>Buscar</button></form>
-                  {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
+                  {visibleTransactions ? visibleTransactions.rows.length ? <div className={styles.candidateList}>{visibleTransactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
                 <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR persistente, revisable y trazable</span></div>
