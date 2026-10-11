@@ -2635,6 +2635,100 @@ test("REC-DOC-109 · una respuesta tardía no puede borrar la referencia de OTRO
   expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(1);
 });
 
+test("REC-DOC-114 · original idéntico de otro dispositivo no vuelve a subir ni finalizar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signCalls = 0, puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.route("**/api/documents", async route => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action === "upload_sign") {
+      signCalls += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          alreadyRegistered: true, documentId, type: "invoice",
+          originalFileName: "factura-demo.pdf", mimeType: body.mimeType,
+          sizeBytes: body.sizeBytes, path: signedUploadPath,
+          expectedSha256: body.expectedSha256,
+          contentAddressVersion: 1, hashVerificationVersion: 1, hashAlgorithm: "sha256",
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "misma-factura-otro-equipo.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 same original"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByText("Este archivo ya estaba guardado.", { exact: false })).toBeVisible();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(signCalls).toBe(1);
+  expect(puts).toBe(0);
+  expect(writes.filter(row => row.action === "upload_finalize")).toHaveLength(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+});
+
+test("REC-DOC-115 · PUT 409 nunca se da por confirmado hasta que el servidor verifica SHA-256", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let puts = 0, signs = 0, finalizes = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 409, body: "Duplicate" });
+  });
+  await page.route("**/api/documents", async route => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action === "upload_sign") signs += 1;
+    if (body?.action === "upload_finalize") {
+      finalizes += 1;
+      if (finalizes === 1) {
+        await route.fulfill({ status: 409, json: { error: "document_upload_hash_mismatch" } });
+        return;
+      }
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "concurrencia.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 valid unique document"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  expect(puts).toBe(1);
+  expect(signs).toBe(1);
+  expect(finalizes).toBe(1);
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "concurrencia.pdf" })).toBeVisible();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(signs).toBe(1);
+  expect(finalizes).toBe(2);
+  expect(puts).toBe(2); // recovery still uses the original same signed route
+});
+
+test("REC-DOC-116 · API rechaza SHA incorrecto antes de solicitar una ruta privada", async () => {
+  for (const expectedSha256 of ["wrong", "A".repeat(64), "0".repeat(65), 4]) {
+    const response = await postDocumentAction(new Request("https://test.local/api/documents", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "upload_sign", type: "invoice",
+        originalFileName: "documento.pdf", mimeType: "application/pdf",
+        sizeBytes: 21, expectedSha256,
+      }),
+    }));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect((await response.json()).error).toBe("invalid_request");
+  }
+});
+
 test("REC-DOC-100 · si localStorage rechaza persistencia no se inicia un PUT privado", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
