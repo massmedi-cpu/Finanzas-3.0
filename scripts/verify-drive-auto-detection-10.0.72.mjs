@@ -34,6 +34,7 @@ assert.match(route, /driveSource:\s*"read_only"/);
 assert.match(route, /document\.drive_batch/);
 assert.match(route, /process\.env\.VERCEL_ENV === "preview"/);
 assert.match(route, /preview_drive_sync_read_only/);
+assert.match(route, /gateway_identity_unavailable/);
 
 assert.match(client, /useEffect/);
 assert.match(client, /\/api\/documents\/drive-sync/);
