@@ -942,3 +942,26 @@ test("REC-DOC-051 · Preview informa que Drive es solo lectura y no ofrece reint
   expect(attempts).toBe(1);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-052 · un rechazo OIDC del gateway no se presenta como sesión de usuario caducada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("id")) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed", code: "gateway_identity_unavailable" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  const warning = page.getByTestId("documents-alert");
+  await expect(warning).toContainText(/servidor no ha podido acreditar su identidad/i);
+  await expect(warning).toContainText(/no es un problema de tu contraseña/i);
+  await expect(warning).not.toContainText(/sesión necesita renovarse/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  expect(writes).toEqual([]);
+});
