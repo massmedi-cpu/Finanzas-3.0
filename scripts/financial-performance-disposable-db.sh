@@ -53,6 +53,10 @@ psql_db -f supabase/tests/financial_movements_ap1_ap2_readback_disposable.sql
 psql_db -f supabase/tests/financial_movements_ap1_ap2_clear_disposable.sql >/dev/null
 psql_db -f supabase/tests/financial_movements_ap1_ap2_clear_readback_disposable.sql
 
+# AP1: verify that repeated registrations cannot rewrite a private original.
+# No production or service-key access: the synthetic workspace rolls back.
+psql_db -f supabase/tests/ap1_private_document_original_immutable.sql
+
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
