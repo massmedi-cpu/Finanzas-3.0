@@ -527,7 +527,7 @@ async function recognizeMonetaryColumns(
     for (const rectangle of numericColumnRectangles(baseWords, isolation, metadata)) {
       const recognition = await withTimeout(
         worker.recognize(
-          Buffer.from(bytes),
+          bytes,
           { rotateRadians: 0, rectangle },
           { text: true, tsv: true },
         ),
@@ -572,7 +572,7 @@ async function recognizeCandidate(
     : { rotateRadians: rotationRadians };
   if (rectangle) options.rectangle = rectangle;
   const recognition = await withTimeout(
-    worker.recognize(Buffer.from(bytes), options, ocrRecognitionOutputFlags(autoRotate)),
+    worker.recognize(bytes, options, ocrRecognitionOutputFlags(autoRotate)),
     OCR_TIMEOUT_MS,
     "recognize",
   );
@@ -636,19 +636,23 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
       throw new Error("ocr_image_dimensions_too_large");
     }
 
+    // One defensive snapshot of the image for the whole extraction. A receipt
+    // can require several orientations and cropped monetary-column reads:
+    // avoid allocating another full image buffer for every OCR pass.
+    const imageBuffer = Buffer.from(input.bytes);
     try {
       const selected = await exclusive(async () => {
         const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "worker");
         try {
-          const initial = await recognizeCandidate(worker, input.bytes, metadata, 0, true);
+          const initial = await recognizeCandidate(worker, imageBuffer, metadata, 0, true);
           let best = initial;
           if (ocrNeedsRotationFallback(initial.words, metadata)) {
             for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
-              const candidate = await recognizeCandidate(worker, input.bytes, metadata, rotationRadians, false);
+              const candidate = await recognizeCandidate(worker, imageBuffer, metadata, rotationRadians, false);
               if (candidate.score > best.score) best = candidate;
             }
           }
-          return await refineBackgroundContamination(worker, input.bytes, metadata, best);
+          return await refineBackgroundContamination(worker, imageBuffer, metadata, best);
         } finally {
           // Release Tesseract before this queue slot is handed to the next request.
           await terminateOwnedWorker(worker);
