@@ -775,3 +775,47 @@ test("AUD-E2E-DOC-001 · cambiar de documento protege y descarta únicamente el 
   await expect(page.getByLabel("Emisor")).toHaveValue("Proveedor Demo");
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-045 · un error de persistencia deja reintentar lista sin inventar documentos ni escribir", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let failFirst = true;
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id") && failFirst) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/problema de persistencia/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
+  failFirst = false;
+  await page.getByRole("button", { name: "Reintentar lista" }).click();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toBeVisible();
+  await expect(page.getByTestId("documents-alert")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-046 · la carga sin sesión distingue 401 sin JSON de un archivo vacío", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("id")) {
+      await route.fulfill({ status: 401, contentType: "text/plain", body: "" });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/sesión necesita renovarse/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
