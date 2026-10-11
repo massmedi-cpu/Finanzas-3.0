@@ -97,7 +97,11 @@ async function renderPagePng(
 }
 
 export class PdfTextOcrProvider implements DocumentOcrProvider {
-  private readonly imageOcr = new TesseractImageOcrProvider();
+  // Injection is intentionally limited to the visual extractor: a failing
+  // scanned page can be exercised without disabling the real PDF.js parser.
+  constructor(
+    private readonly imageOcr: Pick<DocumentOcrProvider, "extract"> = new TesseractImageOcrProvider(),
+  ) {}
 
   supports(mimeType: string) {
     return mimeType.toLowerCase() === "application/pdf";
@@ -165,11 +169,19 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
               warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
             }
             for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
-          } catch (error) {
-            if (!nativeWords.length) throw error;
-            nativePageCount += 1;
-            pages.push({ pageNumber, words: nativeWords });
-            warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+          } catch {
+            // Failure of one visual page must not discard the native content
+            // already recovered from other pages. Never fabricate a word or
+            // call a failed OCR pass successful: mark the page explicitly for
+            // human inspection and preserve its sequential page number.
+            if (!nativeWords.length) {
+              pages.push({ pageNumber, words: [] });
+              warnings.push(`pdf_page_visual_ocr_failed:${pageNumber}`);
+            } else {
+              nativePageCount += 1;
+              pages.push({ pageNumber, words: nativeWords });
+              warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+            }
           }
         } finally {
           try { page.cleanup(); } catch { /* best effort */ }
