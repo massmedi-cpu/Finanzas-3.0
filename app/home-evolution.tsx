@@ -187,12 +187,16 @@ export default function HomeEvolution({
   }), [dateTo, activityLatestDate, rows, sourceFreshness]);
   // Scale only from observable bars. Values from an unobserved month must not
   // compress every real month into an unreadable strip.
+  const hasObservedScale = coveredRows.some((row) => periodHasObservedData({
+    state: row.coverage, latestMovementDate, throughDate: latestMovementDate,
+  }));
   const observedScale = useMemo(() => {
     const observed = coveredRows.filter((row) => row.coverage === "covered" || row.coverage === "partial");
+    // No raw unverified monthly amount may influence chart range or labels.
     return observed.length > 0
       ? Math.max(1, ...observed.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)]))
-      : maxValue;
-  }, [coveredRows, maxValue]);
+      : 1;
+  }, [coveredRows]);
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -303,6 +307,7 @@ export default function HomeEvolution({
           <FinancialBarChart
             rows={coveredRows}
             maxValue={observedScale}
+            hasObservedScale={hasObservedScale}
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
