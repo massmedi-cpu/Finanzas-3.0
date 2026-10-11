@@ -811,7 +811,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         // after verification and let the detail effect fetch the new original.
         selectedIdRef.current = id;
         setSelectedId(id);
-        setNotice("Original guardado de forma privada. Abriendo su ficha; el OCR sólo se ejecutará cuando lo solicites.");
+        setNotice("Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
       }
     } catch (caught) {
       setError(friendlyError(caught));
