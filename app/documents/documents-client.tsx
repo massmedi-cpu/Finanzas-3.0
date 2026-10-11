@@ -545,7 +545,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         throw new Error("document_list_invalid");
       }
       let data = first;
-      if (unassociatedOnly && first.contractVersion < 3) {
+      if (requested.searchParams.get("unassociated") === "true" && first.contractVersion < 3) {
         // Legacy responses do not filter unassociated documents server-side.
         // Always inventory from offset zero: starting at the requested page
         // silently skipped earlier records and duplicated later ones.
@@ -588,7 +588,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         // When the owner explicitly requests archived documents, do not
         // remove them merely because the backend uses an older contract.
         const filtered = all.filter((item) => item.associationCount === 0
-          && (statusFilter === "archived" || item.status !== "archived"));
+          && (requested.searchParams.get("status") === "archived" || item.status !== "archived"));
         // Keep the requested page and its 50-row limit. Returning the entire
         // archive as a single page defeated navigation and mobile rendering.
         data = {
@@ -625,7 +625,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     } finally {
       if (sequence === listSequence.current) setLoadingList(false);
     }
-  }, [listUrl, unassociatedOnly, statusFilter]);
+  }, [listUrl]);
 
   const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
