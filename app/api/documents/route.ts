@@ -172,12 +172,12 @@ export async function GET(request: Request) {
         const result = await callPersistenceGateway("document.open", { id });
         return Response.json(result, { headers: HEADERS });
       }
-      if (mode) throw new Error("invalid_document_mode");
+      if (mode !== null) throw new Error("invalid_document_mode");
       const result = await callPersistenceGateway("document.detail", { id });
       return Response.json(result, { headers: HEADERS });
     }
 
-    if (mode) throw new Error("invalid_document_mode");
+    if (mode !== null) throw new Error("invalid_document_mode");
     const status = statusValue(searchParams.get("status"), true);
     const query = nullableText(searchParams.get("q"), "invalid_document_query", 200);
     const limitRaw = searchParams.get("limit");
