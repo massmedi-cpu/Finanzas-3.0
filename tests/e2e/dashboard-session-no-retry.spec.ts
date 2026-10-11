@@ -45,5 +45,9 @@ test("REC-PERF-041 · Inicio no multiplica solicitudes bancarias ante sesión no
   expect(aggregate.sort()).toEqual(["activity", "critical", "secondary"]);
   expect(legacy, "Una sesión ausente no justifica 5 consultas redundantes").toEqual([]);
   await expect(page.getByRole("region", { name: "Resumen financiero principal" })).toBeVisible();
+  await expect(page.getByText("Sesión necesaria para consultar tus finanzas")).toBeVisible();
+  await expect(page.getByText("No se han alterado tus movimientos.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login");
+  await expect(page.getByRole("button", { name: "Actualizar datos" })).toHaveCount(0);
   await expect(page.getByText("Presupuesto dentro del límite")).toHaveCount(0);
 });
