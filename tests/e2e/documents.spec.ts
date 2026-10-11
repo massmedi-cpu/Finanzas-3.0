@@ -2459,6 +2459,43 @@ test("REC-DOC-099 · otra pestaña detecta la subida pendiente sin firmar un seg
   await second.close();
 });
 
+test("REC-DOC-104 · la pestaña abierta refleja la recuperación privada iniciada y resuelta en otra pestaña", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  // The observer is already mounted before the owner starts its upload.
+  await page.goto("/documents");
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  const owner = await page.context().newPage();
+  await mockDocumentApi(owner, []);
+  let firstFinalize = true;
+  await owner.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize" && firstFinalize) {
+      firstFinalize = false;
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await owner.goto("/documents");
+  await owner.getByLabel("Galería o archivo").setInputFiles({
+    name: "aviso-a-otra-pestana.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 original en otra pestana"),
+  });
+  await owner.getByRole("button", { name: "Guardar original" }).click();
+  await expect(owner.getByTestId("document-upload-unverified")).toBeVisible();
+  // Other already-mounted tabs must notify and disable BEFORE a new submit.
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(page.getByLabel("Galería o archivo")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  await owner.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(owner.getByRole("heading", { name: "aviso-a-otra-pestana.pdf" })).toBeVisible();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  await expect(page.getByLabel("Galería o archivo")).toBeEnabled();
+  await owner.close();
+});
+
 test("REC-DOC-100 · si localStorage rechaza persistencia no se inicia un PUT privado", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
