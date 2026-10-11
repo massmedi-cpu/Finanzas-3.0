@@ -225,6 +225,27 @@ test("document API rejects invalid inputs before persistence", async ({ request 
   await expect(invalidAssociation.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_document_association_method" });
 });
 
+test("REC-OCR-058 · historial OCR privado rechaza IDs duplicados y parámetros ajenos", async ({ request }) => {
+  const malformed = [
+    `/api/documents/ocr-review?id=${documentId}&id=${unknownDocumentId}`,
+    `/api/documents/ocr-review?id=${documentId}&scope=all`,
+    "/api/documents/ocr-review",
+  ];
+  for (const url of malformed) {
+    const response = await request.get(url);
+    expect(response.status(), url).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_request",
+      code: "invalid_document_review_query",
+    });
+  }
+  const invalidId = await request.get("/api/documents/ocr-review?id=not-a-uuid");
+  expect(invalidId.status()).toBe(400);
+  await expect(invalidId.json()).resolves.toEqual({
+    error: "invalid_request", code: "invalid_document_id",
+  });
+});
+
 test("REC-DOC-055 · parámetros duplicados o vacíos se rechazan antes de consultar documentos privados", async ({ request }) => {
   const cases: Array<[string, string]> = [
     ["/api/documents?scope=ordinary&scope=tests", "invalid_document_query_duplicate"],
