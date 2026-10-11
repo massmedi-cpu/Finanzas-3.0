@@ -136,7 +136,6 @@ export default function HomeEvolution({
   rows,
   dateFrom,
   dateTo,
-  maxValue,
   valuesVisible,
   formatMoney,
   formatMonth,
@@ -149,7 +148,6 @@ export default function HomeEvolution({
   rows: FinancialBarPoint[];
   dateFrom: string;
   dateTo: string;
-  maxValue: number;
   valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
