@@ -158,6 +158,10 @@ for (const verifiedBank of [false, true]) {
       },
       balances: { asOfDate: today, activeBalanceCents: 0, accounts: [] },
     };
+    const monthly = {
+      dateFrom: monthStart, dateTo: today,
+      rows: [{ monthStart, incomeCents: 5000, expenseCents: 15000, operatingNetCents: -10000 }],
+    };
     const transactions = { totalCount: 1, rows: [{
       id: "aa000000-0000-4000-8000-000000000001",
       bankDate: today, amountCents: 5000,
@@ -190,7 +194,7 @@ for (const verifiedBank of [false, true]) {
       const scope = new URL(route.request().url()).searchParams.get("scope");
       const data = {
         financial: scope === "critical" ? financial : null,
-        monthly: null, budgets: null, forecast: null,
+        monthly: scope === "secondary" ? monthly : null, budgets: null, forecast: null,
         transactions: scope === "activity" ? transactions : null,
       };
       return route.fulfill({ json: {
@@ -198,17 +202,19 @@ for (const verifiedBank of [false, true]) {
         dataThroughDate: scope === "activity" ? today : null,
         generatedAt: new Date().toISOString(),
         requestedSources: scope === "critical" ? ["financial"] : scope === "activity" ? ["transactions"] : ["monthly", "budgets", "forecast"],
-        failedSources: scope === "secondary" ? ["monthly", "budgets", "forecast"] : [],
+        failedSources: scope === "secondary" ? ["budgets", "forecast"] : [],
         data,
       } });
     });
     await page.goto("/");
     const card = page.locator('section[aria-label="Resumen financiero principal"] article').nth(1);
     const bankHealth = page.getByRole("region", { name: "Estado de los datos bancarios" });
+    const evolution = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
     if (verifiedBank) {
       await expect(card.locator("strong")).toContainText("-100,00");
       await expect(bankHealth).toContainText("Datos bancarios actualizados");
       await expect(page.getByText("El balance del mes está en negativo")).toBeVisible();
+      await expect(evolution.locator('button[data-month-coverage="covered"]')).toHaveCount(1);
     } else {
       await expect(card).toContainText("Fuente bancaria no disponible");
       await expect(card.locator("strong")).toHaveText("—");
@@ -216,6 +222,8 @@ for (const verifiedBank of [false, true]) {
       await expect(bankHealth).toContainText("Fuente bancaria no disponible");
       await expect(bankHealth).not.toContainText("Datos bancarios actualizados");
       await expect(page.getByText("El balance del mes está en negativo")).toHaveCount(0);
+      await expect(evolution.locator('button[data-month-coverage="unknown"]')).toHaveCount(1);
+      await expect(evolution.getByRole("button", { name: /sin cobertura bancaria confirmada/ })).toHaveCount(1);
     }
   });
 }
