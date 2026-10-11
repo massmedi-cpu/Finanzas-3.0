@@ -15,6 +15,7 @@ import {
 } from "../src/application/dashboard/home-bank-coverage";
 import {
   hasSourceSyncIncidents,
+  hasCompletedSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
@@ -563,6 +564,10 @@ export default function InicioOverview() {
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
   const syncHasWarnings = syncSucceeded && hasSourceSyncIncidents(syncRun);
+  const bankUnavailable = sourceFreshness?.available === false;
+  const certifiedSync = syncSucceeded && sourceFreshness?.available === true
+    && hasCompletedSourceSyncEvidence(sourceFreshness.sync)
+    && !hasSourceSyncIncidents(sourceFreshness.sync);
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
   const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";
@@ -623,7 +628,9 @@ export default function InicioOverview() {
       .slice(0, 4) ?? [],
     [forecast],
   );
-  const overBudgetCount = budget?.categories.filter((item) => item.status === "over").length ?? 0;
+  const overBudgetCount = currentPeriodObserved
+    ? budget?.categories.filter((item) => item.status === "over").length ?? 0
+    : 0;
   const hasSavingsBase = (financial?.period.incomeCents ?? 0) >= 10_000;
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
@@ -655,7 +662,7 @@ export default function InicioOverview() {
         tone: "warning",
       });
     }
-    if (revealAmounts && (financial?.period.operatingNetCents ?? 0) < 0) {
+    if (revealAmounts && currentPeriodObserved && (financial?.period.operatingNetCents ?? 0) < 0) {
       items.push({
         title: "El balance del mes está en negativo",
         detail: `Ingresos ${displayMoney(financial?.period.incomeCents ?? 0)} · gastos ${displayMoney(financial?.period.expenseCents ?? 0)}.`,
@@ -694,7 +701,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [forecast, displayMoney, failed.length, financial, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
+  }, [forecast, displayMoney, failed.length, financial, currentPeriodObserved, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}>
@@ -719,7 +726,7 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings ? styles.sourceWarning : syncSucceeded ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings || bankUnavailable ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
@@ -732,18 +739,22 @@ export default function InicioOverview() {
                   ? "La última actualización falló"
                   : syncHasWarnings
                     ? "Sincronización completada con avisos"
-                    : syncSucceeded
-                      ? "Datos bancarios actualizados"
-                      : "Estado de la fuente pendiente"}
+                    : bankUnavailable
+                      ? "Fuente bancaria no disponible"
+                      : certifiedSync
+                        ? "Datos bancarios actualizados"
+                        : "Cobertura bancaria sin verificar"}
             </strong>
             <p>
-              {syncSucceeded && syncRun
-                ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
-                : syncFailed
-                  ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
-                  : latestDataDate
-                    ? `Movimientos disponibles hasta ${formatDate(latestDataDate)}.`
-                    : "La fecha del último movimiento no está confirmada."}
+              {bankUnavailable
+                ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
+                : certifiedSync && syncRun
+                  ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
+                  : syncFailed
+                    ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
+                    : latestDataDate
+                      ? `Movimientos hasta ${formatDate(latestDataDate)}; sincronización sin verificar.`
+                      : "La fecha del último movimiento y la cobertura no están confirmadas."}
               {syncPersistentNotice ? ` ${syncPersistentNotice}` : ""}
               {syncFeedback ? ` ${syncFeedback}` : ""}
             </p>
@@ -1059,7 +1070,7 @@ export default function InicioOverview() {
         projectedNetCents={forecast?.summary.projectedNetCents ?? null}
         projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
         plannedItems={forecast?.summary.plannedItems ?? null}
-        syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
+        syncState={syncFailed ? "failed" : certifiedSync ? "success" : "pending"}
         displayMoney={displayMoney}
         valuesVisible={revealAmounts}
         privacyActive={privacyReady && !amountsVisible}
