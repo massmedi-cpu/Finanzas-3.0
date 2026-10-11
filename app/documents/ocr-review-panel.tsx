@@ -832,6 +832,10 @@ export function OcrReviewPanel({
               <strong>Revisar antes de usar</strong>
               <ul>{result.warnings.map((warning) => <li key={warning}>{warningLabel(warning)}</li>)}</ul>
             </div>
+          ) : result.status !== "ready" || review.financialWarnings.length > 0 ? (
+            <div className={ocrStyles.warnings} data-testid="ocr-review-pending-notice">
+              La lectura requiere revisión: hay datos pendientes de comprobar con el original. No confirmes importes ni asociaciones sin verificar su evidencia.
+            </div>
           ) : <div className={ocrStyles.success}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de confirmar datos.</div>}
 
           <div className={ocrStyles.readingActions}>
