@@ -1,6 +1,7 @@
 import { createClient } from "supabase-js";
 import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
 import { matchesPrivateDocumentReplay } from "../../../src/domain/private-document-replay.ts";
+import { privateDocumentContentId } from "../../../src/domain/private-document-content-address.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -300,16 +301,54 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const mime = mimeType(payload.mimeType);
     const sizeBytes = safeInteger(payload.sizeBytes, "document_size") as number;
     if (sizeBytes <= 0 || sizeBytes > MAX_FILE_BYTES) throw new Error("invalid_document_size");
+    const contentSha256 = nullableText(payload.expectedSha256, "document_content_sha256", 64);
+    if (contentSha256 !== null && !SHA256_HEX.test(contentSha256)) {
+      throw new Error("invalid_document_content_sha256");
+    }
     const extension = MIME_EXTENSIONS.get(mime)!;
     const workspaceId = await currentWorkspaceId(sql);
-    const path = `uploads/${workspaceId}/${crypto.randomUUID()}.${extension}`;
+    // Older clients/recovery paths retain their random UUID object names.
+    // Modern SHA-aware clients obtain the SAME private object path even on
+    // different devices, making parallel same-content uploads idempotent.
+    const path = `uploads/${workspaceId}/${contentSha256 === null
+      ? crypto.randomUUID() : privateDocumentContentId(contentSha256)}.${extension}`;
+    if (contentSha256 !== null) {
+      const existing = await sql`
+        select id, type, original_file_name, mime_type, size_bytes
+          from financial_app.documents
+         where workspace_id=${workspaceId}::uuid
+           and storage_provider='supabase' and storage_key=${path}
+      `;
+      if (existing.length) {
+        const old = existing[0];
+        if (old.mime_type !== mime || Number(old.size_bytes) !== sizeBytes) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        // The stored object was already registered under this deterministic
+        // private path. Reuse the canonical original, never sign a second PUT.
+        return json({
+          alreadyRegistered: true,
+          documentId: old.id,
+          type: old.type,
+          originalFileName: old.original_file_name,
+          mimeType: old.mime_type,
+          sizeBytes, path, expectedSha256: contentSha256,
+          contentAddressVersion: 1, hashVerificationVersion: 1, hashAlgorithm: "sha256",
+        });
+      }
+    }
     const supabase = storageClient();
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path, { upsert: false });
     if (error || !data?.signedUrl || !data?.token) {
       console.error("document-storage-sign", error?.name ?? "unknown");
       return json({ error: "document_upload_sign_failed" }, 503);
     }
-    return json({ bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl, originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES, hashVerificationVersion: 1, hashAlgorithm: "sha256" });
+    return json({
+      bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl,
+      originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES,
+      hashVerificationVersion: 1, hashAlgorithm: "sha256",
+      contentAddressVersion: contentSha256 === null ? null : 1,
+    });
   }
 
   if (action === "document.upload_finalize") {
