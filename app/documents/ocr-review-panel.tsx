@@ -716,7 +716,7 @@ export function OcrReviewPanel({
             ? "Sin texto legible. Comprueba el original."
             : result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
         </li>
-        <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
+        <li className={`${ocrStyles.flowItem} ${result && result.status !== "empty" ? ocrStyles.done : ""}`}>
           <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura y los campos con el original."}</small></div>
         </li>
         <li className={`${ocrStyles.flowItem} ${confirmedRevision ? ocrStyles.done : ""}`}>
