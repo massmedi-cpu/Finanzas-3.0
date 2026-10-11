@@ -900,6 +900,8 @@ export default function InicioOverview() {
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
               latestMovementDate={latestDataDate}
+              sourceFreshness={sourceFreshness}
+              activityLatestDate={dataThroughDate}
               refreshKey={evolutionRevision}
             />
           ) : secondaryLoading ? (
