@@ -21,7 +21,7 @@ import styles from "./documents.module.css";
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
-type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string; sizeBytes: number | null };
+type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string; sizeBytes: number | null; expectedSha256: string | null };
 type PendingPrivateUpload = PendingFinalize & {
   signedUrl: string | null;
   file: File | null;
@@ -29,6 +29,14 @@ type PendingPrivateUpload = PendingFinalize & {
 };
 
 const PENDING_PRIVATE_UPLOAD_KEY = "financial-app:documents:pending-private-upload:v1";
+const PRIVATE_SHA256 = /^[0-9a-f]{64}$/;
+
+async function fileSha256(file: File) {
+  // Bound by the 15 MiB upload limit, before a private upload signature is
+  // requested. No file bytes or signed Storage credentials are persisted.
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 // Only minimal metadata is journaled per tab. Original bytes, signed URLs
 // and Storage tokens NEVER enter web storage. After refresh we can safely
@@ -53,6 +61,8 @@ function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivate
       || typeof value.path !== "string"
       || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(value.path)
       || typeof value.storagePutConfirmed !== "boolean"
+      || (value.expectedSha256 !== undefined && value.expectedSha256 !== null
+        && (typeof value.expectedSha256 !== "string" || !PRIVATE_SHA256.test(value.expectedSha256)))
       || (value.sizeBytes !== undefined && (!Number.isSafeInteger(value.sizeBytes) || value.sizeBytes <= 0 || value.sizeBytes > 15_728_640))) {
       return { present: true, pending: null };
     }
@@ -65,6 +75,7 @@ function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivate
         mimeType: value.mimeType,
         path: value.path,
         sizeBytes: value.sizeBytes ?? null, // legacy in-tab journal remains recoverable
+        expectedSha256: value.expectedSha256 ?? null,
         storagePutConfirmed: value.storagePutConfirmed,
         signedUrl: null,
         file: null,
@@ -84,6 +95,7 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
       version: 1, action: pending.action, type: pending.type,
       originalFileName: pending.originalFileName, mimeType: pending.mimeType,
       path: pending.path, sizeBytes: pending.sizeBytes,
+      expectedSha256: pending.expectedSha256,
       storagePutConfirmed: pending.storagePutConfirmed,
     }));
   } catch {
@@ -161,6 +173,7 @@ type Association = {
 };
 
 type DocumentDetail = {
+  uploadIntegrity?: { sha256: string; sizeBytes: number; verified: boolean };
   contractVersion: 1 | 2 | 3;
   document: Omit<DocumentItem, "associationCount"> & {
     storageKey?: string;
@@ -254,6 +267,11 @@ function validatedFinalizedUpload(payload: unknown, pending: PendingFinalize): D
     || data.document.originalFileName !== pending.originalFileName
     || data.document.type !== pending.type || data.document.mimeType !== pending.mimeType
     || (pending.sizeBytes !== null && data.document.sizeBytes !== pending.sizeBytes)
+    || (pending.expectedSha256 !== null && (
+      data.uploadIntegrity?.verified !== true
+      || data.uploadIntegrity.sha256 !== pending.expectedSha256
+      || data.uploadIntegrity.sizeBytes !== pending.sizeBytes
+    ))
     || !data.principles || data.principles.bankSource !== "read_only"
     || data.principles.getHasSideEffects !== false || data.principles.suggestionsPersisted !== false
     || data.principles.associationsRequireConfirmation !== true) {
@@ -948,6 +966,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           action: pending.action, type: pending.type,
           originalFileName: pending.originalFileName,
           mimeType: pending.mimeType, path: pending.path,
+          expectedSizeBytes: pending.sizeBytes, expectedSha256: pending.expectedSha256,
         }),
       }));
       const confirmed = validatedFinalizedUpload(result, pending);
@@ -1012,6 +1031,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     let privatePutAttempted = false;
     let attemptedPrivateUpload: PendingPrivateUpload | null = null;
     try {
+      const expectedSha256 = await fileSha256(file);
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -1041,7 +1061,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       attemptedPrivateUpload = {
         action: "upload_finalize", type: uploadType, originalFileName: file.name,
         mimeType: file.type, path: sign.path, sizeBytes: file.size,
-        signedUrl: uploadUrl.href, file, storagePutConfirmed: false,
+        expectedSha256, signedUrl: uploadUrl.href, file, storagePutConfirmed: false,
       };
       const body = new FormData();
       body.append("cacheControl", "3600");
@@ -1061,6 +1081,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           action: attemptedPrivateUpload.action, type: attemptedPrivateUpload.type,
           originalFileName: attemptedPrivateUpload.originalFileName,
           mimeType: attemptedPrivateUpload.mimeType, path: attemptedPrivateUpload.path,
+          expectedSizeBytes: attemptedPrivateUpload.sizeBytes, expectedSha256: attemptedPrivateUpload.expectedSha256,
         }),
       }));
       const id = validatedFinalizedUpload(finalized, attemptedPrivateUpload).document.id;
