@@ -2564,6 +2564,77 @@ test("REC-DOC-107 · sin Web Locks no se firma ni sube un documento privado", as
   expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
 });
 
+test("REC-DOC-108 · dos recuperaciones en pestañas distintas no borran referencias simultáneamente", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  await page.addInitScript(({key,path}) => localStorage.setItem(key, JSON.stringify({
+    version: 1, action: "upload_finalize", type: "invoice",
+    originalFileName: "recuperacion-exclusiva.pdf",
+    mimeType: "application/pdf", path, storagePutConfirmed: true,
+  })), { key: durableUploadKey, path: signedUploadPath });
+  let releaseFirst: (() => void) | undefined;
+  const blockedFinalize = new Promise<void>(resolve => { releaseFirst = resolve; });
+  let firstFinalizes = 0;
+  await page.route("**/api/documents", async route => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action === "upload_finalize") {
+      firstFinalizes += 1;
+      await blockedFinalize;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  const other = await page.context().newPage();
+  const otherWrites: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(other, otherWrites);
+  await other.goto("/documents");
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(other.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect.poll(() => firstFinalizes).toBe(1);
+  await other.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(other.getByTestId("documents-alert")).toContainText("Otra pestaña está gestionando un documento");
+  expect(otherWrites.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+  expect(otherWrites.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  releaseFirst?.();
+  await expect(page.getByRole("heading", { name: "recuperacion-exclusiva.pdf" })).toBeVisible();
+  await expect(other.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(firstFinalizes).toBe(1);
+  expect(await other.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+  await other.close();
+});
+
+test("REC-DOC-109 · una respuesta tardía no puede borrar la referencia de OTRO objeto privado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.addInitScript(({key,path}) => localStorage.setItem(key, JSON.stringify({
+    version: 1, action: "upload_finalize", type: "invoice",
+    originalFileName: "antiguo.pdf", mimeType: "application/pdf",
+    path, storagePutConfirmed: true,
+  })), {key: durableUploadKey, path: signedUploadPath});
+  const replacementPath = signedUploadPath.replace(/[^/]+\.pdf$/, "00000000-0000-4000-8000-000000000123.pdf");
+  expect(replacementPath).not.toBe(signedUploadPath);
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize") {
+      // Simulate a newer upload changing the handle before the old finalize
+      // response is received, even if client-origin cooperating tabs lock.
+      await page.evaluate(({key,path}) => {
+        const journal = JSON.parse(localStorage.getItem(key)!);
+        localStorage.setItem(key, JSON.stringify({ ...journal, path }));
+      }, {key: durableUploadKey, path: replacementPath});
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(page.getByTestId("documents-alert")).toContainText("no se ha podido confirmar");
+  const stillStored = await page.evaluate(key => localStorage.getItem(key), durableUploadKey);
+  expect(JSON.parse(stillStored!).path).toBe(replacementPath);
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(1);
+});
+
 test("REC-DOC-100 · si localStorage rechaza persistencia no se inicia un PUT privado", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
