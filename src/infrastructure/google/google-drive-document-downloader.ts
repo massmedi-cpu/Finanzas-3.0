@@ -71,7 +71,7 @@ function driveModifiedTime(value: unknown): string | null {
  * Drive/proxies may omit it or return an incorrect value. A real byte counter
  * is required to bound application memory, regardless of response headers.
  */
-async function readDriveMediaBounded(response: Response): Promise<Uint8Array> {
+async function readDriveMediaBounded(response: Response): Promise<Uint8Array<ArrayBuffer>> {
   if (!response.body) {
     throw new GoogleDriveDocumentError(
       "google_drive_document_download_failed",
