@@ -54,7 +54,7 @@ function hybridPdf(): Uint8Array {
 
 function visualResult(confidence: number): Awaited<ReturnType<DocumentOcrProvider["extract"]>> {
   return {
-    source: "tesseract",
+    source: "image_ocr",
     extractor: "synthetic-confident-or-uncertain-result",
     pages: [{ pageNumber: 1, words: ["TOTAL", "23,45"].map((text,index)=>({
       text, confidence, box: { x: 0.1 + index*0.2, y: 0.45, width: 0.18, height: 0.15 },
