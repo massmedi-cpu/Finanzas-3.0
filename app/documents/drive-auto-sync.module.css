@@ -34,7 +34,11 @@
   padding: 0.55rem 0.85rem;
   border: 1px solid var(--border-control);
   border-radius: 0.75rem;
-  background: var(--surface-control-strong);
+  /* The strong-control token resolves to a dark slate in some light-theme
+     combinations; matching it with light-theme navy text creates a
+     low-contrast call to action. Use the semantic card surface in both
+     themes and a visible outline instead. */
+  background: var(--surface-card);
   color: var(--color-text);
   font: inherit;
   font-size: var(--font-helper);
