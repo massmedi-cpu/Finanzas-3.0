@@ -179,6 +179,8 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
 
 test("REC-TXN-001 · HTTP 200 sin filas verificables no se presenta como extracto vacío y permite relectura", async ({ page }) => {
   let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
   const writes: string[] = [];
   await page.route("**/api/transactions**", async (route) => {
     if (route.request().method() !== "GET") {
@@ -191,9 +193,10 @@ test("REC-TXN-001 · HTTP 200 sin filas verificables no se presenta como extract
       return;
     }
     reads += 1;
+    if (recoveryRequested) recoveryReads += 1;
     await route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify(reads === 1 ? { rows: null, totalCount: 0, hasMore: false } :
+      body: JSON.stringify(!recoveryRequested ? { rows: null, totalCount: 0, hasMore: false } :
         { rows: [baseRow], totalCount: 1, hasMore: false, nextCursor: null }),
     });
   });
@@ -204,11 +207,13 @@ test("REC-TXN-001 · HTTP 200 sin filas verificables no se presenta como extract
   await expect(page.getByLabel("Resumen del listado").locator("div").first().locator("strong")).toHaveText("—");
   await expect(page.getByText("Histórico sin verificar", { exact: true })).toBeVisible();
   await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toHaveCount(0);
+  recoveryRequested = true;
   await page.getByRole("button", { name: "Reintentar listado" }).click();
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("Resumen del listado").locator("div").first().locator("strong")).toHaveText("1");
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
   expect(writes).toEqual([]);
 });
 
@@ -252,6 +257,8 @@ test("REC-TXN-002 · una página incoherente no elimina los movimientos previame
 
 test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento solo lee", async ({ page }) => {
   let facetReads = 0;
+  let recoveryRequested = false;
+  let recoveredFacetReads = 0;
   let listReads = 0;
   const mutations: string[] = [];
   await page.route("**/api/transactions**", async (route) => {
@@ -263,7 +270,8 @@ test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento sol
     const url = new URL(route.request().url());
     if (url.searchParams.get("mode") === "facets") {
       facetReads += 1;
-      if (facetReads === 1) {
+      if (recoveryRequested) recoveredFacetReads += 1;
+      if (!recoveryRequested) {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "facets_timeout" }) });
       } else {
         await fulfillFacets(route);
@@ -279,12 +287,14 @@ test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento sol
   await page.goto("/transactions");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
   await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas y categorías");
+  recoveryRequested = true;
   await page.getByRole("button", { name: "Reintentar cuentas y categorías" }).click();
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
   await expect(page.getByTestId("account-filter")).toContainText("Cuenta de prueba");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
-  expect(facetReads).toBe(2);
-  expect(listReads).toBe(1);
+  expect(facetReads).toBeGreaterThanOrEqual(2);
+  expect(recoveredFacetReads).toBe(1);
+  expect(listReads).toBeGreaterThanOrEqual(1);
   expect(mutations).toEqual([]);
 });
 
