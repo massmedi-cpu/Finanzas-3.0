@@ -40,7 +40,9 @@ test("AUD-E2E-NAV-001 · sin asociar filtra todos los resultados y permite recup
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
     const url = new URL(route.request().url());
     const status = url.searchParams.get("status");
-    const filtered = status ? documents.filter((item) => item.status === status) : documents;
+    const unassociated = url.searchParams.get("unassociated") === "true";
+    const filtered = documents.filter((item) => (!status || item.status === status)
+      && (!unassociated || (item.status !== "archived" && item.associationCount === 0)));
     const offset = Number(url.searchParams.get("offset") || "0");
     const limit = Number(url.searchParams.get("limit") || "50");
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
@@ -73,7 +75,7 @@ test("AUD-E2E-DOC-002 · la advertencia depende de notas confirmadas, no del nom
     id: "93000000-0000-4000-8000-000000000094",
     originalFileName: "F11_DRIVE_LIVE_OCR_TEST.png",
     notes: "Fixture sintético F11 para validar OCR live de Google Drive sobre imagen",
-    type: "other", status: "pending_review", mimeType: "image/png",
+    type: "other", status: "pending_review", mimeType: "image/png", issuerName: null,
     documentDate: "2026-09-12", totalCents: null, associationCount: 0,
     storageProvider: "google_drive", sizeBytes: 58000,
     createdAt: "2026-09-12T09:00:00Z", updatedAt: "2026-09-12T09:00:00Z",
