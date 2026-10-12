@@ -3122,3 +3122,30 @@ test("REC-DOC-120 · detail 200 with malformed metadata cannot expose OCR, edito
   }
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-121 · failed readback after editing must hide stale detail and financial actions", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let invalidReadback = false;
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (invalidReadback && route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: { ...item, mimeType: "text/html" }, associations: [], principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  await page.getByLabel("Emisor").fill("Nuevo emisor");
+  invalidReadback = true;
+  await page.getByRole("button", { name: "Guardar metadatos" }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
+  expect(writes.filter(entry => entry.action === "metadata")).toHaveLength(1);
+});

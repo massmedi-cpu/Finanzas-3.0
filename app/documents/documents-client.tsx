@@ -1771,7 +1771,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           </aside>
 
           <section id="documento-seleccionado" className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : detailLoadFailed || !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
                 <p>Los datos de otro documento no se muestran en esta selección.</p>
