@@ -6,8 +6,8 @@ import type { OcrWord } from "../../domain/document-ocr";
  * This is evidence detection, not financial amount parsing or persistence.
  */
 function hasMoneyEvidence(text: string) {
-  const decimals = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2})(?![\d.,]|\s*%)/;
-  const currencyBefore = /(?:€\s*|\b(?:eur|euros?)\s+)(?:\d{1,3}(?:\.\d{3})+|\d+)(?![\d.,]|\s*%)/;
+  const decimals = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2})(?!\d|[.,]\d|\s*%)/;
+  const currencyBefore = /(?:€\s*|\b(?:eur|euros?)\s+)(?:\d{1,3}(?:\.\d{3})+|\d+)(?!\d|[.,]\d|\s*%)/;
   const currencyAfter = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})+|\d+)\s*€(?![\d.,])/;
   return decimals.test(text) || currencyBefore.test(text) || currencyAfter.test(text);
 }
