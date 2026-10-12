@@ -77,8 +77,15 @@ async function rasterizePdfImage(pdfBytes, expectNativeStamp = false, expectedNa
           text, confidence: 1, box: { x: 0.9, y: 0.1, width: 0.02, height: 0.02 },
         }))), true, "sparse native stamp must not bypass the visual OCR path");
       } else if (expectedNativeSideband) {
-        assert.ok(tokens.join(" ").includes(expectedNativeSideband),
-          "the vertical legal stamp is selectable in the real PDF.js text stream");
+        // The rotated baseline can extend beyond the PDF's page box. PDF.js
+        // may clip text at the page edge or return it in multiple spans:
+        // literal equality with the whole source string would assert an
+        // off-page tail, not whether meaningful sideways text was selected.
+        const selectable = tokens.join(" ").replace(/\s+/g, " ").trim();
+        assert.match(selectable, /DOCUMENTO\s+GENERADO/i,
+          "PDF.js must extract genuine visible-range text from the rotated legal stamp");
+        assert.doesNotMatch(selectable, /TOTAL\s+23[,.]45/i,
+          "the financial amount stays exclusively inside raster pixels");
         assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
           text, confidence: 1, box: { x: 0.015, y: 0.04, width: 0.02, height: 0.86 },
         }))), true, "lateral native text does not count as invoice body coverage");
