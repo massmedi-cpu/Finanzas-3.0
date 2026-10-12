@@ -842,3 +842,57 @@ test("REC-REC-011 · PATCH 200 con relectura corrupta no anuncia archivo ni reut
   await expect(page.getByText("ingreso periódico", { exact: true })).toHaveCount(0);
   expect(writes).toEqual(["PATCH"]);
 });
+
+test("REC-REC-012 · POST 200 y GET válido pero sin decisión persistida nunca anuncian éxito", async ({ page }) => {
+  let writeAccepted = false;
+  const mutations: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(baseSnapshot),
+      });
+    }
+    mutations.push(route.request().method());
+    writeAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: confirmedRecurrenceId, status: "active" }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await page.locator("article").filter({ hasText: "supermercado mensual" })
+    .getByRole("button", { name: "Confirmar recurrencia" }).click();
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  expect(writeAccepted).toBe(true);
+  expect(mutations).toEqual(["POST"]);
+});
+
+test("REC-REC-013 · PATCH 200 con estado bancario anterior no anuncia archivo sin verificar", async ({ page }) => {
+  const mutations: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(baseSnapshot),
+      });
+    }
+    mutations.push(route.request().method());
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: activeRecurrenceId, status: "archived" }),
+    });
+  });
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await expect(history.locator("summary")).toBeVisible();
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  expect(mutations).toEqual(["PATCH"]);
+});
