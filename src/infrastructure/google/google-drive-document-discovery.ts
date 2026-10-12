@@ -45,14 +45,14 @@ export type GoogleDriveDocumentDiscoveryResult = {
 };
 
 export class GoogleDriveDocumentDiscoveryError extends Error {
-  constructor(
-    public readonly code:
-      | "google_drive_document_discovery_access_denied"
-      | "google_drive_document_discovery_failed"
-      | "google_drive_document_discovery_response_invalid",
-    message: string,
-  ) {
+  readonly code:
+    | "google_drive_document_discovery_access_denied"
+    | "google_drive_document_discovery_failed"
+    | "google_drive_document_discovery_response_invalid";
+
+  constructor(code: GoogleDriveDocumentDiscoveryError["code"], message: string) {
     super(message);
+    this.code = code;
     this.name = "GoogleDriveDocumentDiscoveryError";
   }
 }
