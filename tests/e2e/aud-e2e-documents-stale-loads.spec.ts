@@ -132,10 +132,11 @@ test("AUD-E2E-DOC-001 · un fallo de detalle no muestra metadatos del documento 
   await expect(page.getByRole("heading", { name: "Primera factura.pdf" })).toHaveCount(0);
 });
 
-test("AUD-E2E-DOC-001 · fecha bancaria imposible se señala sin bloquear Documentos", async ({ page }) => {
+test("AUD-E2E-DOC-001 · fecha imposible se rechaza sin inventar listado y permite reintentar", async ({ page }) => {
+  let invalidDate = true;
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
     const url = new URL(route.request().url());
-    const invalid = { ...DOCS[0], documentDate: "2026-02-30" };
+    const invalid = { ...DOCS[0], documentDate: invalidDate ? "2026-02-30" : "2026-02-28" };
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -146,8 +147,13 @@ test("AUD-E2E-DOC-001 · fecha bancaria imposible se señala sin bloquear Docume
   });
   await page.goto("/documents");
   const archive = page.getByRole("complementary", { name: "Listado de documentos" });
-  await expect(archive.getByText("Fecha no válida", { exact: false })).toBeVisible();
+  const failure = archive.getByTestId("documents-list-error");
+  await expect(failure).toBeVisible();
+  await expect(archive.getByRole("button", { name: /Primera factura\.pdf/ })).toHaveCount(0);
+  invalidDate = false;
+  await failure.getByRole("button", { name: "Reintentar lista" }).click();
   await expect(archive.getByRole("button", { name: /Primera factura\.pdf/ })).toBeVisible();
+  await expect(failure).toHaveCount(0);
 });
 
 
@@ -207,7 +213,9 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
-  await expect(issuer).toHaveValue("Proveedor revisado");
+  // Failed detail verification blocks stale controls, while the in-memory
+  // draft is retained for the next verified recovery attempt.
+  await expect(issuer).toHaveCount(0);
   expect(patches).toBe(1);
 
   failRevalidation = false;
