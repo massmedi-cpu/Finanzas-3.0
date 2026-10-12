@@ -3149,3 +3149,82 @@ test("REC-DOC-121 · failed readback after editing must hide stale detail and fi
   await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
   expect(writes.filter(entry => entry.action === "metadata")).toHaveLength(1);
 });
+
+
+test("REC-DOC-122 · an impossible association date blocks stale document financial actions", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: { ...item }, principles,
+        associations: [{
+          id: "96000000-0000-4000-8000-000000000096", transactionId,
+          accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente",
+          method: "manual", confirmed: true, date: "2026-02-30", concept: "Pago inventado",
+          amountCents: -5404,
+        }],
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Desasociar" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-123 · an impossible candidate date cannot be offered for bank association", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "candidates") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 1, documentId, ready: true, reason: null,
+        days: 7, amountToleranceCents: 200,
+        candidates: [{
+          transactionId, date: "2026-02-30", concept: "COMUNIDAD BLOQUE",
+          accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente",
+          amountCents: -5404, confidence: 1, dayDifference: 0, amountDifferenceCents: 0,
+          effectiveKind: "expense", categoryId: null, merchantId: null, merchantName: null,
+        }],
+        principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false },
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Buscar sugerencias" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/sugerencias no corresponden a este documento/i);
+  await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-124 · an impossible bank date cannot be offered for manual association", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/transactions*", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      rows: [{
+        id: transactionId, bankDate: "2026-02-30", amountCents: -5404,
+        account: { id: "95000000-0000-4000-8000-000000000095", name: "Cuenta corriente" },
+        concept: { effective: "COMUNIDAD BLOQUE" },
+        category: { effectiveId: null, effectiveName: null },
+        kind: { effective: "expense" },
+      }], totalCount: 1,
+    }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByLabel("Buscar movimiento").fill("comunidad");
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/búsqueda de movimientos ha devuelto datos incompletos/i);
+  await expect(page.getByRole("button", { name: "Asociar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});

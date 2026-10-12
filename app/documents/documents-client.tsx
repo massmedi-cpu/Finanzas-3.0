@@ -364,6 +364,7 @@ function validAssociation(value: unknown): value is Association {
     && (row.method === "manual" || row.method === "suggested")
     && typeof row.confirmed === "boolean"
     && typeof row.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+    && formatDate(row.date) !== "Fecha no válida"
     && typeof row.concept === "string" && typeof row.accountName === "string"
     && Number.isSafeInteger(row.amountCents);
 }
@@ -386,6 +387,7 @@ function validatedCandidateResponse(payload: unknown, documentId: string): Candi
       || !Number.isSafeInteger(candidate.amountCents)
       || typeof candidate.concept !== "string" || typeof candidate.accountName !== "string"
       || typeof candidate.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
+      || formatDate(candidate.date) === "Fecha no válida"
       || typeof candidate.confidence !== "number" || !Number.isFinite(candidate.confidence)
       || candidate.confidence < 0 || candidate.confidence > 1
       || !Number.isSafeInteger(candidate.amountDifferenceCents)
@@ -432,6 +434,7 @@ function validatedTransactionSearch(value: unknown): TransactionSearch {
     const row = raw as Partial<TransactionRow>;
     if (typeof row.id !== "string" || !DOCUMENT_UUID.test(row.id) || seen.has(row.id)
       || typeof row.bankDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(row.bankDate)
+      || formatDate(row.bankDate) === "Fecha no válida"
       || !Number.isSafeInteger(row.amountCents)
       || !row.account || typeof row.account.id !== "string" || !DOCUMENT_UUID.test(row.account.id)
       || typeof row.account.name !== "string"
