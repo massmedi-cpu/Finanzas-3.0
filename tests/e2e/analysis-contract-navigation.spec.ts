@@ -221,7 +221,9 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
   expect(freshnessSource).toContain("Datos sincronizados parcialmente");
   expect(freshnessSource).toContain("Sincronización parcial");
   expect(freshnessSource).toContain("Último intento");
-  expect(freshnessSource).toContain('fetch("/api/analysis/source-freshness"');
+  expect(freshnessSource).toContain('params.set("accountId", accountId)');
+  expect(freshnessSource).toContain('? `/api/analysis/source-freshness?${params.toString()}`');
+  expect(freshnessSource).toContain('void fetch(url, {');
   expect(freshnessSource).toContain("function nullableFiniteNumber");
   expect(freshnessSource).toContain("Number.isFinite(value)");
   expect(freshnessSource).toContain("Number.isNaN(date.getTime())");
