@@ -159,3 +159,40 @@ test("REC-OCR-083 · actual PDF.js must not borrow VAT amount after an empty TOT
   expect(result.source).toBe("pdf_ocr");
   expect(result.pages[0].words.map((word) => word.text)).toEqual(["TOTAL", "23,45"]);
 });
+
+
+test("REC-OCR-087 · actual PDF.js preserves short native total against longer conflicting raster OCR", async () => {
+  const nativeText = "FACTURA ORIGINAL TOTAL 45,30 EUR";
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async () => {
+      visualReads += 1;
+      return {
+        ...visualResult(0.96),
+        pages: [{
+          pageNumber: 1,
+          words: [
+            { text: "TOTAL", confidence: 0.96, box: { x: 0.1, y: 0.4, width: 0.12, height: 0.12 } },
+            { text: "23,45", confidence: 0.96, box: { x: 0.22, y: 0.4, width: 0.12, height: 0.12 } },
+            ...Array.from({ length: 25 }, (_, index) => ({
+              text: "CONCEPTO", confidence: 0.96,
+              box: { x: 0.1, y: 0.55 + index * 0.01, width: 0.2, height: 0.009 },
+            })),
+          ],
+        }],
+      };
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(nativeText), mimeType: "application/pdf",
+    originalFileName: "factura-conflicto-nativo-visual.pdf",
+  });
+  // The native layer is short enough to warrant a bounded visual attempt,
+  // yet OCR volume alone is never grounds to change a known invoice total.
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_text");
+  const selected = result.pages[0].words.map((word) => word.text).join(" ");
+  expect(selected).toContain("TOTAL 45,30 EUR");
+  expect(selected).not.toContain("23,45");
+  expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
+});
