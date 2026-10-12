@@ -135,8 +135,11 @@ test("REC-SYNC-006 · fallo HTTP de frescura muestra reintento y recupera sin es
   await mockComparison(page);
   let calls = 0;
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => {
-    calls += 1;
-    return route.fulfill(calls === 1
+    // The page may query all-account coverage before the scoped comparison
+    // snapshot arrives. Reserve the injected failure for the actual account.
+    const scopedRequest = new URL(route.request().url()).searchParams.get("accountId") === ACCOUNT_ID;
+    if (scopedRequest) calls += 1;
+    return route.fulfill(scopedRequest && calls === 1
       ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "source_unavailable" }) }
       : {
           status: 200,
