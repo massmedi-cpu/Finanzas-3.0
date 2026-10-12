@@ -25,6 +25,6 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   if (chars >= 260) return false;
   const normalized = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const financialLabel = /\b(?:total|importe|subtotal|base imponible|precio|a pagar|iva|igic|cuota)\b/.test(normalized);
-  const financialAmount = /(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2}|\d+\s*€|\b(?:eur|euros?)\s+\d+)/i.test(normalized);
+  const financialAmount = /(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2}|\d+\s*€|€\s*\d+|\b(?:eur|euros?)\s+\d+)/i.test(normalized);
   return !(financialLabel && financialAmount);
 }
