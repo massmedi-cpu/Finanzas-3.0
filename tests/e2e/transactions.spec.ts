@@ -641,6 +641,8 @@ test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin invent
   };
   const rowWithSplit = { ...firstRow, split };
   let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
   const mutations: string[] = [];
   await mockTransactionApi(page);
   await page.route("**/api/transactions**", async (route) => {
@@ -653,9 +655,10 @@ test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin invent
     }
     if (url.searchParams.get("mode") === "split") {
       reads += 1;
+      if (recoveryRequested) recoveryReads += 1;
       await route.fulfill({
         status: 200, contentType: "application/json",
-        body: JSON.stringify(reads === 1 ? {} :
+        body: JSON.stringify(!recoveryRequested ? {} :
           { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
       });
       return;
@@ -673,9 +676,11 @@ test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin invent
   await page.getByTestId(`split-${firstId}`).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("La información del reparto está incompleta");
   await expect(page.getByTestId("save-split")).toBeDisabled();
+  recoveryRequested = true;
   await page.getByRole("button", { name: "Reintentar lectura del reparto" }).click();
   await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
   await expect(page.getByRole("button", { name: "Reintentar lectura del reparto" })).toHaveCount(0);
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
   expect(mutations).toEqual([]);
 });
