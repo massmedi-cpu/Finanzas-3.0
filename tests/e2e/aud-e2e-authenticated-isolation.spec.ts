@@ -107,7 +107,7 @@ test("synthetic ticket crosses real private Storage and the canonical OCR engine
     upload: { ...signedUpload, sizeBytes: png.byteLength, expectedSha256: sha256(png) },
   }), { mode: 0o600 });
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ""; // Disposable localhost only.
-  const signed = await fetch(`${supabaseUrl}/storage/v1/object/sign/${context.upload.bucket}/${context.upload.path}`, {
+  const signed = await fetch(`${supabaseUrl}/storage/v1/object/sign/${signedUpload.bucket}/${signedUpload.path}`, {
     method: "POST", headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json" },
     body: JSON.stringify({ expiresIn: 120 }),
   });
