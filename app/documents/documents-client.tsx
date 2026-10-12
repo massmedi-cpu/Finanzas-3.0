@@ -857,6 +857,24 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || data.principles.associationsRequireConfirmation !== true
         || !["ticket", "invoice", "other"].includes(data.document.type)
         || !["imported", "pending_review", "confirmed", "archived"].includes(data.document.status)
+        // A document detail is just as untrusted as the archive list. Do
+        // not enable metadata editing, associations or OCR for a 200 response
+        // whose basic source, date or test designation is malformed.
+        || !["supabase", "google_drive"].includes(data.document.storageProvider)
+        || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(data.document.mimeType)
+        || typeof data.document.notes !== "string"
+        || typeof data.document.createdAt !== "string"
+        || !Number.isFinite(Date.parse(data.document.createdAt))
+        || typeof data.document.updatedAt !== "string"
+        || !Number.isFinite(Date.parse(data.document.updatedAt))
+        || (data.document.sizeBytes !== null
+          && (!Number.isSafeInteger(data.document.sizeBytes) || data.document.sizeBytes < 0))
+        || (data.document.issuerName !== null && typeof data.document.issuerName !== "string")
+        || (data.document.documentDate !== null
+          && (typeof data.document.documentDate !== "string"
+            || !/^\d{4}-\d{2}-\d{2}$/.test(data.document.documentDate)
+            || formatDate(data.document.documentDate) === "Fecha no válida"))
+        || (data.document.isTest !== undefined && typeof data.document.isTest !== "boolean")
         || (data.document.totalCents !== null && !Number.isSafeInteger(data.document.totalCents))
         || typeof data.document.originalFileName !== "string"
         || !data.document.originalFileName.trim()) {

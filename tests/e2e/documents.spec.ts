@@ -3084,3 +3084,41 @@ test("REC-DOC-119 · a false 200 must not show an invalid calendar day or relabe
   }
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-120 · detail 200 with malformed metadata cannot expose OCR, editors or associations", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ["otro proveedor", { storageProvider: "unknown_unverified" }],
+    ["formato peligroso", { mimeType: "text/html" }],
+    ["fecha inexistente", { documentDate: "2026-02-30" }],
+    ["fixture mal etiquetado", { isTest: "false" }],
+    ["sin notas textuales", { notes: { suspicious: true } }],
+    ["tamaño corrupto", { sizeBytes: "1234" }],
+  ];
+  let broken = cases[0][1];
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3,
+        document: { ...item, ...broken },
+        associations: [],
+        principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  for (const [name, bad] of cases) {
+    broken = bad;
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+    await expect(page.getByTestId("documents-detail-error"), name).toContainText("El detalle no está disponible");
+    await expect(page.getByRole("heading", { name: "Revisar con OCR" }), name).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Guardar cambios" }), name).toHaveCount(0);
+    await expect(page.getByTestId("documents-alert"), name).toContainText(/servidor no ha devuelto el documento solicitado/i);
+  }
+  expect(writes).toEqual([]);
+});
