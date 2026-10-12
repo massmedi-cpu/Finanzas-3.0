@@ -307,7 +307,19 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await page.goto("/documents");
   await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
   await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
-  await expect(page.getByText(/OCR revisable/).first()).toBeVisible();
+  // REC-DOC-117 · Compact layouts intentionally remove redundant hero
+  // badges. On mobile, the archive shortcut replaces those badges without
+  // weakening the OCR review gates verified in the opened document below.
+  const reviewBadge = page.getByText("OCR revisable · sin escrituras automáticas", { exact: true });
+  const compactArchiveShortcut = page.getByRole("link", { name: /Ir al archivo documental/ });
+  if (await compactArchiveShortcut.isVisible()) {
+    await expect(reviewBadge).toBeHidden();
+    await expect(compactArchiveShortcut).toHaveAttribute("href", "#archivo-documental");
+    await expect(page.locator("#archivo-documental")).toBeAttached();
+  } else {
+    await expect(reviewBadge).toBeVisible();
+    await expect(compactArchiveShortcut).toBeHidden();
+  }
   await expect(page.locator("#document-camera")).toHaveAttribute("accept", "image/*");
   await expect(page.locator("#document-camera")).toHaveAttribute("capture", "environment");
   await expect(page.locator("#document-file")).toHaveAttribute("accept", ".pdf,.jpg,.jpeg,.png,.webp");
