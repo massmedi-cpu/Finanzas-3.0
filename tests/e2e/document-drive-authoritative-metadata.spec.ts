@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { registerAtomicDriveDocumentBatch } from "../../src/domain/atomic-drive-document-batch";
 import {
   GOOGLE_DRIVE_OCR_MAX_BYTES,
   GoogleDriveDocumentDownloader,
@@ -247,7 +248,7 @@ test("REC-DRIVE-132 · gateway validates every Drive item before transaction", (
   const validation = handler.indexOf("const documents = payload.files.map");
   const duplicate = handler.indexOf("seenFileIds.has(fileId)");
   const sizeCheck = handler.indexOf("size === null || size <= 0 || size > MAX_FILE_BYTES");
-  const transaction = handler.indexOf("await sql.begin(async (tx: any)");
+  const transaction = handler.indexOf("registerAtomicDriveDocumentBatch(documents, sql");
   expect(validation).toBeGreaterThan(0);
   expect(duplicate).toBeGreaterThan(validation);
   expect(sizeCheck).toBeGreaterThan(validation);
@@ -262,10 +263,64 @@ test("REC-DRIVE-133 · every document registration uses ONE rollback-safe transa
   const from = source.indexOf('if (action === "document.drive_batch")');
   const to = source.indexOf('if (action === "test.document_engine")', from);
   const handler = source.slice(from, to);
-  expect(handler).toContain("await sql.begin(async (tx: any) => {");
-  expect(handler).toContain("for (const file of documents)");
+  expect(handler).toContain("await registerAtomicDriveDocumentBatch(documents, sql");
   expect(handler).toContain("await tx`select financial_app.register_document(");
   expect(handler).not.toContain("await sql`select financial_app.register_document(");
   expect(handler).toContain("return databaseError(error)");
-  expect(handler).toContain("imported: documents.length");
+  expect(handler).toContain("return json({ imported, total: documents.length");
+});
+
+test("REC-DRIVE-134 · a registration failure rolls back the entire synthetic batch", async () => {
+  const committed = ["existing-record"];
+  let transactionsStarted = 0;
+  let registrationsAttempted = 0;
+  // Transaction stub faithfully exposes a staging buffer that commits only
+  // on resolve; the production executor relies on postgres.js sql.begin.
+  const db = {
+    async begin(callback: (tx: { stage: string[] }) => Promise<void>) {
+      transactionsStarted += 1;
+      const staging: string[] = [];
+      await callback({ stage: staging });
+      committed.push(...staging);
+    },
+  };
+  await expect(registerAtomicDriveDocumentBatch(["first", "broken", "third"], db, async (tx, row) => {
+    registrationsAttempted += 1;
+    if (row === "broken") throw new Error("synthetic constraint violation");
+    tx.stage.push(row);
+  })).rejects.toThrow("synthetic constraint violation");
+  expect(transactionsStarted).toBe(1);
+  expect(registrationsAttempted).toBe(2);
+  expect(committed).toEqual(["existing-record"]);
+});
+
+test("REC-DRIVE-135 · a fully successful batch commits once and reports exact count", async () => {
+  const committed: string[] = [];
+  let transactionsStarted = 0;
+  const db = {
+    async begin(callback: (tx: { stage: string[] }) => Promise<void>) {
+      transactionsStarted += 1;
+      const staging: string[] = [];
+      await callback({ stage: staging });
+      committed.push(...staging);
+    },
+  };
+  const count = await registerAtomicDriveDocumentBatch(["alpha", "beta", "gamma"], db, async (tx, row) => {
+    tx.stage.push(row);
+  });
+  expect(count).toBe(3);
+  expect(transactionsStarted).toBe(1);
+  expect(committed).toEqual(["alpha", "beta", "gamma"]);
+});
+
+test("REC-DRIVE-136 · empty and oversized batches never enter the database", async () => {
+  let begins = 0;
+  const db = {
+    async begin(_callback: (tx: unknown) => Promise<void>) { begins += 1; },
+  };
+  await expect(registerAtomicDriveDocumentBatch([], db, async () => undefined))
+    .rejects.toThrow("invalid_document_drive_batch");
+  await expect(registerAtomicDriveDocumentBatch(Array(201).fill("x"), db, async () => undefined))
+    .rejects.toThrow("invalid_document_drive_batch");
+  expect(begins).toBe(0);
 });
