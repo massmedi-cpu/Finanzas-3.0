@@ -47,9 +47,7 @@ function validDriveSyncResult(value: unknown): value is DriveSyncResult {
   ];
   if (!counters.every((value) => Number.isSafeInteger(value) && Number(value) >= 0)) return false;
   return result.detectedChanges! + result.unchanged! === result.scanned!
-    && result.imported! <= result.detectedChanges!
-    && result.failed! <= result.detectedChanges!
-    && result.pending! <= result.detectedChanges!;
+    && result.imported! + result.failed! + result.pending! === result.detectedChanges!;
 }
 
 function validStoredResult(value: unknown): StoredResult | null {
@@ -66,7 +64,7 @@ function summary(result: DriveSyncResult) {
     || result.skippedInvalid > 0;
   const notes: string[] = [];
   if (result.imported > 0) {
-    notes.push(result.imported + " " + (result.imported === 1 ? "documento nuevo incorporado" : "documentos nuevos incorporados") + " desde Drive.");
+    notes.push(result.imported + " " + (result.imported === 1 ? "documento incorporado o actualizado" : "documentos incorporados o actualizados") + " desde Drive.");
   }
   if (result.failed > 0) {
     notes.push(result.failed + " " + (result.failed === 1 ? "documento no pudo validarse" : "documentos no pudieron validarse") + ".");
@@ -143,7 +141,9 @@ export function DriveAutoSync() {
       }
 
       if (body.imported > 0) {
-        window.location.reload();
+        // Re-read the list without unmounting the editor, losing an in-flight
+        // private upload or discarding unsaved metadata. Never reload the page.
+        window.dispatchEvent(new Event("financial-app:documents-drive-updated"));
       }
     } catch {
       setPhase("error");
