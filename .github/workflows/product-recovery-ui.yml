@@ -7,6 +7,10 @@ on:
       - 'app/**'
       - 'src/design/**'
       - 'src/domain/document-ocr-financial-interpretation.ts'
+      - 'src/domain/private-document-content-address.ts'
+      - 'src/domain/private-document-replay.ts'
+      - 'src/infrastructure/google/google-drive-document-downloader.ts'
+      - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
       - 'src/application/document-drive-inventory.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
       - 'scripts/test-document-drive-inventory.mjs'
@@ -80,6 +84,9 @@ jobs:
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/private-document-content-address.spec.ts
+          tests/e2e/private-document-replay.spec.ts
+          tests/e2e/document-drive-authoritative-metadata.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
