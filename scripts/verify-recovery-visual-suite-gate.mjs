@@ -24,6 +24,8 @@ for (const [file, casesInFile] of cases) {
   process.stdout.write(`PASS: ${file} is executed, ${casesInFile.join(", ")} present\n`);
 }
 assert.ok(workflow.includes("'scripts/verify-recovery-visual-suite-gate.mjs'"), "Changes to guard must trigger CI");
+assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-atomic-batch.mjs"), "Drive rollback behavioral tests must execute BEFORE slow browser matrix");
+assert.ok(workflow.includes("'scripts/test-drive-atomic-batch.mjs'"), "Changing Drive rollback tests must retrigger CI");
 // A passing browser job is not independently reviewable unless its screenshots
 // and failure traces survive the ephemeral CI runner. The first Playwright command
 // clears its output on the next run, so preserve both phases separately.
