@@ -19,27 +19,32 @@ assert.ok(png.byteLength > 1000, "synthetic receipt image created");
 // A scanned PDF contains pixels but NO native text. Embed the synthetic
 // raster as a JPEG XObject, rasterize it again using PDF.js and send that
 // resulting PNG through the same local Spanish Tesseract worker.
-function embedRasterInPdf(jpeg, width, height, selectableStamp = false, selectableFooter = null) {
+function embedRasterInPdf(jpeg, width, height, selectableStamp = false, selectableFooter = null, selectableSideband = null) {
   const imageCommands = "q\n" + width + " 0 0 " + height + " 0 0 cm\n/Im1 Do\nQ\n";
   const stampCommands = selectableStamp ? "BT\n/F1 8 Tf\n" + (width - 25) + " " + (height - 20) + " Td\n(1) Tj\nET\n" : "";
   // 3 Tr stores selectable text in the PDF but paints no pixels. This models
   // real scanned invoices with a selectable metadata/footer layer over raster.
   const footer = selectableFooter?.replace(/[\\()]/g, (character) => "\\" + character) ?? "";
   const footerCommands = selectableFooter ? "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + footer + ") Tj\nET\n" : "";
-  const commands = Buffer.from(imageCommands + stampCommands + footerCommands, "ascii");
+  const sideband = selectableSideband?.replace(/[\\()]/g, (character) => "\\" + character) ?? "";
+  // Invisible PDF text rotated 90° in the outer margin. The central
+  // invoice remains genuinely raster-only and must be read by Tesseract.
+  const sidebandCommands = selectableSideband ? "BT\n/F1 2 Tf\n3 Tr\n0 1 -1 0 16 10 Tm\n("
+    + sideband + ") Tj\nET\n" : "";
+  const commands = Buffer.from(imageCommands + stampCommands + footerCommands + sidebandCommands, "ascii");
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "ascii"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "ascii"),
     Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + width + " " + height
       + "] /Resources << /XObject << /Im1 5 0 R >>"
-      + (selectableStamp || selectableFooter ? " /Font << /F1 6 0 R >>" : "")
+      + (selectableStamp || selectableFooter || selectableSideband ? " /Font << /F1 6 0 R >>" : "")
       + " >> /Contents 4 0 R >>", "ascii"),
     Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n", "ascii"), commands, Buffer.from("endstream", "ascii")]),
     Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width " + width
       + " /Height " + height + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
       + jpeg.length + " >>\nstream\n", "ascii"), jpeg, Buffer.from("\nendstream", "ascii")]),
   ];
-  if (selectableStamp || selectableFooter) objects.push(Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "ascii"));
+  if (selectableStamp || selectableFooter || selectableSideband) objects.push(Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "ascii"));
   const buffers = [Buffer.from("%PDF-1.4\n", "ascii")];
   const offsets = [0];
   let position = buffers[0].length;
@@ -56,7 +61,7 @@ function embedRasterInPdf(jpeg, width, height, selectableStamp = false, selectab
   return new Uint8Array(Buffer.concat(buffers));
 }
 
-async function rasterizePdfImage(pdfBytes, expectNativeStamp = false, expectedNativeFooter = null) {
+async function rasterizePdfImage(pdfBytes, expectNativeStamp = false, expectedNativeFooter = null, expectedNativeSideband = null) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = pdfjs.getDocument({ data: pdfBytes, useSystemFonts: true });
   try {
@@ -71,6 +76,12 @@ async function rasterizePdfImage(pdfBytes, expectNativeStamp = false, expectedNa
         assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
           text, confidence: 1, box: { x: 0.9, y: 0.1, width: 0.02, height: 0.02 },
         }))), true, "sparse native stamp must not bypass the visual OCR path");
+      } else if (expectedNativeSideband) {
+        assert.ok(tokens.join(" ").includes(expectedNativeSideband),
+          "the vertical legal stamp is selectable in the real PDF.js text stream");
+        assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
+          text, confidence: 1, box: { x: 0.015, y: 0.04, width: 0.02, height: 0.86 },
+        }))), true, "lateral native text does not count as invoice body coverage");
       } else if (expectedNativeFooter) {
         assert.ok(tokens.join(" ").includes(expectedNativeFooter),
           "the synthetic footer is genuinely selectable in PDF.js");
@@ -106,6 +117,11 @@ assert.ok(selectableFooter.length > 110 && selectableFooter.length < 260);
 const renderedFooterHybrid = await rasterizePdfImage(
   embedRasterInPdf(rasterJpeg, 1000, 220, false, selectableFooter),
   false, selectableFooter,
+);
+const verticalStamp = selectableFooter.repeat(2);
+const renderedVerticalHybrid = await rasterizePdfImage(
+  embedRasterInPdf(rasterJpeg, 1000, 220, false, null, verticalStamp),
+  false, null, verticalStamp,
 );
 assert.deepEqual([...renderedScan.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "scanned PDF rendered into PNG");
 
@@ -159,6 +175,11 @@ try {
     "actual recovered PDF invoice total must win over longer selectable boilerplate");
   console.log("PASS · long selectable PDF footer did not hide its raster invoice total");
 
+  const sidebandResult = await worker.recognize(renderedVerticalHybrid, { rotateRadians: 0 }, { text: true });
+  const sidebandText = String(sidebandResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(sidebandText, /TOTAL/i, "vertical selectable stamp cannot conceal visible TOTAL");
+  assert.match(sidebandText, /23[,.]45/, "Spanish Tesseract reads exact cents through sideways-stamp PDF");
+  console.log("PASS · rotated native legal stamp does not mask actual raster invoice OCR");
 
 } finally {
   await worker?.terminate();
