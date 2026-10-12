@@ -2,6 +2,7 @@ import { createClient } from "supabase-js";
 import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
 import { matchesPrivateDocumentReplay } from "../../../src/domain/private-document-replay.ts";
 import { matchesPrivateDocumentUploadPathContract, privateDocumentContentId } from "../../../src/domain/private-document-content-address.ts";
+import { registerAtomicDriveDocumentBatch } from "../../../src/domain/atomic-drive-document-batch.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -556,16 +557,15 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     // A failed record rolls back ALL document registrations in this batch.
     // Never report a partial import as if it had completed successfully.
     // This affects only document metadata; original Drive files stay read-only.
+    let imported: number;
     try {
-      await sql.begin(async (tx: any) => {
-        for (const file of documents) {
-          await tx`select financial_app.register_document(${file.type},${file.name},${file.mime},'google_drive',${file.fileId},${file.fileId},${file.size}::bigint,${file.modifiedTime}::timestamptz)`;
-        }
+      imported = await registerAtomicDriveDocumentBatch(documents, sql, async (tx: any, file) => {
+        await tx`select financial_app.register_document(${file.type},${file.name},${file.mime},'google_drive',${file.fileId},${file.fileId},${file.size}::bigint,${file.modifiedTime}::timestamptz)`;
       });
     } catch (error) {
       return databaseError(error);
     }
-    return json({ imported: documents.length, total: documents.length, ocrUsed: false });
+    return json({ imported, total: documents.length, ocrUsed: false });
   }
 
   if (action === "test.document_engine") {
