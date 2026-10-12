@@ -186,3 +186,46 @@ test("REC-OCR-069 · 3-decimal total-like continuation still triggers review", (
   const text = "Factura original. TOTAL € 50,234. " + boilerplate.slice(0, 118);
   expect(pdfNativeTextNeedsVisualOcr(words(text))).toBe(true);
 });
+
+
+test("REC-OCR-070 · more than 260 characters in one hidden native footer still require visual OCR", () => {
+  const overlay = boilerplate.repeat(3);
+  expect(overlay.length).toBeGreaterThan(260);
+  const footerWord: OcrWord = {
+    text: overlay, confidence: 1,
+    box: { x: 0.02, y: 0.93, width: 0.96, height: 0.025 },
+  };
+  expect(pdfNativeTextNeedsVisualOcr([footerWord])).toBe(true);
+});
+
+test("REC-OCR-071 · six lengthy native footer spans cannot conceal the scanned invoice", () => {
+  const footer = Array.from({ length: 6 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: 0.05, y: 0.82 + index * 0.025, width: 0.9, height: 0.02 },
+  }));
+  expect(footer.length).toBeGreaterThanOrEqual(5);
+  expect(footer.map((word) => word.text).join(" ").length).toBeGreaterThan(260);
+  expect(pdfNativeTextNeedsVisualOcr(footer)).toBe(true);
+});
+
+test("REC-OCR-072 · a long authentic native invoice with total is retained without visual OCR", () => {
+  const invoice = "FACTURA DE PRUEBA. IMPORTE TOTAL 123,45 € " + boilerplate.repeat(3);
+  const native: OcrWord = {
+    text: invoice, confidence: 1,
+    box: { x: 0.02, y: 0.82, width: 0.95, height: 0.04 },
+  };
+  expect(pdfNativeTextNeedsVisualOcr([native])).toBe(false);
+});
+
+test("REC-OCR-073 · longer visual legal boilerplate must not replace a real native total", () => {
+  const native = words("Factura de suministro. TOTAL 42,35 €");
+  const unrelatedVisual = words(boilerplate.repeat(4));
+  expect(unrelatedVisual.length).toBeGreaterThan(native.length);
+  expect(pdfVisualOcrImprovesNative(native, unrelatedVisual)).toBe(false);
+});
+
+test("REC-OCR-074 · visual invoice total can still recover a native-only legal footer", () => {
+  const native = words(boilerplate);
+  const visual = words("FACTURA ORIGINAL. TOTAL 42,35 €");
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
+});

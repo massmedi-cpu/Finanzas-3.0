@@ -48,8 +48,21 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   // invoice are already a usable native layer, even when it contains no
   // price (a cover page or a detailed header). Preserve that fast path;
   // a single long hidden footer cannot claim the same structural coverage.
+  // A long selectable legal footer can contain hundreds of characters while
+  // the actual invoice is exclusively rasterized above it. Neither character
+  // count nor the number of native spans proves page-wide text coverage.
+  // Preserve a positively identified native invoice total, but try visual
+  // OCR when every selectable span is restricted to the bottom fifth.
+  const footerOnly = words.every(({ box }) =>
+    Number.isFinite(box.y) && Number.isFinite(box.height)
+    && box.y >= 0.8 && box.y <= 1 && box.height >= 0
+    && box.y + box.height <= 1.001);
+  if (footerOnly && !hasInvoiceTotalEvidence(words)) return true;
+
   if (chars >= 210 && words.length >= 5) return false;
-  if (chars >= 260) return false;
+  // A single enormous native text item can still be hidden PDF metadata,
+  // not a readable invoice. For that case require actual financial evidence.
+  if (chars >= 260 && words.length >= 2) return false;
   const normalized = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const financialLabel = /\b(?:total|importe|subtotal|base imponible|precio|a pagar|iva|igic|cuota)\b/.test(normalized);
   return !(financialLabel && hasMoneyEvidence(normalized));
@@ -64,6 +77,10 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
 export function pdfVisualOcrImprovesNative(nativeWords: OcrWord[], visualWords: OcrWord[]) {
   if (!visualWords.length) return false;
   if (!nativeWords.length) return true;
+  // A lengthier but unrelated OCR result must never erase a known native
+  // invoice total. Recognition volume alone does not establish relevance.
+  if (hasInvoiceTotalEvidence(nativeWords) && !hasInvoiceTotalEvidence(visualWords)) return false;
+
   const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
   const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
   if ((visualWords.length > nativeWords.length && visualChars >= nativeChars)
