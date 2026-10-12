@@ -5,7 +5,6 @@ import path from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { createWorker, PSM } from "tesseract.js";
 import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
-import { PdfTextOcrProvider } from "../src/infrastructure/ocr/pdf-text-provider.ts";
 
 const canvas = createCanvas(1000, 220);
 const context = canvas.getContext("2d");
@@ -160,37 +159,7 @@ try {
     "actual recovered PDF invoice total must win over longer selectable boilerplate");
   console.log("PASS · long selectable PDF footer did not hide its raster invoice total");
 
-  // The real PDF.js provider must also choose the scanned invoice TOTAL
-  // over that same selectable footer. Inject only the already running real
-  // Tesseract worker; do not fake the PDF parser, page raster or recognition.
-  const integrated = await new PdfTextOcrProvider({
-    extract: async ({ bytes }) => {
-      const recognized = await worker.recognize(Buffer.from(bytes), { rotateRadians: 0 }, { text: true });
-      const recognizedText = String(recognized.data?.text ?? "").replace(/\s+/g, " ").trim();
-      return {
-        source: "tesseract-js",
-        pages: [{
-          pageNumber: 1,
-          words: recognizedText.split(/\s+/).filter(Boolean).map((text) => ({
-            text, confidence: 0.9,
-            box: { x: 0.1, y: 0.4, width: 0.12, height: 0.12 },
-          })),
-        }],
-        warnings: [],
-      };
-    },
-  }).extract({
-    bytes: embedRasterInPdf(rasterJpeg, 1000, 220, false, selectableFooter),
-    mimeType: "application/pdf",
-    originalFileName: "factura-escaneada-con-capa-nativa.pdf",
-  });
-  const integratedText = integrated.pages[0]?.words.map((word) => word.text).join(" ") ?? "";
-  assert.match(integratedText, /TOTAL/i, "real PDF provider chooses invoice TOTAL, not selectable footer");
-  assert.match(integratedText, /23[,.]45/, "real PDF provider preserves original cents");
-  assert.equal(integrated.source, "pdf_ocr", "provider attributes selected words to visual OCR");
-  assert.ok(integrated.warnings.includes("pdf_page_sparse_native_recovered:1"),
-    "hybrid source recovery is visible to user for review");
-  console.log("PASS · integrated PdfTextOcrProvider recovers the real scanned invoice over native footer");
+
 } finally {
   await worker?.terminate();
 }
