@@ -66,6 +66,54 @@ function driveModifiedTime(value: unknown): string | null {
   return value;
 }
 
+/**
+ * Fail before buffering an oversized response. Content-Length is only a hint:
+ * Drive/proxies may omit it or return an incorrect value. A real byte counter
+ * is required to bound application memory, regardless of response headers.
+ */
+async function readDriveMediaBounded(response: Response): Promise<Uint8Array> {
+  if (!response.body) {
+    throw new GoogleDriveDocumentError(
+      "google_drive_document_download_failed",
+      "La descarga de Drive no tiene contenido legible.",
+    );
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      length += value.byteLength;
+      if (length > GOOGLE_DRIVE_OCR_MAX_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new GoogleDriveDocumentError(
+          "google_drive_document_too_large",
+          "La descarga de Drive supera el límite seguro de 15 MB.",
+        );
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof GoogleDriveDocumentError) throw error;
+    throw new GoogleDriveDocumentError(
+      "google_drive_document_download_failed",
+      "No se pudo completar la descarga del documento de Drive.",
+    );
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 function googleHeaders(accessToken: string) {
   return {
     authorization: `Bearer ${accessToken}`,
@@ -192,7 +240,7 @@ export class GoogleDriveDocumentDownloader {
       }
     }
 
-    const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
+    const bytes = await readDriveMediaBounded(mediaResponse);
     if (!bytes.byteLength || bytes.byteLength > GOOGLE_DRIVE_OCR_MAX_BYTES || bytes.byteLength !== size) {
       throw new GoogleDriveDocumentError(
         bytes.byteLength > GOOGLE_DRIVE_OCR_MAX_BYTES
