@@ -89,7 +89,11 @@ export function pdfVisualOcrImprovesNative(nativeWords: OcrWord[], visualWords: 
   // invoice total. Recognition volume alone does not establish relevance.
   const nativeTotal = hasInvoiceTotalEvidence(nativeWords);
   const visualTotal = hasInvoiceTotalEvidence(visualWords);
-  if (nativeTotal && !visualTotal) return false;
+  // A native invoice total is deterministic selectable financial evidence.
+  // Additional raster words (even if numerous) cannot be trusted to replace
+  // the original with a conflicting OCR amount. Preserve the native text;
+  // visual OCR still recovers scanned pages when no native total is present.
+  if (nativeTotal) return false;
 
   // A badly recognized raster may generate more words than the native layer,
   // but quantity is not quality. Preserve the readable original and mark the

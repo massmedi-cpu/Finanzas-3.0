@@ -268,3 +268,17 @@ test("REC-OCR-084 · a single long native VAT span without an invoice total cann
   expect(text.length).toBeGreaterThan(260);
   expect(pdfNativeTextNeedsVisualOcr([native])).toBe(true);
 });
+
+
+test("REC-OCR-085 · lengthy conflicting raster OCR never overwrites a true native invoice total", () => {
+  const native = words("FACTURA ORIGINAL. TOTAL 45,30 €");
+  const visual = words("FACTURA OCR TOTAL 23,45 € " + boilerplate.repeat(4));
+  expect(visual.length).toBeGreaterThan(native.length);
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(false);
+});
+
+test("REC-OCR-086 · OCR can recover a scanned invoice if native text has only VAT", () => {
+  const native = words("IVA 9,45 € " + boilerplate);
+  const visual = words("FACTURA ORIGINAL. TOTAL 54,45 €");
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
+});
