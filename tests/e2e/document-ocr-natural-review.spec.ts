@@ -125,7 +125,9 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await panel.getByRole("button", { name: /Analizar/ }).click();
   await expect.poll(() => ocrRuns).toBe(1);
   expect(ocrMethod).toBe("POST");
-  await expect(panel.getByText("Revisa primero total con el original", { exact: true }).last()).toBeVisible();
+  // The unlabelled "TIENDA PRUEBA" header cannot prove the issuer, even at
+  // confidence 0.91: the financial total AND issuer need original comparison.
+  await expect(panel.getByText("Revisa primero comercio / emisor y total con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
