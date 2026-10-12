@@ -12,6 +12,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -127,8 +128,16 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
   if (!response?.ok) throw new Error("document_download_failed");
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_FILE_BYTES) throw new Error("document_download_too_large");
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.byteLength || bytes.byteLength > MAX_FILE_BYTES) throw new Error("document_download_too_large");
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = await readLimitedResponseBody(response, MAX_FILE_BYTES);
+  } catch (error) {
+    if (error instanceof LimitedResponseBodyError && error.reason === "too_large") {
+      throw new Error("document_download_too_large");
+    }
+    throw new Error("document_download_failed");
+  }
+  if (!bytes.byteLength) throw new Error("document_download_failed");
 
   return new Response(bytes, {
     status: 200,
