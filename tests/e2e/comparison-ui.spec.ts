@@ -134,12 +134,14 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
 test("REC-SYNC-006 · fallo HTTP de frescura muestra reintento y recupera sin escribir datos", async ({ page }) => {
   await mockComparison(page);
   let calls = 0;
+  let recoveryRequested = false;
+  let recoveredReads = 0;
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => {
-    // The page may query all-account coverage before the scoped comparison
-    // snapshot arrives. Reserve the injected failure for the actual account.
-    const scopedRequest = new URL(route.request().url()).searchParams.get("accountId") === ACCOUNT_ID;
-    if (scopedRequest) calls += 1;
-    return route.fulfill(scopedRequest && calls === 1
+    // Initial unscoped and selected-account queries may overlap or be
+    // cancelled during navigation. Keep the 503 until the user retries.
+    calls += 1;
+    if (recoveryRequested) recoveredReads += 1;
+    return route.fulfill(!recoveryRequested
       ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "source_unavailable" }) }
       : {
           status: 200,
@@ -164,10 +166,12 @@ test("REC-SYNC-006 · fallo HTTP de frescura muestra reintento y recupera sin es
   const retry = page.getByRole("button", { name: "Reintentar", exact: true });
   await expect(retry).toBeVisible();
   await expect(retry).toHaveCSS("min-height", "44px");
+  recoveryRequested = true;
   await retry.click();
   await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
   await expect(failure).toHaveCount(0);
-  expect(calls).toBe(2);
+  expect(calls).toBeGreaterThanOrEqual(2);
+  expect(recoveredReads).toBe(1);
 });
 
 test("REC-SYNC-005 · origen declarado no disponible muestra un aviso, no una banda vacía", async ({ page }) => {
