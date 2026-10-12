@@ -98,6 +98,21 @@ async function mockDashboard(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true,
+        earliestMovementDate: "2026-01-01",
+        latestMovementDate: "2026-09-16",
+        sync: {
+          status: "success", startedAt: "2026-09-16T08:00:00Z",
+          finishedAt: "2026-09-16T08:05:00Z",
+          rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      });
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await json(route, { run: null });
       return;
