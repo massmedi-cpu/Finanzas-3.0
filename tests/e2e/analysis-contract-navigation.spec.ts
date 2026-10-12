@@ -201,7 +201,13 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
 
   expect(routeSource).toContain("callPersistenceGatewayBatch");
   expect(routeSource).toContain('action: "source.google_connection_status"');
-  expect(routeSource).toContain('action: "transaction.query", payload: { limit: 1 }');
+  // The scalable date-bounds query is the primary source; legacy query is a fallback.
+  // Both paths must honor account scope and preserve the observed bank date.
+  expect(routeSource).toContain('action: "transaction.date_bounds", payload: { accountId }');
+  expect(routeSource).toContain('callPersistenceGateway<unknown>("transaction.query", { limit: 1, accountId })');
+  expect(routeSource).toContain("earliestMovementDate = text(bounds?.earliestMovementDate)");
+  expect(routeSource).toContain("latestMovementDate = text(bounds?.latestMovementDate)");
+  expect(routeSource).toContain("latestMovementDate = transactionDate(legacy)");
   expect(routeSource).toContain('"source.status"');
   expect(routeSource).toContain('status !== "partial"');
   expect(routeSource).toContain("value >= 0");
