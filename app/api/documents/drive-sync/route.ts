@@ -119,6 +119,7 @@ async function verifyCandidates(
           name: downloaded.fileName ?? candidate.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
+          modifiedTime: downloaded.modifiedTime ?? candidate.modifiedTime,
         });
       } catch {
         failed += 1;
