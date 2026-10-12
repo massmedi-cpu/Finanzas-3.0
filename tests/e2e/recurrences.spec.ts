@@ -776,3 +776,69 @@ test("REC-REC-009 · los candidatos y sus decisiones no desbordan 320-1440 px en
   }
   expect(writes).toEqual([]);
 });
+
+test("REC-REC-010 · POST 200 sin relectura verificada no anuncia confirmación", async ({ page }) => {
+  let postAccepted = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      return route.fulfill({
+        status: postAccepted ? 503 : 200,
+        contentType: "application/json",
+        body: JSON.stringify(postAccepted ? { code: "source_unavailable" } : baseSnapshot),
+      });
+    }
+    writes.push(method);
+    postAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: confirmedRecurrenceId, status: "active" }),
+    });
+  });
+
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await page.locator("article").filter({ hasText: "supermercado mensual" })
+    .getByRole("button", { name: "Confirmar recurrencia" }).click();
+
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual(["POST"]);
+});
+
+test("REC-REC-011 · PATCH 200 con relectura corrupta no anuncia archivo ni reutiliza candidatos", async ({ page }) => {
+  let patchAccepted = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(patchAccepted
+          ? { ...baseSnapshot, candidateCount: 0 }
+          : baseSnapshot),
+      });
+    }
+    writes.push(method);
+    patchAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: activeRecurrenceId, status: "archived" }),
+    });
+  });
+
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await expect(history.locator("summary")).toBeVisible();
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  await expect(page.getByText("ingreso periódico", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual(["PATCH"]);
+});
