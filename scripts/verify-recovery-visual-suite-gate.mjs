@@ -24,6 +24,12 @@ for (const [file, casesInFile] of cases) {
   for (const caseId of casesInFile) assert.ok(source.includes(caseId), `${file} lost ${caseId}`);
   process.stdout.write(`PASS: ${file} is executed, ${casesInFile.join(", ")} present\n`);
 }
+const visual = workflow.split("name: Browser coverage, theme, keyboard and layout checks")[1]?.split("name: Retain isolated visual screenshots")[0] ?? "";
+assert.ok(visual.includes("tests/e2e/product-recovery-visual.spec.ts"), "Product visual regressions must execute");
+const visualTests = readFileSync("tests/e2e/product-recovery-visual.spec.ts", "utf8");
+for (const id of ["REC-UI-DOC-006", "REC-UI-DOC-007", "REC-UI-DOC-008"]) {
+  assert.ok(visualTests.includes(id), "Mandatory Document visual regression missing: " + id);
+}
 assert.ok(workflow.includes("'scripts/verify-recovery-visual-suite-gate.mjs'"), "Changes to guard must trigger CI");
 assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-atomic-batch.mjs"), "Drive rollback behavioral tests must execute BEFORE slow browser matrix");
 assert.ok(workflow.includes("'scripts/test-drive-atomic-batch.mjs'"), "Changing Drive rollback tests must retrigger CI");
