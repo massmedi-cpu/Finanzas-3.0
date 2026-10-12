@@ -135,3 +135,19 @@ test("REC-DRIVE-137 · importación automática refresca lista sin perder filtro
   expect(syncCalls).toBe(1);
   expect(navigations).toBe(1);
 });
+
+test("REC-DRIVE-138 · incoherent imported count is never shown as completed", async ({ page }) => {
+  await mockDocumentList(page);
+  await page.route("**/api/documents/drive-sync", route => route.fulfill({ json: {
+    contractVersion: 1, source: "google_drive", mode: "automatic_incremental_read_only",
+    scanned: 1, detectedChanges: 1, imported: 0, failed: 0, pending: 0,
+    unchanged: 0, skippedUnsupported: 0, skippedInvalid: 0, truncated: false,
+    completedAt: "2026-10-12T10:00:00.000Z",
+    principles: { bankSource: "read_only", driveSource: "read_only",
+      duplicateSafe: true, nonBlocking: true },
+  } }));
+  await page.goto("/documents");
+  const sync = page.getByTestId("drive-auto-sync");
+  await expect(sync).toContainText("No se ha podido verificar Drive");
+  await expect(sync).not.toContainText("Carpeta comprobada.");
+});
