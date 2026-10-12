@@ -57,3 +57,18 @@ test("REC-DOC-112 · gateway validates private Storage before immutable database
   expect(source).toContain("for update");
   expect(source).toContain("workspace_id=${workspaceId}::uuid");
 });
+
+test("REC-DOC-120 · direct private document open is workspace scoped", () => {
+  const source = readFileSync(join(
+    process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts",
+  ), "utf8");
+  const begin = source.indexOf('if (action === "document.open")');
+  const end = source.indexOf('if (action === "document.drive_batch")', begin);
+  expect(begin).toBeGreaterThan(0);
+  expect(end).toBeGreaterThan(begin);
+  const open = source.slice(begin, end);
+  expect(open).toContain("const workspaceId = await currentWorkspaceId(sql)");
+  expect(open).toContain("where id=${id}::uuid and workspace_id=${workspaceId}::uuid");
+  expect(open).toContain('row.storage_provider !== "google_drive" && row.storage_provider !== "supabase"');
+  expect(open).toContain('document_not_found');
+});
