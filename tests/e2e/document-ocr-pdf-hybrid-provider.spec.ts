@@ -7,7 +7,7 @@ const footer = "DOCUMENTO GENERADO AUTOMATICAMENTE POR EL SISTEMA DE ARCHIVO. "
   + "SE INFORMA QUE EL TEXTO SELECCIONABLE SOLO CONTIENE UNA REFERENCIA LEGAL "
   + "Y QUE LA FACTURA ORIGINAL CON EL TOTAL SE ENCUENTRA EN LA IMAGEN ESCANEADA.";
 
-function hybridPdf(): Uint8Array {
+function hybridPdf(selectableText = footer): Uint8Array {
   const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
@@ -21,7 +21,7 @@ function hybridPdf(): Uint8Array {
   // the JPEG XObject. This test never loads real invoices or credentials.
   const commands = Buffer.from(
     "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
-      + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + footer + ") Tj\nET\n", "ascii",
+      + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n", "ascii",
   );
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
@@ -94,4 +94,68 @@ test("REC-OCR-066 · actual PDF.js retains selectable original when raster recog
   expect(result.source).toBe("pdf_text");
   expect(result.pages[0].words.map(word=>word.text).join(" ")).toContain("DOCUMENTO GENERADO");
   expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
+});
+
+
+test("REC-OCR-081 · actual PDF.js recovers raster total beneath an invisible footer longer than 260 chars", async () => {
+  const longFooter = footer.repeat(3);
+  expect(longFooter.length).toBeGreaterThan(260);
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async ({ bytes, mimeType }) => {
+      visualReads += 1;
+      expect(mimeType).toBe("image/png");
+      expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      return visualResult(0.96);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(longFooter),
+    mimeType: "application/pdf",
+    originalFileName: "raster-bajo-overlay-largo.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.pages[0].words.map((word) => word.text)).toEqual(["TOTAL", "23,45"]);
+  expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
+});
+
+test("REC-OCR-082 · actual PDF.js preserves the fast path when native overlay has a genuine total", async () => {
+  const nativeText = "FACTURA ORIGINAL. TOTAL 23,45 EUR. " + footer.repeat(3);
+  expect(nativeText.length).toBeGreaterThan(260);
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async () => {
+      visualReads += 1;
+      return visualResult(0.96);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(nativeText),
+    mimeType: "application/pdf",
+    originalFileName: "factura-texto-nativo-valido.pdf",
+  });
+  expect(visualReads).toBe(0);
+  expect(result.source).toBe("pdf_text");
+  expect(result.pages[0].words.map((word) => word.text).join(" ")).toContain("TOTAL 23,45 EUR");
+  expect(result.warnings).not.toContain("pdf_page_sparse_native_unverified:1");
+});
+
+test("REC-OCR-083 · actual PDF.js must not borrow VAT amount after an empty TOTAL label", async () => {
+  const incompleteTotal = "FACTURA ORIGINAL. TOTAL pendiente. IVA 12,50 EUR. " + footer.repeat(2);
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async () => {
+      visualReads += 1;
+      return visualResult(0.96);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(incompleteTotal),
+    mimeType: "application/pdf",
+    originalFileName: "total-ilegible-iva-legible.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.pages[0].words.map((word) => word.text)).toEqual(["TOTAL", "23,45"]);
 });
