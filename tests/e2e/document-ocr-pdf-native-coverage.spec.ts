@@ -138,3 +138,33 @@ test("REC-OCR-062 · false positive decimal substring inside a reference is reje
   expect(pdfNativeTextNeedsVisualOcr(candidate)).toBe(true);
   expect(pdfVisualOcrImprovesNative(words(boilerplate), words("TOTAL 1234,567"))).toBe(false);
 });
+
+
+test("REC-OCR-063 · five substantial native invoice spans remain fast-path despite missing total", () => {
+  const nativeLines = [
+    "Factura del suministro correspondiente al periodo 01-09 a 30-09",
+    "Proveedor y domicilio fiscal detallados, CIF, condiciones de pago",
+    "Concepto, base imponible e impuestos aplicables para cada producto",
+    "Número de factura emitida, importe",
+    "Datos completos de la operación",
+  ];
+  const native = nativeLines.map((text, index) => ({
+    text, confidence: 1,
+    box: { x: 0.05, y: index * 0.14, width: 0.88, height: 0.08 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
+
+test("REC-OCR-064 · long one-span hidden footer still cannot mask a scanned total", () => {
+  const footer = [
+    "DOCUMENTO ESCANEADO QUE GUARDA UNA CAPA DE METADATOS SOLO PARA REFERENCIA LEGAL.",
+    "EL SISTEMA DE ARCHIVO NO INCLUYE EN ESTE TEXTO LOS DATOS FINANCIEROS DEL",
+    "JUSTIFICANTE ORIGINAL, QUE PERMANECE COMO IMAGEN Y NECESITA RECONOCIMIENTO.",
+  ].join(" ");
+  expect(footer.length).toBeGreaterThan(210);
+  expect(footer.length).toBeLessThan(260);
+  expect(pdfNativeTextNeedsVisualOcr([{
+    text: footer, confidence: 1,
+    box: { x: 0.02, y: 0.92, width: 0.92, height: 0.03 },
+  }])).toBe(true);
+});
