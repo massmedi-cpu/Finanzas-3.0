@@ -1761,7 +1761,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : currentList?.items.length ? (
               <div className={styles.documentList}>
                 {currentList.items.map((item) => (
-                  <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
+                  <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} aria-pressed={selectedId === item.id} aria-controls="documento-seleccionado" onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
                     <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{item.isTest === true ? <small className={styles.syntheticNoteLabel}>Prueba · designación revisada</small> : hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>

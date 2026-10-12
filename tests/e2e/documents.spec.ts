@@ -3519,3 +3519,31 @@ test("REC-DOC-133 · recovery from malformed document detail restores actions on
   expect(detailRequests).toBeGreaterThanOrEqual(2);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-UI-DOC-009 · selection and keyboard focus remain accessible on both themes and compact layouts", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  const row = archive.getByRole("button", { name: /factura-demo\.pdf/i });
+  await expect(row).toBeVisible();
+  await expect(row).toHaveAttribute("aria-pressed", "false");
+  await expect(row).toHaveAttribute("aria-controls", "documento-seleccionado");
+  await row.click();
+  await expect(row).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#documento-seleccionado")).toBeVisible();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    await row.focus();
+    const style = await row.evaluate(element => {
+      const css = window.getComputedStyle(element);
+      return { outlineStyle: css.outlineStyle, outlineWidth: css.outlineWidth,
+        boxShadow: css.boxShadow };
+    });
+    expect(style.outlineStyle, theme).not.toBe("none");
+    expect(style.outlineWidth, theme).toBe("3px");
+    expect(style.boxShadow, theme).toContain("inset");
+  }
+  expect(writes).toEqual([]);
+});

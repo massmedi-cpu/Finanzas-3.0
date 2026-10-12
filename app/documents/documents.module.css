@@ -208,3 +208,24 @@
     outline-offset: 2px;
   }
 }
+
+
+/* REC-UI-DOC-009: the selected document must remain perceivable by keyboard,
+   screen-reader and sighted users in both themes, without changing row size. */
+.documentRow:focus-visible {
+  outline: 3px solid var(--color-primary-bright);
+  outline-offset: -3px;
+  position: relative;
+  z-index: 1;
+}
+.documentRow[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--color-primary-bright) 13%, var(--surface-card));
+  box-shadow: inset 4px 0 0 var(--color-primary-bright);
+}
+:global(html[data-theme="light"]) .documentRow[aria-pressed="true"] {
+  background: var(--surface-primary-subtle);
+  box-shadow: inset 4px 0 0 var(--color-primary);
+}
+:global(html[data-theme="light"]) .documentRow:focus-visible {
+  outline-color: var(--color-primary);
+}
