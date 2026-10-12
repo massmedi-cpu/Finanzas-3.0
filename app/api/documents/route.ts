@@ -242,7 +242,7 @@ export async function POST(request: Request) {
           mimeType: mimeValue(item.mimeType),
           fileId: text(item.fileId, "invalid_document_drive_file_id", 300),
           sizeBytes: integer(item.sizeBytes, "invalid_document_size", 0, Number.MAX_SAFE_INTEGER, true),
-          modifiedTime: nullableText(item.modifiedTime, "invalid_document_source_modified_at", 80),
+          // Never accept a browser-provided modification timestamp as Drive evidence.
         };
       });
 
@@ -255,6 +255,7 @@ export async function POST(request: Request) {
           name: downloaded.fileName ?? file.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
+          modifiedTime: downloaded.modifiedTime, // Authoritative Google metadata only.
         });
       }
 
