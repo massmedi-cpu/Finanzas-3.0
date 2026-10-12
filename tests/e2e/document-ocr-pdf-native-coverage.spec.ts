@@ -112,3 +112,29 @@ test("REC-OCR-057 · no visual words means no apparent OCR improvement", () => {
 test("REC-OCR-058 · an actually richer visual layer still takes priority", () => {
   expect(pdfVisualOcrImprovesNative(words("Referencia 1"), words(boilerplate))).toBe(true);
 });
+
+
+test("REC-OCR-059 · three-decimal rate is not mistaken for a monetary total in native layer", () => {
+  const text = "Documento TOTAL 1,234. " + boilerplate.slice(0, 145);
+  expect(text.length).toBeLessThan(260);
+  expect(pdfNativeTextNeedsVisualOcr(words(text))).toBe(true);
+});
+
+test("REC-OCR-060 · percentage with decimal and whitespace is never a monetary total", () => {
+  const native = words("TOTAL 21,00 % " + boilerplate.slice(0, 150));
+  const visual = words("TOTAL 21,00 %");
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), visual)).toBe(false);
+});
+
+test("REC-OCR-061 · invoice total in full ISO EU thousands notation remains valid", () => {
+  const invoice = words("FACTURA ORIGINAL. TOTAL 1.234,50 € " + boilerplate.slice(0, 120));
+  expect(pdfNativeTextNeedsVisualOcr(invoice)).toBe(false);
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), words("TOTAL 1.234,50 €"))).toBe(true);
+});
+
+test("REC-OCR-062 · false positive decimal substring inside a reference is rejected", () => {
+  const candidate = words("Importe TOTAL 1234,567 " + boilerplate.slice(0, 140));
+  expect(pdfNativeTextNeedsVisualOcr(candidate)).toBe(true);
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), words("TOTAL 1234,567"))).toBe(false);
+});
