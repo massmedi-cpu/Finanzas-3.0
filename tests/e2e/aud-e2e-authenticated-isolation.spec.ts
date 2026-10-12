@@ -13,10 +13,18 @@ if (supabaseOrigin.hostname !== "127.0.0.1" || supabaseOrigin.protocol !== "http
   throw new Error("cloud_runtime_forbidden");
 }
 const contextFile = `${dir}/context.json`;
+// The isolated application's signed Storage URL retains the configured public
+// Supabase project origin. Translate only that exact, trusted Storage origin
+// to the disposable localhost server; never fetch from a remote project.
+const canonicalStorageOrigin = "https://btzukbfesxdratqnxuoj.supabase.co";
 const localUrl = (value: string) => {
   const url = new URL(value);
-  if (url.origin !== supabaseOrigin.origin || url.username || url.password) throw new Error("nonlocal_storage_url");
-  return url.toString();
+  if (url.username || url.password
+    || !url.pathname.startsWith("/storage/v1/")
+    || (url.origin !== supabaseOrigin.origin && url.origin !== canonicalStorageOrigin)) {
+    throw new Error("nonlocal_storage_url");
+  }
+  return new URL(url.pathname + url.search, supabaseOrigin).toString();
 };
 
 test("real app login rejects anonymous/unauthorized users and renews actual Supabase cookies", async ({ page, request }) => {
@@ -74,6 +82,8 @@ test("synthetic ticket crosses real private Storage and the canonical OCR engine
   });
   expect(uploadResponse.status()).toBe(200);
   const signedUpload = await uploadResponse.json();
+  // A forged Storage host must remain blocked even when its path looks valid.
+  expect(() => localUrl("https://external.invalid/storage/v1/object/other")).toThrow("nonlocal_storage_url");
   const uploaded = await fetch(localUrl(signedUpload.signedUrl), {
     method: "PUT", headers: { "content-type": "image/png" }, body: png,
   });
