@@ -113,13 +113,18 @@ async function verifyCandidates(
         const downloaded = await driveDownloader.download({
           fileId: candidate.fileId,
           expectedMimeType: candidate.mimeType,
+          expectedModifiedTime: candidate.modifiedTime,
+          expectedSizeBytes: candidate.sizeBytes,
         });
+        if (!downloaded.modifiedTime) {
+          throw new Error("drive_verified_modified_time_missing");
+        }
         verified.push({
           ...candidate,
           name: downloaded.fileName ?? candidate.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
-          modifiedTime: downloaded.modifiedTime ?? candidate.modifiedTime,
+          modifiedTime: downloaded.modifiedTime, // Verified server revision only.
         });
       } catch {
         failed += 1;
