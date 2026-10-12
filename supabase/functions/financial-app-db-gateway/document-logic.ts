@@ -1,7 +1,7 @@
 import { createClient } from "supabase-js";
 import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
 import { matchesPrivateDocumentReplay } from "../../../src/domain/private-document-replay.ts";
-import { privateDocumentContentId } from "../../../src/domain/private-document-content-address.ts";
+import { matchesPrivateDocumentUploadPathContract, privateDocumentContentId } from "../../../src/domain/private-document-content-address.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -388,6 +388,12 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const workspaceId = await currentWorkspaceId(sql);
     const pathMatch = path.match(STORAGE_PATH);
     if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) throw new Error("invalid_document_storage_key");
+    // v5-shaped content-derived paths are only valid for their ORIGINAL
+    // SHA-256. Legacy random v4 paths remain recoverable. The downloaded
+    // object is independently hashed below, before any database mutation.
+    if (!matchesPrivateDocumentUploadPathContract(path, expectedSha256)) {
+      return json({ error: "document_upload_content_address_conflict" }, 409);
+    }
 
     const supabase = storageClient();
     let stored: any;
