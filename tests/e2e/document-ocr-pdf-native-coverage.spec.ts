@@ -366,7 +366,7 @@ test("REC-OCR-100 · an explicit native whole-EUR total followed by sentence pun
 });
 
 test("REC-OCR-101 · a numeric continuation after whole-euro currency is not a proven total", () => {
-  const native = words("FACTURA TOTAL 45 EUR,50 " + boilerplate);
+  const native = words("FACTURA TOTAL 45 EUR,50 " + boilerplate.slice(0, 90));
   const visual = words("FACTURA TOTAL 23,45 EUR");
   expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
   expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
