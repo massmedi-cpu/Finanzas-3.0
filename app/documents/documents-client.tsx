@@ -236,6 +236,16 @@ type DocumentList = {
   principles: DocumentPrinciples;
 };
 
+// The display layer may receive HTTP 200 with a PostgreSQL timestamp that
+// JavaScript silently normalizes (for example, 30 February -> 2 March).
+// Reject a fictitious provenance date before presenting or editing an item.
+function validDocumentTimestamp(value: unknown): value is string {
+  if (typeof value !== "string"
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
+  return formatDate(value.slice(0, 10)) !== "Fecha no válida"
+    && Number.isFinite(Date.parse(value));
+}
+
 // Trust neither HTTP 200 nor TypeScript assertions as proof that this is a
 // valid personal document list. Refuse to render malformed/partial responses
 // as a genuine empty archive, and do not discard the previous list.
@@ -278,8 +288,8 @@ function validatedDocumentList(payload: unknown): DocumentList {
       || !["supabase", "google_drive"].includes(item.storageProvider ?? "")
       || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(item.mimeType ?? "")
       || typeof item.notes !== "string"
-      || typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt))
-      || typeof item.updatedAt !== "string" || !Number.isFinite(Date.parse(item.updatedAt))
+      || !validDocumentTimestamp(item.createdAt)
+      || !validDocumentTimestamp(item.updatedAt)
       || (item.sizeBytes !== null && (!Number.isSafeInteger(item.sizeBytes) || (item.sizeBytes ?? -1) < 0))
       || (item.issuerName !== null && typeof item.issuerName !== "string")
       || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
@@ -866,10 +876,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || !["supabase", "google_drive"].includes(data.document.storageProvider)
         || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(data.document.mimeType)
         || typeof data.document.notes !== "string"
-        || typeof data.document.createdAt !== "string"
-        || !Number.isFinite(Date.parse(data.document.createdAt))
-        || typeof data.document.updatedAt !== "string"
-        || !Number.isFinite(Date.parse(data.document.updatedAt))
+        || !validDocumentTimestamp(data.document.createdAt)
+        || !validDocumentTimestamp(data.document.updatedAt)
         || (data.document.sizeBytes !== null
           && (!Number.isSafeInteger(data.document.sizeBytes) || data.document.sizeBytes < 0))
         || (data.document.issuerName !== null && typeof data.document.issuerName !== "string")
