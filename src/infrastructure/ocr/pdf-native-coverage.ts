@@ -63,6 +63,25 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
     && box.y + box.height <= 1.001);
   if (footerOnly && !hasInvoiceTotalEvidence(words)) return true;
 
+  // Repeated text spans packed into a tiny top/header/sidebar band do not
+  // constitute whole-page invoice coverage either. An OCR-selectable banner
+  // may surround a rasterized invoice body. Keep a real native TOTAL, but
+  // offer bounded visual recovery when the selectable layer occupies less
+  // than one fifth of page height regardless of its character count.
+  let top = 1;
+  let bottom = 0;
+  let validGeometry = true;
+  for (const { box } of words) {
+    if (!Number.isFinite(box.y) || !Number.isFinite(box.height)
+      || box.y < 0 || box.y > 1 || box.height < 0 || box.y + box.height > 1.001) {
+      validGeometry = false;
+      break;
+    }
+    top = Math.min(top, box.y);
+    bottom = Math.max(bottom, box.y + box.height);
+  }
+  if (validGeometry && bottom - top < 0.18 && !hasInvoiceTotalEvidence(words)) return true;
+
   if (chars >= 210 && words.length >= 5) return false;
   // A single enormous native text item can still be hidden PDF metadata,
   // not a readable invoice. For that case require actual financial evidence.

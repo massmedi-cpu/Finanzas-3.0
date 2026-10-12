@@ -282,3 +282,30 @@ test("REC-OCR-086 · OCR can recover a scanned invoice if native text has only V
   const visual = words("FACTURA ORIGINAL. TOTAL 54,45 €");
   expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
 });
+
+
+test("REC-OCR-089 · long multi-span selectable top banner cannot hide scanned body", () => {
+  const native = Array.from({ length: 6 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: 0.05, y: 0.02 + index * 0.022, width: 0.9, height: 0.019 },
+  }));
+  expect(native.map(word => word.text).join(" ").length).toBeGreaterThan(260);
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+});
+
+test("REC-OCR-090 · genuine native invoice text spanning the page remains fast-path", () => {
+  const native = Array.from({ length: 6 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: 0.05, y: 0.06 + index * 0.12, width: 0.9, height: 0.045 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
+
+test("REC-OCR-091 · a verified native total remains authoritative even in a narrow header", () => {
+  const native = Array.from({ length: 6 }, (_, index): OcrWord => ({
+    text: index === 0 ? "FACTURA TOTAL 45,30 EUR" : boilerplate,
+    confidence: 1,
+    box: { x: 0.05, y: 0.03 + index * 0.02, width: 0.9, height: 0.015 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
