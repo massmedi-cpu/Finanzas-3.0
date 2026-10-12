@@ -44,6 +44,11 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   // Keep native extraction when it already carries BOTH an invoice field
   // label and a monetary value; otherwise attempt visual OCR while retaining
   // the native words if the visual pass fails or is less informative.
+  // Five independent text spans covering a substantial amount of an
+  // invoice are already a usable native layer, even when it contains no
+  // price (a cover page or a detailed header). Preserve that fast path;
+  // a single long hidden footer cannot claim the same structural coverage.
+  if (chars >= 210 && words.length >= 5) return false;
   if (chars >= 260) return false;
   const normalized = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const financialLabel = /\b(?:total|importe|subtotal|base imponible|precio|a pagar|iva|igic|cuota)\b/.test(normalized);
