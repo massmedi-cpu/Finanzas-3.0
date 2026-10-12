@@ -3628,3 +3628,35 @@ test("REC-DOC-138 · forged Drive origin in detail cannot permit OCR or financia
   await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-UI-DOC-010 · archive does not announce an old verified count during a failed refresh", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let failing = false;
+  let failedReads = 0;
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (failing && route.request().method() === "GET" && !url.searchParams.has("id")) {
+      failedReads++;
+      await route.fulfill({ status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "document_service_unavailable" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  await expect(archive.getByRole("heading", { name: "1 documento", exact: true })).toBeVisible();
+  await expect(archive).toHaveAttribute("aria-busy", "false");
+  failing = true;
+  await archive.getByRole("button", { name: "Actualizar documentos" }).click();
+  await expect(archive.getByTestId("documents-list-error")).toBeVisible();
+  await expect(archive.getByRole("heading", { name: "Documentos", exact: true })).toBeVisible();
+  await expect(archive.getByRole("heading", { name: "1 documento", exact: true })).toHaveCount(0);
+  failing = false;
+  await archive.getByRole("button", { name: "Reintentar lista" }).click();
+  await expect(archive.getByRole("heading", { name: "1 documento", exact: true })).toBeVisible();
+  expect(failedReads).toBeGreaterThan(0);
+  expect(writes).toEqual([]);
+});

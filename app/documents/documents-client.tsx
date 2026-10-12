@@ -1757,11 +1757,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         </section>
 
         <section className={styles.workspace}>
-          <aside id="archivo-documental" className={styles.listPanel} aria-label="Listado de documentos">
+          <aside id="archivo-documental" className={styles.listPanel} aria-label="Listado de documentos" aria-busy={listPending}>
             <div className={styles.listHeader}>
               <div>
                 <p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p>
-                <h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2>
+                <h2 aria-live="polite" aria-atomic="true">{currentList && !listPending && !listLoadFailed ? `${currentList.total} ${currentList.total === 1 ? "documento" : "documentos"}` : "Documentos"}</h2>
                 {selectedId ? <a className={styles.detailJump} href="#documento-seleccionado">Ir a la ficha seleccionada ↓</a> : null}
               </div>
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={listPending} aria-label="Actualizar documentos">↻</button>
