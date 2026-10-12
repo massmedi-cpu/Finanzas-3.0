@@ -17,7 +17,11 @@ function hasInvoiceTotalEvidence(words: OcrWord[]) {
     .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   for (const label of text.matchAll(/\b(?:total|importe total|a pagar)\b/g)) {
     const tail = text.slice((label.index ?? 0) + label[0].length, (label.index ?? 0) + label[0].length + 56);
-    if (hasMoneyEvidence(tail)) return true;
+    // TOTAL without a value is not proved by an unrelated IVA, tax base,
+    // reference number or unit price printed after the heading.
+    const competingField = tail.search(/\b(?:i\.?v\.?a|i\.?g\.?i\.?c|base imponible|subtotal|cuota|precio unitario|referencia|numero de factura)\b/);
+    const ownField = competingField < 0 ? tail : tail.slice(0, competingField);
+    if (hasMoneyEvidence(ownField)) return true;
   }
   return false;
 }
@@ -79,18 +83,25 @@ export function pdfVisualOcrImprovesNative(nativeWords: OcrWord[], visualWords: 
   if (!nativeWords.length) return true;
   // A lengthier but unrelated OCR result must never erase a known native
   // invoice total. Recognition volume alone does not establish relevance.
-  if (hasInvoiceTotalEvidence(nativeWords) && !hasInvoiceTotalEvidence(visualWords)) return false;
+  const nativeTotal = hasInvoiceTotalEvidence(nativeWords);
+  const visualTotal = hasInvoiceTotalEvidence(visualWords);
+  if (nativeTotal && !visualTotal) return false;
+
+  // A badly recognized raster may generate more words than the native layer,
+  // but quantity is not quality. Preserve the readable original and mark the
+  // hybrid page unverified instead of replacing it with low-confidence noise.
+  const confidences = visualWords
+    .map((word) => word.confidence)
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  const meanConfidence = confidences.length
+    ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length : 0;
+  if (meanConfidence < 0.35) return false;
 
   const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
   const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
   if ((visualWords.length > nativeWords.length && visualChars >= nativeChars)
     || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5)) return true;
 
-  if (!hasInvoiceTotalEvidence(visualWords) || hasInvoiceTotalEvidence(nativeWords)) return false;
-  const confidences = visualWords
-    .map((word) => word.confidence)
-    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
-  const meanConfidence = confidences.length
-    ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length : 0;
+  if (!visualTotal || nativeTotal) return false;
   return meanConfidence >= 0.55;
 }

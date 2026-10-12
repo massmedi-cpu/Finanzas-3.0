@@ -229,3 +229,31 @@ test("REC-OCR-074 · visual invoice total can still recover a native-only legal 
   const visual = words("FACTURA ORIGINAL. TOTAL 42,35 €");
   expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
 });
+
+
+test("REC-OCR-075 · VAT amount following an empty TOTAL is not a native invoice total", () => {
+  const overlay = "TOTAL pendiente de revisión. IVA 12,50 € " + boilerplate.repeat(2);
+  const native: OcrWord = {
+    text: overlay, confidence: 1,
+    box: { x: 0.03, y: 0.9, width: 0.93, height: 0.035 },
+  };
+  expect(pdfNativeTextNeedsVisualOcr([native])).toBe(true);
+});
+
+test("REC-OCR-076 · a scanned invoice TOTAL can outrank a native VAT-only footer", () => {
+  const native = words("TOTAL pendiente de revisión. IVA 12,50 € " + boilerplate);
+  const visual = words("FACTURA ORIGINAL TOTAL 23,45 €");
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
+});
+
+test("REC-OCR-077 · long low-confidence visual noise never displaces readable native words", () => {
+  const native = words("Sello de archivo y referencia de factura.");
+  const uncertainVisual = words(boilerplate.repeat(4)).map((word) => ({ ...word, confidence: 0.12 }));
+  expect(uncertainVisual.length).toBeGreaterThan(native.length);
+  expect(pdfVisualOcrImprovesNative(native, uncertainVisual)).toBe(false);
+});
+
+test("REC-OCR-078 · image-only PDF retains low-confidence OCR for explicit user review", () => {
+  const uncertainVisual = words("FACTURA TOTAL 23,45").map((word) => ({ ...word, confidence: 0.12 }));
+  expect(pdfVisualOcrImprovesNative([], uncertainVisual)).toBe(true);
+});
