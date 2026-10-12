@@ -14,8 +14,14 @@ test("REC-DOC-113 · same bytes produce the same UUID across devices and reloads
     .not.toBe(one);
 });
 
-for (const digest of ["", "A".repeat(64), "g".repeat(64), "0".repeat(63), "0".repeat(65)]) {
-  test("REC-DOC-113 · invalid digest is never converted into a private path: " + digest.length, () => {
+for (const [label, digest] of [
+  ["empty", ""],
+  ["uppercase", "A".repeat(64)],
+  ["non-hex", "g".repeat(64)],
+  ["short", "0".repeat(63)],
+  ["long", "0".repeat(65)],
+] as const) {
+  test("REC-DOC-113 · invalid digest is never converted into a private path: " + label, () => {
     expect(() => privateDocumentContentId(digest)).toThrow("invalid_document_content_sha256");
   });
 }
