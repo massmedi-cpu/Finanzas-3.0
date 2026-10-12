@@ -168,3 +168,21 @@ test("REC-OCR-064 · long one-span hidden footer still cannot mask a scanned tot
     box: { x: 0.02, y: 0.92, width: 0.92, height: 0.03 },
   }])).toBe(true);
 });
+
+
+test("REC-OCR-067 · punctuation after an explicit euro invoice total is not a decimal continuation", () => {
+  const text = "Factura de comercio. IMPORTE TOTAL € 50. " + boilerplate.slice(0, 115);
+  expect(text.length).toBeGreaterThan(110);
+  expect(text.length).toBeLessThan(260);
+  expect(pdfNativeTextNeedsVisualOcr(words(text))).toBe(false);
+});
+
+test("REC-OCR-068 · a two-decimal total followed by a sentence full stop remains money", () => {
+  const text = "Factura original. TOTAL 23,45. " + boilerplate.slice(0, 118);
+  expect(pdfNativeTextNeedsVisualOcr(words(text))).toBe(false);
+});
+
+test("REC-OCR-069 · 3-decimal total-like continuation still triggers review", () => {
+  const text = "Factura original. TOTAL € 50,234. " + boilerplate.slice(0, 118);
+  expect(pdfNativeTextNeedsVisualOcr(words(text))).toBe(true);
+});
