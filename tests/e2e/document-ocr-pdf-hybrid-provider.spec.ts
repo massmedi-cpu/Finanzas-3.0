@@ -7,7 +7,7 @@ const footer = "DOCUMENTO GENERADO AUTOMATICAMENTE POR EL SISTEMA DE ARCHIVO. "
   + "SE INFORMA QUE EL TEXTO SELECCIONABLE SOLO CONTIENE UNA REFERENCIA LEGAL "
   + "Y QUE LA FACTURA ORIGINAL CON EL TOTAL SE ENCUENTRA EN LA IMAGEN ESCANEADA.";
 
-function hybridPdf(selectableText = footer): Uint8Array {
+function hybridPdf(selectableText = footer, headerText: string | null = null): Uint8Array {
   const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
@@ -21,7 +21,8 @@ function hybridPdf(selectableText = footer): Uint8Array {
   // the JPEG XObject. This test never loads real invoices or credentials.
   const commands = Buffer.from(
     "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
-      + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n", "ascii",
+      + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n"
+      + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : ""), "ascii",
   );
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
@@ -233,4 +234,47 @@ test("REC-OCR-097 · real PDF.js preserves an original whole-euro TOTAL in EUR o
   expect(selected).toContain("TOTAL 45 EUR");
   expect(selected).not.toContain("23,45");
   expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
+});
+
+
+test("REC-OCR-098 · real PDF.js recovers scanned total when only header and footer are selectable", async () => {
+  const header = "CABECERA DE EMISOR CON INFORMACION ADMINISTRATIVA";
+  const footerOnly = footer.repeat(2);
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async ({ bytes, mimeType }) => {
+      visualReads += 1;
+      expect(mimeType).toBe("image/png");
+      expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      return visualResult(0.96);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(footerOnly, header),
+    mimeType: "application/pdf",
+    originalFileName: "cabecera-pie-digital-cuerpo-factura-escaneada.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.pages[0].words.map(word => word.text)).toEqual(["TOTAL", "23,45"]);
+  expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
+});
+
+test("REC-OCR-099 · real PDF.js keeps a native whole-EUR total with a selectable header and footer", async () => {
+  const nativeText = "FACTURA ORIGINAL. TOTAL 45 EUR. " + footer.repeat(2);
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async () => {
+      visualReads += 1;
+      return visualResult(0.96);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(nativeText, "CABECERA ADMINISTRATIVA ORIGINAL"),
+    mimeType: "application/pdf",
+    originalFileName: "pdf-hibrido-con-total-nativo-fiable.pdf",
+  });
+  expect(visualReads).toBe(0);
+  expect(result.source).toBe("pdf_text");
+  expect(result.pages[0].words.map(word => word.text).join(" ")).toContain("TOTAL 45 EUR");
 });
