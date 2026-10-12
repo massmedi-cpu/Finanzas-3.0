@@ -2,7 +2,7 @@ import type { DocumentOcrProvider } from "../../application/document-ocr-service
 import type { OcrWord } from "../../domain/document-ocr";
 import { resolvePdfOcrSource } from "./pdf-source-provenance";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
-import { pdfNativeTextNeedsVisualOcr } from "./pdf-native-coverage";
+import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "./pdf-native-coverage";
 import { pdfRasterScale } from "./pdf-render-geometry";
 
 const MAX_PAGES = 16;
@@ -171,13 +171,7 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
               originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
             });
             const visualWords = visual.pages[0]?.words ?? [];
-            const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
-            const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
-            const improved = visualWords.length > 0
-              && (!nativeWords.length || (
-                visualWords.length > nativeWords.length
-                && visualChars >= nativeChars
-              ) || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5));
+            const improved = pdfVisualOcrImprovesNative(nativeWords, visualWords);
             if (improved) {
               visualOcrPageCount += 1;
               pages.push({ pageNumber, words: visualWords });
