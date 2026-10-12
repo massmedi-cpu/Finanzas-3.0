@@ -1396,9 +1396,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     }
   }
 
-  async function persistMetadata(): Promise<boolean> {
-    if (!detail || busy) return false;
-    if (!metadataDirtyRef.current) return true;
+  async function persistMetadata(verifiedDetail?: DocumentDetail): Promise<boolean> {
+    // After a failed readback the rendered detail is deliberately discarded.
+    // A freshly verified detail may be supplied only by the recovery path,
+    // while the unconfirmed editor is preserved separately.
+    const currentDetail = verifiedDetail ?? detail;
+    if (!currentDetail || busy) return false;
+    if (editorMatchesDocument(editor, currentDetail.document)) return true;
     const cents = parseEuroToCents(editor.total);
     if (cents === undefined) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
@@ -1412,16 +1416,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          action: "metadata", id: detail.document.id, type: editor.type,
+          action: "metadata", id: currentDetail.document.id, type: editor.type,
           documentDate: editor.documentDate || null,
           issuerName: editor.issuerName || null,
           totalCents: cents, notes: editor.notes,
         }),
       }));
       // No sustituir el editor con una relectura antigua hasta validar el PATCH.
-      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      const confirmed = await refreshAfterMutation(currentDetail.document.id, true);
       const persisted = confirmed?.document;
-      const matchesSave = persisted?.id === detail.document.id
+      const matchesSave = persisted?.id === currentDetail.document.id
         && persisted.type === editor.type
         && (persisted.documentDate ?? "") === editor.documentDate
         && (persisted.issuerName ?? "") === editor.issuerName.trim()
@@ -1454,9 +1458,19 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function saveAndContinue() {
-    if (!pendingExit) return;
+    if (!pendingExit || busy) return;
     const target = pendingExit;
-    if (await persistMetadata()) continueDocumentExit(target);
+    // A previous PATCH may have succeeded while its readback failed.
+    // Restore a verified detail without ever replacing the unsaved editor;
+    // do not attempt another write until that read succeeds.
+    const verifiedDetail = !detail && detailLoadFailed && selectedIdRef.current
+      ? await loadDetail(selectedIdRef.current, true, true)
+      : undefined;
+    if (!detail && !verifiedDetail) {
+      setError("Antes de reintentar el guardado, necesitamos releer el documento. El borrador sigue conservado.");
+      return;
+    }
+    if (await persistMetadata(verifiedDetail ?? undefined)) continueDocumentExit(target);
   }
 
   function discardAndContinue() {
