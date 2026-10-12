@@ -100,11 +100,13 @@ if (Deno.args[0] === "prepare") {
     const classificationRows = await sql`select id,merchant_id,category_id,category_origin from financial_app.transactions order by id`;
     await Deno.writeTextFile(`${dir}/bank-baseline.json`, JSON.stringify({ ...baseline[0], classificationRows }), { mode: 0o600 });
   } finally { await sql.end(); }
-  const upload = await ok(owner.token, "document.upload_sign", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", sizeBytes: 1000 });
-  assert(new URL(upload.signedUrl).hostname === "127.0.0.1", "external_upload_forbidden");
-  const registered = await ok(owner.token, "document.register", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", storageProvider: "supabase", storageKey: upload.path, sourceDriveFileId: null, sizeBytes: null, sourceModifiedAt: null });
-  assert(registered.document?.id, "fixture_document_missing");
-  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, upload, documentId: registered.document.id, fixtureIds }), { mode: 0o600 });
+  // The legacy document.register route is deliberately forbidden because
+  // it bypassed validation of private Storage bytes. The browser test below
+  // generates the actual PNG, obtains a SHA-aware upload signature and
+  // finalizes it through the current verified public HTTP contract.
+  // Serial Playwright workers ensure that the context is amended before the
+  // full HTTP suite and before the final cross-user SQL verification.
+  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, fixtureIds }), { mode: 0o600 });
   console.log("AUD_AUTH|stage=prepared|users=4|workspaces=2|real_auth=true");
 } else if (Deno.args[0] === "verify") {
   const c = JSON.parse(await Deno.readTextFile(contextPath));
@@ -118,7 +120,11 @@ if (Deno.args[0] === "prepare") {
   const id = c.documentId;
   assert((await operation("", "document.detail", { id })).status === 403, "anonymous_accepted");
   assert((await operation("invalid-token", "document.detail", { id })).status === 401, "invalid_token_accepted");
-  const finalized = await ok(c.owner.token, "document.upload_finalize", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", path: c.upload.path });
+  const finalized = await ok(c.owner.token, "document.upload_finalize", {
+    type: "ticket", originalFileName: "AUD-synthetic-ticket.png",
+    mimeType: "image/png", path: c.upload.path,
+    expectedSizeBytes: c.upload.sizeBytes, expectedSha256: c.upload.expectedSha256,
+  });
   assert(finalized.document.id === id && finalized.document.sizeBytes > 0, "real_storage_finalize_failed");
   await ok(c.owner.token, "document.update", { id, type: "ticket", documentDate: "2026-10-08", issuerName: "AUD synthetic issuer", totalCents: 1900, notes: "Synthetic isolated document, no personal data" });
   const original = (await ok(c.owner.token, "document.detail", { id })).document;
