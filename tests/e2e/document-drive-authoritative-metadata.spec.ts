@@ -82,7 +82,9 @@ test("REC-DRIVE-123 · both document gateways forward authoritative preflight ti
   expect(automatic).toContain("expectedModifiedTime: candidate.modifiedTime");
   expect(automatic).toContain("expectedSizeBytes: candidate.sizeBytes");
   expect(automatic).not.toContain("downloaded.modifiedTime ?? candidate.modifiedTime");
-  expect(automatic).toContain('callPersistenceGateway("document.drive_batch"');
+  // The typed gateway may use a generic result type; match the call, not a
+  // particular TypeScript formatting choice.
+  expect(automatic).toMatch(/callPersistenceGateway(?:<[^>]+>)?\("document\.drive_batch"/);
 });
 
 test("REC-DRIVE-124 · oversized body without Content-Length is cancelled before buffering", async () => {
