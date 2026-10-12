@@ -10,6 +10,7 @@ on:
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/ap1_private_document_original_immutable.sql'
+      - 'supabase/tests/ap1_drive_atomic_batch_disposable.sql'
       - 'supabase/tests/financial_performance_50k_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql'
