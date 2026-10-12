@@ -83,6 +83,7 @@ function apiError(error: unknown) {
       google_drive_document_access_denied: 409,
       google_drive_document_not_found: 404,
       google_drive_document_metadata_invalid: 409,
+      google_drive_document_source_changed: 409,
       google_drive_document_mime_mismatch: 415,
       google_drive_document_content_mismatch: 415,
       google_drive_document_too_large: 413,
