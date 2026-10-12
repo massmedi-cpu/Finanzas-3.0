@@ -79,11 +79,16 @@ function json(route: Route, body: unknown) {
 }
 
 async function openComparison(page: Page, sync: typeof BASE_SYNC) {
-  await page.route("**/api/analysis/source-freshness", (route) => json(route, {
-    available: true,
-    latestMovementDate: "2026-09-27",
-    sync,
-  }));
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => {
+    // The user selected a specific bank account. The genuine component now
+    // sends accountId to avoid showing all-accounts sync as verified coverage
+    // for an individual account. Match the real scoped URL, not a stale
+    // unscoped endpoint; still enforce the selected-account contract.
+    expect(new URL(route.request().url()).searchParams.get("accountId")).toBe(ACCOUNT_ID);
+    return json(route, {
+      available: true, latestMovementDate: "2026-09-27", sync,
+    });
+  });
   await page.route(/\/api\/compare(?:\?.*)?$/, (route) => json(route, comparisonSnapshot()));
   await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-10&accountId=${ACCOUNT_ID}`);
   await expect(page.getByRole("heading", { name: "Comparador", level: 1 })).toBeVisible();
