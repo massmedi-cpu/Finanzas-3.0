@@ -121,6 +121,19 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
       await expect(page.getByRole("heading", { name: "12 documentos" })).toBeVisible();
+      // REC-UI-DOC-008: prioritize the usable archive on 360px screens
+      // instead of repeating desktop trust badges above the import form.
+      const archiveLink = page.getByRole("link", { name: "Ir al archivo documental ↓" });
+      if (width === 360) {
+        await expect(archiveLink).toBeVisible();
+        await expect(page.getByText("Original privado", { exact: true })).toBeHidden();
+        await archiveLink.click();
+        await expect(page).toHaveURL(/#archivo-documental$/);
+        await expect(page.locator("#archivo-documental")).toBeVisible();
+      } else {
+        await expect(archiveLink).toBeHidden();
+        await expect(page.getByText("Original privado", { exact: true })).toBeVisible();
+      }
       // REC-UI-DOC-007: real browser contrast, including disabled vs enabled
       // phases. The previous light theme used dark-on-dark colors for Drive.
       const driveAction = page.getByTestId("drive-auto-sync").getByRole("button", { name: "Comprobar ahora" });
