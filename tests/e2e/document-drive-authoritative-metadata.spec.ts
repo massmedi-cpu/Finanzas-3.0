@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  GOOGLE_DRIVE_OCR_MAX_BYTES,
   GoogleDriveDocumentDownloader,
 } from "../../src/infrastructure/google/google-drive-document-downloader";
 
@@ -78,4 +79,57 @@ test("REC-DRIVE-123 · both document gateways forward authoritative preflight ti
   expect(manualBlock).not.toContain("item.modifiedTime");
   expect(automatic).toContain("modifiedTime: downloaded.modifiedTime ?? candidate.modifiedTime");
   expect(automatic).toContain('callPersistenceGateway("document.drive_batch"');
+});
+
+test("REC-DRIVE-124 · oversized body without Content-Length is cancelled before buffering", async () => {
+  let cancelled = false;
+  const fetcher: typeof fetch = async input => {
+    if (String(input).includes("?fields=")) {
+      return Response.json({
+        id: fileId, name: "factura-simulada.pdf",
+        mimeType: "application/pdf", size: String(Buffer.byteLength(pdf)),
+        modifiedTime: authoritativeDate, trashed: false,
+      });
+    }
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(GOOGLE_DRIVE_OCR_MAX_BYTES + 1));
+      },
+      cancel() { cancelled = true; },
+    });
+    return new Response(body, { status: 200 });
+  };
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly-token" }, fetcher,
+  );
+  await expect(downloader.download({ fileId, expectedMimeType: "application/pdf" }))
+    .rejects.toMatchObject({ code: "google_drive_document_too_large" });
+  expect(cancelled).toBe(true);
+});
+
+test("REC-DRIVE-125 · valid PDF split across stream chunks imports with no Content-Length", async () => {
+  const source = Buffer.from(pdf);
+  const fetcher: typeof fetch = async input => {
+    if (String(input).includes("?fields=")) {
+      return Response.json({
+        id: fileId, name: "factura-fragmentada.pdf",
+        mimeType: "application/pdf", size: String(source.byteLength),
+        modifiedTime: authoritativeDate, trashed: false,
+      });
+    }
+    return new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(source.subarray(0, 2));
+        controller.enqueue(source.subarray(2, 9));
+        controller.enqueue(source.subarray(9));
+        controller.close();
+      },
+    }), { status: 200 });
+  };
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly-token" }, fetcher,
+  );
+  const doc = await downloader.download({ fileId, expectedMimeType: "application/pdf" });
+  expect(Buffer.from(doc.bytes).equals(source)).toBe(true);
+  expect(doc.modifiedTime).toBe(authoritativeDate);
 });
