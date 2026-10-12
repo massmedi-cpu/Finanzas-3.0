@@ -17,6 +17,7 @@ type DriveMetadata = {
   mimeType?: unknown;
   size?: unknown;
   trashed?: unknown;
+  modifiedTime?: unknown;
 };
 
 export class GoogleDriveDocumentError extends Error {
@@ -48,6 +49,21 @@ function parseSize(value: unknown) {
     return Number.isSafeInteger(parsed) ? parsed : null;
   }
   return null;
+}
+
+
+/** Only authoritative RFC 3339 timestamps returned by Google Drive may be persisted. */
+function driveModifiedTime(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string"
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(value)
+    || !Number.isFinite(Date.parse(value))) {
+    throw new GoogleDriveDocumentError(
+      "google_drive_document_metadata_invalid",
+      "Google Drive no ha devuelto una fecha de modificación válida.",
+    );
+  }
+  return value;
 }
 
 function googleHeaders(accessToken: string) {
@@ -109,7 +125,7 @@ export class GoogleDriveDocumentDownloader {
     const encodedId = encodeURIComponent(fileId);
     const metadataUrl =
       `https://www.googleapis.com/drive/v3/files/${encodedId}` +
-      "?fields=id,name,mimeType,size,trashed&supportsAllDrives=true";
+      "?fields=id,name,mimeType,size,modifiedTime,trashed&supportsAllDrives=true";
     const metadataResponse = await this.fetcher(metadataUrl, {
       method: "GET",
       headers: googleHeaders(accessToken),
@@ -140,6 +156,7 @@ export class GoogleDriveDocumentDownloader {
         "El tipo real del archivo de Drive no coincide con el documento registrado.",
       );
     }
+    const modifiedTime = driveModifiedTime(metadata?.modifiedTime);
     if (size <= 0 || size > GOOGLE_DRIVE_OCR_MAX_BYTES) {
       throw new GoogleDriveDocumentError(
         "google_drive_document_too_large",
@@ -197,6 +214,7 @@ export class GoogleDriveDocumentDownloader {
       fileName: asNonEmptyString(metadata?.name),
       mimeType,
       sizeBytes: size,
+      modifiedTime,
     };
   }
 }
