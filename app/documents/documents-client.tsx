@@ -283,7 +283,12 @@ function validatedDocumentList(payload: unknown): DocumentList {
       || (item.sizeBytes !== null && (!Number.isSafeInteger(item.sizeBytes) || (item.sizeBytes ?? -1) < 0))
       || (item.issuerName !== null && typeof item.issuerName !== "string")
       || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
-      || (item.documentDate !== null && typeof item.documentDate !== "string")
+      || (item.documentDate !== null && (typeof item.documentDate !== "string"
+        || !/^\d{4}-\d{2}-\d{2}$/.test(item.documentDate)
+        || formatDate(item.documentDate) === "Fecha no válida"))
+      // A malformed test designation must not silently turn a test fixture
+      // into an ordinary personal document in the archive UI.
+      || (item.isTest !== undefined && typeof item.isTest !== "boolean")
       || !Number.isSafeInteger(item.associationCount) || (item.associationCount ?? -1) < 0) {
       throw new Error("document_list_invalid");
     }

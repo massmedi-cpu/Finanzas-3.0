@@ -1635,6 +1635,22 @@ test("REC-OCR-047 · el fallo de una página PDF indica incompletitud sin códig
 
 
 
+
+test("REC-OCR-088 · una página PDF dañada se explica sin ocultar la incompletitud", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], ["pdf_page_load_failed:2"], "needs_review");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const warnings = panel.getByText("Revisar antes de usar").locator("..");
+  await expect(warnings).toContainText("No se pudo abrir la página 2 de este PDF");
+  await expect(warnings).toContainText("el documento está incompleto");
+  await expect(warnings).not.toContainText("pdf_page_load_failed");
+  await expect(panel.getByText("Revisión necesaria", { exact: true })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
 test("REC-OCR-050 · la extracción digital fallida explica la recuperación visual en español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes, [], ["pdf_page_native_text_failed:2"], "needs_review");
@@ -3030,6 +3046,36 @@ test("REC-DOC-118 · archive refuses false 200 with malformed provider, MIME or 
     await route.fallback();
   });
   for (const [name, invalid] of invalidItems) {
+    current = invalid;
+    await page.goto("/documents");
+    await expect(page.getByTestId("documents-alert"), name).toContainText(/lista documental incompleta o incompatible/i);
+    await expect(page.getByText("No se ha podido cargar la lista"), name).toBeVisible();
+    await expect(page.getByRole("button", { name: /factura-demo\.pdf/i }), name).toHaveCount(0);
+  }
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-119 · a false 200 must not show an invalid calendar day or relabel a test fixture", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const malformed: Array<[string, Record<string, unknown>]> = [
+    ["febrero imposible", { documentDate: "2026-02-30" }],
+    ["fecha ambigua", { documentDate: "30/02/2026" }],
+    ["fecha sin día", { documentDate: "2026-10" }],
+    ["fixture presentado como ordinario", { isTest: "false" }],
+  ];
+  let current = malformed[0][1];
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, items: [{ ...item, ...current }], total: 1, limit: 50, offset: 0, principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  for (const [name, invalid] of malformed) {
     current = invalid;
     await page.goto("/documents");
     await expect(page.getByTestId("documents-alert"), name).toContainText(/lista documental incompleta o incompatible/i);
