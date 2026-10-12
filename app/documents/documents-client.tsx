@@ -299,6 +299,8 @@ function validatedDocumentList(payload: unknown): DocumentList {
       // A malformed test designation must not silently turn a test fixture
       // into an ordinary personal document in the archive UI.
       || (item.isTest !== undefined && typeof item.isTest !== "boolean")
+      || (item.testDesignationUpdatedAt != null && !validDocumentTimestamp(item.testDesignationUpdatedAt))
+      || (item.testDesignationReason != null && typeof item.testDesignationReason !== "string")
       || !Number.isSafeInteger(item.associationCount) || (item.associationCount ?? -1) < 0) {
       throw new Error("document_list_invalid");
     }
@@ -886,6 +888,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             || !/^\d{4}-\d{2}-\d{2}$/.test(data.document.documentDate)
             || formatDate(data.document.documentDate) === "Fecha no válida"))
         || (data.document.isTest !== undefined && typeof data.document.isTest !== "boolean")
+        // This provenance is user-facing. Invalid timestamps and non-text
+        // explanations must not be rendered as authoritative test labelling.
+        || (data.document.testDesignationUpdatedAt != null
+          && !validDocumentTimestamp(data.document.testDesignationUpdatedAt))
+        || (data.document.testDesignationReason != null
+          && typeof data.document.testDesignationReason !== "string")
         || (data.document.totalCents !== null && !Number.isSafeInteger(data.document.totalCents))
         || typeof data.document.originalFileName !== "string"
         || !data.document.originalFileName.trim()) {
