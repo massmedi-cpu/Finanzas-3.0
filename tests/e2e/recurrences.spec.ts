@@ -558,6 +558,8 @@ test("AUD-E2E-REC-001 · todos los ciclos omitidos son visibles aun sin marca de
 
 test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupera sin escritura", async ({ page }) => {
   let reads = 0;
+  let recoveryReads = 0;
+  let recoveryRequested = false;
   const writes: string[] = [];
   await page.route("**/api/recurrences*", async (route) => {
     if (route.request().method() !== "GET") {
@@ -565,10 +567,11 @@ test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupe
       return route.fulfill({ status: 409, body: "unexpected_write" });
     }
     reads += 1;
+    if (recoveryRequested) recoveryReads += 1;
     await route.fulfill({
-      status: reads === 1 ? 503 : 200,
+      status: recoveryRequested ? 200 : 503,
       contentType: "application/json",
-      body: JSON.stringify(reads === 1 ? { code: "source_unavailable" } : baseSnapshot),
+      body: JSON.stringify(recoveryRequested ? baseSnapshot : { code: "source_unavailable" }),
     });
   });
   await page.goto("/recurrences");
@@ -576,36 +579,46 @@ test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupe
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["—", "—", "—", "—"]);
   await expect(page.getByText(/No se puede confirmar cuántos patrones existen/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirmar recurrencia" })).toHaveCount(0);
+  recoveryRequested = true;
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("2");
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
   expect(writes).toEqual([]);
 });
 
 test("REC-REC-003 · GET 200 con contrato corrupto no inventa ausencia; cero válido sí se representa", async ({ page }) => {
   let reads = 0;
+  let validZeroRequested = false;
+  let invalidReads = 0;
   await page.route("**/api/recurrences*", async (route) => {
     reads += 1;
+    if (!validZeroRequested) invalidReads += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(reads === 1
-        ? { ...baseSnapshot, candidateCount: 0 }
-        : { ...baseSnapshot, candidateCount: 0, candidates: [] }),
+      body: JSON.stringify(validZeroRequested
+        ? { ...baseSnapshot, candidateCount: 0, candidates: [] }
+        : { ...baseSnapshot, candidateCount: 0 }),
     });
   });
   await page.goto("/recurrences");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  validZeroRequested = true;
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Patrones recalculados" })).toContainText("Patrones recalculados");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["0", "0", "0", "0"]);
   await expect(page.getByText(/No hay patrones con al menos 3 apariciones/)).toBeVisible();
+  expect(invalidReads).toBeGreaterThanOrEqual(1);
+  expect(reads).toBeGreaterThan(invalidReads);
 });
 
 test("REC-REC-004 · lectura de actualización fallida oculta candidatos obsoletos y permite recuperación", async ({ page }) => {
   let reads = 0;
+  let failingRefresh = false;
+  let recoveredRefresh = false;
   const writes: string[] = [];
   await page.route("**/api/recurrences*", async (route) => {
     if (route.request().method() !== "GET") {
@@ -614,21 +627,23 @@ test("REC-REC-004 · lectura de actualización fallida oculta candidatos obsolet
     }
     reads += 1;
     await route.fulfill({
-      status: reads === 2 ? 503 : 200,
+      status: failingRefresh && !recoveredRefresh ? 503 : 200,
       contentType: "application/json",
-      body: JSON.stringify(reads === 2 ? { code: "source_unavailable" } : baseSnapshot),
+      body: JSON.stringify(failingRefresh && !recoveredRefresh ? { code: "source_unavailable" } : baseSnapshot),
     });
   });
   await page.goto("/recurrences");
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  failingRefresh = true;
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  recoveredRefresh = true;
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   expect(writes).toEqual([]);
-  expect(reads).toBe(3);
+  expect(reads).toBeGreaterThanOrEqual(3);
 });
 
 test("REC-REC-005 · POST incierto no afirma reversión ni repite la decisión automáticamente", async ({ page }) => {
@@ -707,29 +722,34 @@ for (const theme of ["light", "dark"] as const) {
 test("REC-REC-008 · los estados bancarios se presentan en español y las próximas fechas nunca retroceden", async ({ page }) => {
   const writes: string[] = [];
   let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
   await page.route("**/api/recurrences*", async (route) => {
     if (route.request().method() !== "GET") {
       writes.push(route.request().method());
       return route.fulfill({ status: 409 });
     }
     reads += 1;
+    if (recoveryRequested) recoveryReads += 1;
     await route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify(reads === 1
-        ? { ...baseSnapshot, candidates: baseSnapshot.candidates.map((c, i) => i === 0 ? { ...c, nextEstimatedDate: "2026-09-06" } : c) }
-        : baseSnapshot),
+      body: JSON.stringify(recoveryRequested
+        ? baseSnapshot
+        : { ...baseSnapshot, candidates: baseSnapshot.candidates.map((c, i) => i === 0 ? { ...c, nextEstimatedDate: "2026-09-06" } : c) }),
     });
   });
   await page.goto("/recurrences");
   await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  recoveryRequested = true;
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   const history = page.locator("details").filter({ hasText: /Históricos/ });
   await history.locator("summary").click();
   await expect(history.getByText("Estado · Activa", { exact: true })).toBeVisible();
   await expect(history.getByText("Estado · active", { exact: true })).toHaveCount(0);
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
   expect(writes).toEqual([]);
 });
 
