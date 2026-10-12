@@ -86,7 +86,8 @@ async function openComparison(page: Page, sync: typeof BASE_SYNC) {
     // unscoped endpoint; still enforce the selected-account contract.
     expect(new URL(route.request().url()).searchParams.get("accountId")).toBe(ACCOUNT_ID);
     return json(route, {
-      available: true, latestMovementDate: "2026-09-27", sync,
+      available: true, earliestMovementDate: "2026-01-01",
+      latestMovementDate: "2026-09-27", sync,
     });
   });
   await page.route(/\/api\/compare(?:\?.*)?$/, (route) => json(route, comparisonSnapshot()));
@@ -145,7 +146,7 @@ test("Comparador separa movimientos ausentes de los avisos adicionales", async (
   await openComparison(page, { ...BASE_SYNC, rowsMissing: 2, warningsCount: 3 });
 
   const status = page.getByRole("status", { name: /Fuente sincronizada con incidencias/ });
-  await expect(status).toContainText("2 movimientos ya no están en la fuente");
+  await expect(status).toContainText("2 movimientos ausentes de los datos importados");
   await expect(status).toContainText("1 aviso adicional");
   await expect(status).not.toContainText("3 avisos");
 });
