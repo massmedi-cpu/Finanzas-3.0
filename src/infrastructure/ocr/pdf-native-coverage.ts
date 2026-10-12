@@ -8,7 +8,7 @@ import type { OcrWord } from "../../domain/document-ocr";
 function hasMoneyEvidence(text: string) {
   const decimals = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2})(?!\d|[.,]\d|\s*%)/;
   const currencyBefore = /(?:€\s*|\b(?:eur|euros?)\s+)(?:\d{1,3}(?:\.\d{3})+|\d+)(?!\d|[.,]\d|\s*%)/;
-  const currencyAfter = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})+|\d+)\s*€(?![\d.,])/;
+  const currencyAfter = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})+|\d+)\s*(?:€|\b(?:eur|euros?)\b)(?![\d.,])/;
   return decimals.test(text) || currencyBefore.test(text) || currencyAfter.test(text);
 }
 
@@ -81,6 +81,20 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
     bottom = Math.max(bottom, box.y + box.height);
   }
   if (validGeometry && bottom - top < 0.18 && !hasInvoiceTotalEvidence(words)) return true;
+
+  // Some hybrid scanners retain selectable headers AND legal footers
+  // while the invoice body (including its line items and final amount)
+  // is raster-only. Their bounding span is full-page even though neither
+  // edge region proves that the financial body was extracted. Only trigger
+  // this path when both edges have text but the central body is empty.
+  // This avoids treating ordinary short native invoices or full text
+  // pages as scanner overlays.
+  if (validGeometry && !hasInvoiceTotalEvidence(words)
+    && words.some(({ box }) => box.y <= 0.15)
+    && words.some(({ box }) => box.y >= 0.8)
+    && !words.some(({ box }) => box.y < 0.8 && box.y + box.height > 0.2)) {
+    return true;
+  }
 
   if (chars >= 210 && words.length >= 5) return false;
   // A single enormous native text item can still be hidden PDF metadata,

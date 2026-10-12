@@ -309,3 +309,51 @@ test("REC-OCR-091 · a verified native total remains authoritative even in a nar
   }));
   expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
 });
+
+
+test("REC-OCR-092 · native invoice with TOTAL 45 EUR cannot be overwritten by a longer conflicting OCR", () => {
+  const native = words("Factura original con importe TOTAL 45 EUR");
+  const conflicting = words("FACTURA TOTAL 23,45 EUR " + boilerplate.repeat(3));
+  expect(pdfVisualOcrImprovesNative(native, conflicting)).toBe(false);
+});
+
+test("REC-OCR-093 · euro words after an integer support thousands without false percentage evidence", () => {
+  const native = words("FACTURA ORIGINAL TOTAL 1.234 euros " + boilerplate.slice(0, 128));
+  const conflicting = words("TOTAL 12,34 EUR " + boilerplate.repeat(2));
+  expect(pdfVisualOcrImprovesNative(native, conflicting)).toBe(false);
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), conflicting)).toBe(true);
+});
+
+test("REC-OCR-094 · selectable header and footer cannot mask an entirely rasterized invoice body", () => {
+  const text = [...Array(3).fill(boilerplate), ...Array(3).fill(boilerplate)];
+  const native = text.map((value, index): OcrWord => ({
+    text: value,
+    confidence: 1,
+    box: { x: 0.04, y: index < 3 ? 0.02 + index * 0.04 : 0.83 + (index - 3) * 0.04,
+      width: 0.9, height: 0.02 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+});
+
+test("REC-OCR-095 · a valid native invoice with central words skips redundant rasterization", () => {
+  const native = [
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.04, width: 0.9, height: 0.03 } },
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.17, width: 0.9, height: 0.03 } },
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.32, width: 0.9, height: 0.03 } },
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.49, width: 0.9, height: 0.03 } },
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.67, width: 0.9, height: 0.03 } },
+    { text: boilerplate, confidence: 1, box: { x: 0.04, y: 0.85, width: 0.9, height: 0.03 } },
+  ];
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
+
+test("REC-OCR-096 · header and footer including true native financial total remain authoritative", () => {
+  const native = [
+    { text: "FACTURA TOTAL 45 EUR", confidence: 1, box: { x: 0.04, y: 0.02, width: 0.9, height: 0.03 } },
+    ...Array.from({ length: 4 }, (_, index) => ({
+      text: boilerplate, confidence: 1,
+      box: { x: 0.04, y: index < 2 ? 0.07 + index * 0.04 : 0.84 + (index - 2) * 0.04, width: 0.9, height: 0.03 },
+    })),
+  ];
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
