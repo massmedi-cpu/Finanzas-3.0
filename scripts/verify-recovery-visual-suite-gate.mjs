@@ -26,6 +26,9 @@ for (const [file, casesInFile] of cases) {
 assert.ok(workflow.includes("'scripts/verify-recovery-visual-suite-gate.mjs'"), "Changes to guard must trigger CI");
 assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-atomic-batch.mjs"), "Drive rollback behavioral tests must execute BEFORE slow browser matrix");
 assert.ok(workflow.includes("'scripts/test-drive-atomic-batch.mjs'"), "Changing Drive rollback tests must retrigger CI");
+assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-discovery-integrity.mjs"), "Drive discovery pagination tests must execute as early gate");
+assert.ok(workflow.includes("'src/infrastructure/google/google-drive-document-discovery.ts'"), "Discovery code changes must trigger CI");
+assert.ok(workflow.includes("'scripts/test-drive-discovery-integrity.mjs'"), "Discovery test changes must trigger CI");
 // A passing browser job is not independently reviewable unless its screenshots
 // and failure traces survive the ephemeral CI runner. The first Playwright command
 // clears its output on the next run, so preserve both phases separately.
