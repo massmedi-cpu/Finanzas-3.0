@@ -3417,3 +3417,69 @@ test("REC-DOC-130 · corrupt designation history in a detail blocks financial ac
   await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-131 · unconfirmed or malformed associations are not displayed as authorized bank links", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const sample = {
+    id: "96000000-0000-4000-8000-000000000096", transactionId,
+    accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente",
+    method: "suggested", confirmed: true, date: "2026-09-02",
+    concept: "Pago comprobado", amountCents: -5404, categoryId: null,
+    merchantId: null, merchantName: null, effectiveKind: "expense", confidence: 0.9,
+  };
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ["sin confirmar", { confirmed: false }],
+    ["categoría incorrecta", { categoryId: "cat-inventada" }],
+    ["emisor incorrecto", { merchantId: { unexpected: "object" } }],
+    ["confianza imposible", { confidence: 999 }],
+  ];
+  let anomaly = cases[0][1];
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: { ...item }, associations: [{ ...sample, ...anomaly }], principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  for (const [name, invalid] of cases) {
+    anomaly = invalid;
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+    await expect(page.getByTestId("documents-detail-error"), name).toBeVisible();
+    await expect(page.getByRole("button", { name: "Desasociar" }), name).toHaveCount(0);
+  }
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-132 · duplicate association rows cannot create duplicate unassociate actions", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const association = {
+    id: "96000000-0000-4000-8000-000000000096", transactionId,
+    accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente",
+    method: "manual", confirmed: true, date: "2026-09-02",
+    concept: "Pago verificado", amountCents: -5404,
+  };
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: { ...item },
+        associations: [association, { ...association, id: "97000000-0000-4000-8000-000000000097" }],
+        principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Desasociar" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});

@@ -374,11 +374,19 @@ function validAssociation(value: unknown): value is Association {
     && typeof row.transactionId === "string" && DOCUMENT_UUID.test(row.transactionId)
     && typeof row.accountId === "string" && DOCUMENT_UUID.test(row.accountId)
     && (row.method === "manual" || row.method === "suggested")
-    && typeof row.confirmed === "boolean"
+    // This panel labels and permits undo of CONFIRMED bank associations.
+    // A false/unknown confirmation must not masquerade as user-approved.
+    && row.confirmed === true
     && typeof row.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
     && formatDate(row.date) !== "Fecha no válida"
     && typeof row.concept === "string" && typeof row.accountName === "string"
-    && Number.isSafeInteger(row.amountCents);
+    && Number.isSafeInteger(row.amountCents)
+    && (row.categoryId == null || (typeof row.categoryId === "string" && DOCUMENT_UUID.test(row.categoryId)))
+    && (row.merchantId == null || (typeof row.merchantId === "string" && DOCUMENT_UUID.test(row.merchantId)))
+    && (row.merchantName == null || typeof row.merchantName === "string")
+    && (row.effectiveKind == null || typeof row.effectiveKind === "string")
+    && (row.confidence == null || (typeof row.confidence === "number"
+      && Number.isFinite(row.confidence) && row.confidence >= 0 && row.confidence <= 1));
 }
 
 function validatedCandidateResponse(payload: unknown, documentId: string): CandidateResponse {
@@ -866,6 +874,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)
         || ![1, 2, 3].includes(data.contractVersion)
         || !data.associations.every(validAssociation)
+        || new Set(data.associations.map((entry) => entry.transactionId)).size !== data.associations.length
+        || new Set(data.associations.map((entry) => entry.id)).size !== data.associations.length
         || !data.principles || data.principles.bankSource !== "read_only"
         || data.principles.getHasSideEffects !== false
         || data.principles.suggestionsPersisted !== false
