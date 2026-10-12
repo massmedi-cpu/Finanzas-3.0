@@ -9,6 +9,7 @@ on:
       - 'src/domain/document-ocr-financial-interpretation.ts'
       - 'src/domain/private-document-content-address.ts'
       - 'src/domain/private-document-replay.ts'
+      - 'src/domain/atomic-drive-document-batch.ts'
       - 'src/infrastructure/google/google-drive-document-downloader.ts'
       - 'src/infrastructure/http/limited-response-body.ts'
       - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
