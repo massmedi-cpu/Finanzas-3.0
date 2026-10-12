@@ -1653,7 +1653,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         <section className={styles.workspace}>
           <aside className={styles.listPanel} aria-label="Listado de documentos">
             <div className={styles.listHeader}>
-              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2></div>
+              <div>
+                <p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p>
+                <h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2>
+                {selectedId ? <a className={styles.detailJump} href="#documento-seleccionado">Ir a la ficha seleccionada ↓</a> : null}
+              </div>
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={listPending} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
@@ -1727,7 +1731,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : null}
           </aside>
 
-          <section className={styles.detailPanel} aria-live="polite">
+          <section id="documento-seleccionado" className={styles.detailPanel} aria-live="polite">
             {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
