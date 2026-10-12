@@ -868,6 +868,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   useEffect(() => { void loadList(); }, [loadList]);
   useEffect(() => {
+    const refreshAfterDrive = () => { void loadList(listUrl, true); };
+    window.addEventListener("financial-app:documents-drive-updated", refreshAfterDrive);
+    return () => window.removeEventListener("financial-app:documents-drive-updated", refreshAfterDrive);
+  }, [loadList, listUrl]);
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (scope === "ordinary") params.delete("scope"); else params.set("scope", scope);
     if (statusFilter) params.set("status", statusFilter); else params.delete("status");
