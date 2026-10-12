@@ -16,6 +16,7 @@ on:
       - 'src/application/document-drive-inventory.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
       - 'scripts/test-document-drive-inventory.mjs'
+      - 'scripts/test-drive-atomic-batch.mjs'
       - 'scripts/verify-recovery-visual-suite-gate.mjs'
       - 'tests/e2e/**'
       - 'playwright*.ts'
@@ -46,6 +47,8 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - name: Certify Drive metadata batch atomicity and rollback
+        run: node --experimental-strip-types scripts/test-drive-atomic-batch.mjs
       - name: Certify OCR labelled amounts against synthetic independent expected values
         run: node scripts/test-ocr-amount-label-selection.mjs
       - name: Certify read-only Drive inventory completeness and duplicate safety
