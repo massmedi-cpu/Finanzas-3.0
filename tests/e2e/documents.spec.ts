@@ -3574,3 +3574,57 @@ test("REC-DOC-134 · metadata write is not announced as synchronized when archiv
   expect(failedReadbacks).toBeGreaterThan(0);
   expect(writes.filter(entry => entry.action === "metadata")).toHaveLength(1);
 });
+
+
+test("REC-DOC-137 · the Drive origin of a list cannot be forged using invalid dates or object ids", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ["impossible Drive source date", { storageProvider: "google_drive", sourceModifiedAt: "2026-02-30T20:00:00Z" }],
+    ["missing timezone on Drive date", { storageProvider: "google_drive", sourceModifiedAt: "2026-09-06T20:00:00" }],
+    ["object in Drive file ID", { storageProvider: "google_drive", sourceDriveFileId: { forged: true } }],
+    ["blank Drive file ID", { storageProvider: "google_drive", sourceDriveFileId: "   " }],
+  ];
+  let anomaly = cases[0][1];
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, items: [{ ...item, ...anomaly }], total: 1, limit: 50, offset: 0, principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  for (const [name, invalid] of cases) {
+    anomaly = invalid;
+    await page.goto("/documents");
+    await expect(page.getByTestId("documents-list-error"), name).toBeVisible();
+    await expect(page.getByRole("button", { name: /factura-demo\.pdf/i }), name).toHaveCount(0);
+  }
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-138 · forged Drive origin in detail cannot permit OCR or financial associations", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: {
+          ...item, storageProvider: "google_drive",
+          sourceModifiedAt: "2026-02-30T20:00:00Z", sourceDriveFileId: { forged: true },
+        }, associations: [], principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});

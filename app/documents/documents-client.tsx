@@ -290,6 +290,11 @@ function validatedDocumentList(payload: unknown): DocumentList {
       || typeof item.notes !== "string"
       || !validDocumentTimestamp(item.createdAt)
       || !validDocumentTimestamp(item.updatedAt)
+      // Drive origin evidence must not contain invented times or an object
+      // disguised as an opaque file id, even if the rest of the list is 200.
+      || (item.sourceModifiedAt != null && !validDocumentTimestamp(item.sourceModifiedAt))
+      || (item.sourceDriveFileId != null
+        && (typeof item.sourceDriveFileId !== "string" || !item.sourceDriveFileId.trim()))
       || (item.sizeBytes !== null && (!Number.isSafeInteger(item.sizeBytes) || (item.sizeBytes ?? -1) < 0))
       || (item.issuerName !== null && typeof item.issuerName !== "string")
       || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
@@ -890,6 +895,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || typeof data.document.notes !== "string"
         || !validDocumentTimestamp(data.document.createdAt)
         || !validDocumentTimestamp(data.document.updatedAt)
+        || (data.document.sourceModifiedAt != null
+          && !validDocumentTimestamp(data.document.sourceModifiedAt))
+        || (data.document.sourceDriveFileId != null
+          && (typeof data.document.sourceDriveFileId !== "string"
+            || !data.document.sourceDriveFileId.trim()))
         || (data.document.sizeBytes !== null
           && (!Number.isSafeInteger(data.document.sizeBytes) || data.document.sizeBytes < 0))
         || (data.document.issuerName !== null && typeof data.document.issuerName !== "string")
