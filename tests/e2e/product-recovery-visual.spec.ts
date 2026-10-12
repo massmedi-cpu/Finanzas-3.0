@@ -122,8 +122,24 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
       await expect(page.getByRole("heading", { name: "12 documentos" })).toBeVisible();
       await expect(page.getByText(items[0].originalFileName).first()).toBeVisible();
-      await page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ }).click();
+      const selectedRow = page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ });
+      await selectedRow.click();
       await expect(page.getByRole("heading", { name: items[0].originalFileName })).toBeVisible();
+      // REC-UI-DOC-006: narrow list panels must not collapse the filename to
+      // one letter because status, file icon and metadata claim three columns.
+      const filenameStyle = await selectedRow.locator("strong").first().evaluate(node => ({
+        clamp: getComputedStyle(node).webkitLineClamp,
+        whiteSpace: getComputedStyle(node).whiteSpace,
+      }));
+      expect(filenameStyle.clamp).toBe("2");
+      expect(filenameStyle.whiteSpace).toBe("normal");
+      if (width === 360) {
+        const jump = page.getByRole("link", { name: "Ir a la ficha seleccionada ↓" });
+        await expect(jump).toBeVisible();
+        await jump.click();
+        await expect(page).toHaveURL(/#documento-seleccionado$/);
+        await expect(page.locator("#documento-seleccionado")).toBeVisible();
+      }
       await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
       const flow = page.getByRole("list", { name: "Proceso de revisión OCR" });
       const firstStage = flow.locator("li").first();
