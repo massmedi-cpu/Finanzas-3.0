@@ -214,6 +214,9 @@ export async function POST() {
           modifiedTime: file.modifiedTime,
         })),
       });
+      if (!Number.isSafeInteger(result.imported) || result.imported !== verified.length) {
+        throw new Error("document_drive_import_count_mismatch");
+      }
       imported = result.imported;
     }
 
