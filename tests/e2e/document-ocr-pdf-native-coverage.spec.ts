@@ -377,3 +377,40 @@ test("REC-OCR-102 · euro-symbol totals with final punctuation retain native pre
   const visual = words("FACTURA TOTAL 23,45 " + boilerplate.repeat(4));
   expect(pdfVisualOcrImprovesNative(native, visual)).toBe(false);
 });
+
+
+test("REC-OCR-103 · full-height left-margin native stamps cannot hide raster financial body", () => {
+  const native = Array.from({ length: 7 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: 0.02, y: 0.03 + index * 0.12, width: 0.15, height: 0.05 },
+  }));
+  expect(native.map(word => word.text).join(" ").length).toBeGreaterThan(260);
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+});
+
+test("REC-OCR-104 · both narrow margins without central selectable content require raster OCR", () => {
+  const native = Array.from({ length: 8 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: index % 2 ? 0.82 : 0.02, y: 0.02 + index * 0.10,
+      width: 0.15, height: 0.04 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+});
+
+test("REC-OCR-105 · a full digital invoice with center-page content avoids margin fallback", () => {
+  const native = Array.from({ length: 7 }, (_, index): OcrWord => ({
+    text: boilerplate, confidence: 1,
+    box: { x: 0.18, y: 0.03 + index * 0.12, width: 0.55, height: 0.05 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+});
+
+test("REC-OCR-106 · a genuine native total is retained even if the text lives in a narrow margin", () => {
+  const native = Array.from({ length: 7 }, (_, index): OcrWord => ({
+    text: index === 0 ? "FACTURA TOTAL 45 EUR." : boilerplate,
+    confidence: 1,
+    box: { x: 0.02, y: 0.03 + index * 0.12, width: 0.15, height: 0.05 },
+  }));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+  expect(pdfVisualOcrImprovesNative(native, words("FACTURA TOTAL 23,45 EUR"))).toBe(false);
+});

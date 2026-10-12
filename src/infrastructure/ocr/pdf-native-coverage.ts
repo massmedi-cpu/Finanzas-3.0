@@ -82,6 +82,16 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   }
   if (validGeometry && bottom - top < 0.18 && !hasInvoiceTotalEvidence(words)) return true;
 
+  // A rotated filing stamp or legal strip can run all the way down a PDF's
+  // margin. Vertical coverage alone then looks complete, but no text from
+  // the invoice body was actually extracted. Check horizontal placement
+  // independently. Keep a genuinely selectable invoice TOTAL authoritative.
+  const marginOnly = words.every(({ box }) =>
+    Number.isFinite(box.x) && Number.isFinite(box.width)
+    && box.x >= 0 && box.width >= 0 && box.x + box.width <= 1.001
+    && (box.x + box.width <= 0.2 || box.x >= 0.8));
+  if (marginOnly && !hasInvoiceTotalEvidence(words)) return true;
+
   // Some hybrid scanners retain selectable headers AND legal footers
   // while the invoice body (including its line items and final amount)
   // is raster-only. Their bounding span is full-page even though neither
