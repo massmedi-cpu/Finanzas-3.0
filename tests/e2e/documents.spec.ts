@@ -3483,3 +3483,39 @@ test("REC-DOC-132 · duplicate association rows cannot create duplicate unassoci
   await expect(page.getByRole("button", { name: "Desasociar" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-133 · recovery from malformed document detail restores actions only after verified retry", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let malformed = true;
+  let detailRequests = 0;
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      detailRequests++;
+      if (malformed) {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          contractVersion: 3, document: { ...item, mimeType: "text/html" },
+          associations: [], principles,
+        }) });
+        return;
+      }
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  const error = page.getByTestId("documents-detail-error");
+  await expect(error).toContainText("se han desactivado la edición, el OCR y las asociaciones");
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
+
+  malformed = false;
+  await error.getByRole("button", { name: "Reintentar detalle" }).click();
+  await expect(error).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  await expect(page.getByLabel("Emisor")).toHaveValue("Proveedor Demo");
+  expect(detailRequests).toBeGreaterThanOrEqual(2);
+  expect(writes).toEqual([]);
+});

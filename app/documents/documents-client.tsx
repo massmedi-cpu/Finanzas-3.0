@@ -583,7 +583,7 @@ function friendlyError(error: unknown) {
     invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
     document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
     document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
-    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado. No mostraremos datos de otro documento; reintenta la consulta.",
+    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado o su contenido no supera la verificación de integridad. La edición y las asociaciones están bloqueadas hasta recuperarlo.",
     document_open_blocked: "El navegador ha bloqueado la ventana del documento. Permite ventanas emergentes para Financial App y vuelve a pulsar Abrir.",
     document_open_failed: "No se ha podido abrir el original. Reintenta desde la ficha del documento.",
     document_open_unsafe_url: "Se ha rechazado un enlace de archivo no seguro. El original no se ha abierto.",
@@ -1815,7 +1815,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : detailLoadFailed || !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
-                <p>Los datos de otro documento no se muestran en esta selección.</p>
+                <p>No podemos verificar la ficha. Para proteger tus datos, se han desactivado la edición, el OCR y las asociaciones hasta que la consulta sea válida.</p>
                 <button type="button" className={styles.secondaryButton} onClick={() => void loadDetail(selectedId)}>Reintentar detalle</button>
               </div>
             ) : (
