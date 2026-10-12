@@ -72,6 +72,21 @@ async function mockDashboard(page: Page) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await fulfillJson(route, {
+        available: true,
+        earliestMovementDate: "2026-01-01",
+        latestMovementDate: "2026-09-11",
+        sync: {
+          status: "success", startedAt: "2026-09-11T08:00:00Z",
+          finishedAt: "2026-09-11T08:05:00Z",
+          rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      });
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await fulfillJson(route, { run: null });
       return;
@@ -79,6 +94,23 @@ async function mockDashboard(page: Page) {
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical" || scope === "activity") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope,
+          asOfDate: "2026-09-11",
+          dataThroughDate: scope === "activity" ? "2026-09-11" : null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: scope === "critical" ? ["financial"] : ["transactions"],
+          failedSources: [],
+          data: {
+            financial: scope === "critical" ? financial : null,
+            monthly: null, budgets: null, forecast: null,
+            transactions: scope === "activity" ? transactions : null,
+          },
+        });
+        return;
+      }
       if (scope === "primary") {
         await fulfillJson(route, {
           contractVersion: 1,
