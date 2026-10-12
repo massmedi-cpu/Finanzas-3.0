@@ -272,6 +272,16 @@ function validatedDocumentList(payload: unknown): DocumentList {
       || !["ticket", "invoice", "other"].includes(item.type ?? "")
       || !["imported", "pending_review", "confirmed", "archived"].includes(item.status ?? "")
       || typeof item.originalFileName !== "string" || !item.originalFileName.trim()
+      // A valid document id is not enough: an HTTP 200 can still contain
+      // unusable or cross-provider metadata. Never present it as a loaded
+      // archive with real files until the minimum display contract is sound.
+      || !["supabase", "google_drive"].includes(item.storageProvider ?? "")
+      || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(item.mimeType ?? "")
+      || typeof item.notes !== "string"
+      || typeof item.createdAt !== "string" || !Number.isFinite(Date.parse(item.createdAt))
+      || typeof item.updatedAt !== "string" || !Number.isFinite(Date.parse(item.updatedAt))
+      || (item.sizeBytes !== null && (!Number.isSafeInteger(item.sizeBytes) || (item.sizeBytes ?? -1) < 0))
+      || (item.issuerName !== null && typeof item.issuerName !== "string")
       || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
       || (item.documentDate !== null && typeof item.documentDate !== "string")
       || !Number.isSafeInteger(item.associationCount) || (item.associationCount ?? -1) < 0) {

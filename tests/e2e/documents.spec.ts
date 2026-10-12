@@ -3003,3 +3003,38 @@ test("REC-DOC-074 · firma válida para otro archivo no puede reemplazar el orig
   expect(signedUploads).toBe(1);
   expect(writes.some((write) => write.action === "upload_finalize")).toBe(false);
 });
+
+
+test("REC-DOC-118 · archive refuses false 200 with malformed provider, MIME or money metadata", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const invalidItems: Array<[string, Record<string, unknown>]> = [
+    ["otro proveedor", { storageProvider: "external_unverified" }],
+    ["MIME ausente", { mimeType: null }],
+    ["tamaño no numérico", { sizeBytes: "1234" }],
+    ["fecha de origen ilegible", { createdAt: "fecha inventada" }],
+    ["notas no textuales", { notes: { unexpected: "object" } }],
+    ["proveedor sin nombre legible", { issuerName: 12345 }],
+  ];
+  let current = invalidItems[0][1];
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3,
+        items: [{ ...item, ...current }],
+        total: 1, limit: 50, offset: 0, principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  for (const [name, invalid] of invalidItems) {
+    current = invalid;
+    await page.goto("/documents");
+    await expect(page.getByTestId("documents-alert"), name).toContainText(/lista documental incompleta o incompatible/i);
+    await expect(page.getByText("No se ha podido cargar la lista"), name).toBeVisible();
+    await expect(page.getByRole("button", { name: /factura-demo\.pdf/i }), name).toHaveCount(0);
+  }
+  expect(writes).toEqual([]);
+});
