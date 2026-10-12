@@ -222,6 +222,13 @@
   background: color-mix(in srgb, var(--color-primary-bright) 13%, var(--surface-card));
   box-shadow: inset 4px 0 0 var(--color-primary-bright);
 }
+/* REC-UI-DOC-011 · Axe identified 3.64:1 for bright-blue 14px
+   glyphs on the selected icon tile in dark mode. The readable
+   semantic text color gives >=4.5:1 while preserving the accent
+   background and the visible left selection rail. */
+.documentRow[aria-pressed="true"] .fileIcon {
+  color: var(--color-text);
+}
 :global(html[data-theme="light"]) .documentRow[aria-pressed="true"] {
   background: var(--surface-primary-subtle);
   box-shadow: inset 4px 0 0 var(--color-primary);

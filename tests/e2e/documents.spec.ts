@@ -3535,7 +3535,13 @@ test("REC-UI-DOC-009 · selection and keyboard focus remain accessible on both t
   await expect(page.locator("#documento-seleccionado")).toBeVisible();
   for (const theme of ["light", "dark"]) {
     await page.evaluate(value => { document.documentElement.dataset.theme = value; }, theme);
+    // :focus-visible responds to keyboard modality, not a scripted focus()
+    // immediately after a mouse click. Navigate out and back with real
+    // Tab keystrokes so the test verifies actual accessible keyboard focus.
     await row.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(row).toBeFocused();
     const style = await row.evaluate(element => {
       const css = window.getComputedStyle(element);
       return { outlineStyle: css.outlineStyle, outlineWidth: css.outlineWidth,
