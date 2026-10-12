@@ -1610,6 +1610,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
           <p className={styles.heroText}>Guarda facturas y tickets desde cámara, galería, archivos o Drive, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
+          <a className={styles.archiveQuickLink} href="#archivo-documental">Ir al archivo documental ↓</a>
           <div className={styles.pills}>
             <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
           </div>
@@ -1656,7 +1657,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         </section>
 
         <section className={styles.workspace}>
-          <aside className={styles.listPanel} aria-label="Listado de documentos">
+          <aside id="archivo-documental" className={styles.listPanel} aria-label="Listado de documentos">
             <div className={styles.listHeader}>
               <div>
                 <p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p>
