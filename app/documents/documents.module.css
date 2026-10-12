@@ -177,3 +177,20 @@
     gap: .35rem .65rem;
   }
 }
+
+
+/* REC-UI-DOC-008 · Mobile hero content must remain readable without forcing
+   every trust indicator onto a separate full-width row. */
+@container app-content (max-width: 700px) {
+  .pills {
+    gap: .35rem;
+    align-items: flex-start;
+  }
+  .pills span {
+    padding: .26rem .45rem;
+    font-size: .75rem;
+    line-height: 1.3;
+    font-weight: 750;
+    letter-spacing: normal;
+  }
+}
