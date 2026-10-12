@@ -196,3 +196,41 @@ test("REC-OCR-087 · actual PDF.js preserves short native total against longer c
   expect(selected).not.toContain("23,45");
   expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
 });
+
+
+test("REC-OCR-097 · real PDF.js preserves an original whole-euro TOTAL in EUR over conflicting raster OCR", async () => {
+  const nativeText = "FACTURA ORIGINAL TOTAL 45 EUR";
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async ({ bytes, mimeType }) => {
+      visualReads += 1;
+      expect(mimeType).toBe("image/png");
+      expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      return {
+        ...visualResult(0.96),
+        pages: [{
+          pageNumber: 1,
+          words: [
+            { text: "TOTAL", confidence: 0.96, box: { x: 0.1, y: 0.3, width: 0.1, height: 0.08 } },
+            { text: "23,45", confidence: 0.96, box: { x: 0.2, y: 0.3, width: 0.1, height: 0.08 } },
+            ...Array.from({ length: 30 }, (_, index) => ({
+              text: "PRODUCTO", confidence: 0.96,
+              box: { x: 0.1, y: 0.42 + index * 0.01, width: 0.2, height: 0.008 },
+            })),
+          ],
+        }],
+      };
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf(nativeText),
+    mimeType: "application/pdf",
+    originalFileName: "original-euros-enteros-con-capa-raster.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_text");
+  const selected = result.pages[0].words.map((word) => word.text).join(" ");
+  expect(selected).toContain("TOTAL 45 EUR");
+  expect(selected).not.toContain("23,45");
+  expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
+});
