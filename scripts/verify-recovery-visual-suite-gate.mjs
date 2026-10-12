@@ -12,6 +12,7 @@ const cases = [
   ["tests/e2e/private-document-content-address.spec.ts", ["REC-DOC-117", "REC-DOC-118", "REC-DOC-119"]],
   ["tests/e2e/private-document-replay.spec.ts", ["REC-DOC-110", "REC-DOC-111", "REC-DOC-112", "REC-DOC-120"]],
   ["tests/e2e/document-drive-authoritative-metadata.spec.ts", ["REC-DRIVE-120", "REC-DRIVE-121", "REC-DRIVE-122", "REC-DRIVE-123", "REC-DRIVE-124", "REC-DRIVE-125", "REC-DRIVE-126", "REC-DRIVE-127", "REC-DRIVE-128", "REC-DRIVE-129", "REC-DRIVE-130", "REC-DRIVE-131", "REC-DRIVE-132", "REC-DRIVE-133", "REC-DRIVE-134", "REC-DRIVE-135", "REC-DRIVE-136"]],
+  ["tests/e2e/drive-auto-detection-10.0.72.spec.ts", ["REC-DRIVE-137", "REC-DRIVE-138"]],
   ["tests/e2e/document-download-byte-limit.spec.ts", ["REC-DOC-MEM-001", "REC-DOC-MEM-002", "REC-DOC-MEM-003", "REC-DOC-MEM-004", "REC-DOC-MEM-005"]],
 ];
 const integrated = workflow.split("name: Integrated module regressions on the same optimized build")[1]?.split("      # Synthetic UI results")[0] ?? "";
