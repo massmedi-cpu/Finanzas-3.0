@@ -19,6 +19,7 @@ type DriveMetadata = {
   size?: unknown;
   trashed?: unknown;
   modifiedTime?: unknown;
+  version?: unknown;
 };
 
 export class GoogleDriveDocumentError extends Error {
@@ -28,6 +29,7 @@ export class GoogleDriveDocumentError extends Error {
       | "google_drive_document_access_denied"
       | "google_drive_document_not_found"
       | "google_drive_document_metadata_invalid"
+      | "google_drive_document_source_changed"
       | "google_drive_document_mime_mismatch"
       | "google_drive_document_content_mismatch"
       | "google_drive_document_too_large"
@@ -84,6 +86,18 @@ async function readDriveMediaBounded(response: Response): Promise<Uint8Array<Arr
   }
 }
 
+/** Drive returns version as an int64 decimal string; never round it to Number. */
+function driveVersion(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string" || !/^[0-9]{1,20}$/.test(value)) {
+    throw new GoogleDriveDocumentError(
+      "google_drive_document_metadata_invalid",
+      "La versión del archivo original no es válida.",
+    );
+  }
+  return value.replace(/^0+(?=\d)/, "");
+}
+
 function googleHeaders(accessToken: string) {
   return {
     authorization: `Bearer ${accessToken}`,
@@ -116,7 +130,12 @@ export class GoogleDriveDocumentDownloader {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
-  async download(input: { fileId: string; expectedMimeType: string }) {
+  async download(input: {
+    fileId: string;
+    expectedMimeType: string;
+    expectedModifiedTime?: string;
+    expectedSizeBytes?: number;
+  }) {
     const fileId = input.fileId.trim();
     const expectedMimeType = input.expectedMimeType.trim().toLowerCase();
     if (!FILE_ID.test(fileId)) {
@@ -143,7 +162,7 @@ export class GoogleDriveDocumentDownloader {
     const encodedId = encodeURIComponent(fileId);
     const metadataUrl =
       `https://www.googleapis.com/drive/v3/files/${encodedId}` +
-      "?fields=id,name,mimeType,size,modifiedTime,trashed&supportsAllDrives=true";
+      "?fields=id,name,mimeType,size,modifiedTime,version,trashed&supportsAllDrives=true";
     const metadataResponse = await this.fetcher(metadataUrl, {
       method: "GET",
       headers: googleHeaders(accessToken),
@@ -175,6 +194,18 @@ export class GoogleDriveDocumentDownloader {
       );
     }
     const modifiedTime = driveModifiedTime(metadata?.modifiedTime);
+    const version = driveVersion(metadata?.version);
+    // Folder discovery and download may race: never mix two distinct Drive
+    // revisions in an incremental import. Optional expectations come only
+    // from server-side discovery, not from a browser-provided assertion.
+    if ((input.expectedModifiedTime !== undefined
+        && (!modifiedTime || Date.parse(modifiedTime) !== Date.parse(input.expectedModifiedTime)))
+      || (input.expectedSizeBytes !== undefined && size !== input.expectedSizeBytes)) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_source_changed",
+        "El original de Drive cambió durante la comprobación; repite la sincronización.",
+      );
+    }
     if (size <= 0 || size > GOOGLE_DRIVE_OCR_MAX_BYTES) {
       throw new GoogleDriveDocumentError(
         "google_drive_document_too_large",
@@ -223,6 +254,38 @@ export class GoogleDriveDocumentDownloader {
       throw new GoogleDriveDocumentError(
         "google_drive_document_content_mismatch",
         "El contenido real del archivo de Drive no coincide con el tipo documental declarado.",
+      );
+    }
+
+    // Drive's version is monotonically increasing for ALL server-side
+    // changes. Repeat the read-only metadata query after downloading bytes;
+    // if either revision differs, do not persist this mixed snapshot.
+    const finalMetadataResponse = await this.fetcher(metadataUrl, {
+      method: "GET",
+      headers: googleHeaders(accessToken),
+      cache: "no-store",
+      redirect: "error",
+    }).catch(() => null);
+    if (!finalMetadataResponse) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_download_failed",
+        "No se pudo volver a verificar la versión del archivo original.",
+      );
+    }
+    if (!finalMetadataResponse.ok) throw mapGoogleFailure(finalMetadataResponse.status);
+    const finalMetadata = (await finalMetadataResponse.json().catch(() => null)) as DriveMetadata | null;
+    const finalName = asNonEmptyString(finalMetadata?.name);
+    const firstName = asNonEmptyString(metadata?.name);
+    const finalSize = parseSize(finalMetadata?.size);
+    const finalMime = asNonEmptyString(finalMetadata?.mimeType)?.toLowerCase() ?? null;
+    const finalModified = driveModifiedTime(finalMetadata?.modifiedTime);
+    const finalVersion = driveVersion(finalMetadata?.version);
+    if (asNonEmptyString(finalMetadata?.id) !== fileId || finalMetadata?.trashed === true
+      || finalSize !== size || finalMime !== mimeType || finalName !== firstName
+      || finalModified !== modifiedTime || finalVersion !== version) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_source_changed",
+        "El original de Drive cambió durante la descarga; repite la operación.",
       );
     }
 
