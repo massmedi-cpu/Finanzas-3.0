@@ -1,6 +1,28 @@
 import type { OcrWord } from "../../domain/document-ocr";
 
 /**
+ * Exact enough for the native-vs-visual OCR decision: reject percentages,
+ * numeric prefixes and 3-decimal ratios rather than treating them as money.
+ * This is evidence detection, not financial amount parsing or persistence.
+ */
+function hasMoneyEvidence(text: string) {
+  const decimals = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2})(?![\d.,]|\s*%)/;
+  const currencyBefore = /(?:€\s*|\b(?:eur|euros?)\s+)(?:\d{1,3}(?:\.\d{3})+|\d+)(?![\d.,]|\s*%)/;
+  const currencyAfter = /(?:^|[^\d.,])(?:\d{1,3}(?:\.\d{3})+|\d+)\s*€(?![\d.,])/;
+  return decimals.test(text) || currencyBefore.test(text) || currencyAfter.test(text);
+}
+
+function hasInvoiceTotalEvidence(words: OcrWord[]) {
+  const text = words.map((word) => word.text).join(" ")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  for (const label of text.matchAll(/\b(?:total|importe total|a pagar)\b/g)) {
+    const tail = text.slice((label.index ?? 0) + label[0].length, (label.index ?? 0) + label[0].length + 56);
+    if (hasMoneyEvidence(tail)) return true;
+  }
+  return false;
+}
+
+/**
  * Scanned PDF pages sometimes retain only an embedded page number or stamp.
  * A nonempty selectable text layer is not proof that the invoice is readable.
  * Fall back to visual OCR for sparse native text, keeping the original text
@@ -25,8 +47,7 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   if (chars >= 260) return false;
   const normalized = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const financialLabel = /\b(?:total|importe|subtotal|base imponible|precio|a pagar|iva|igic|cuota)\b/.test(normalized);
-  const financialAmount = /(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2}|\d+\s*€|€\s*\d+|\b(?:eur|euros?)\s+\d+)/i.test(normalized);
-  return !(financialLabel && financialAmount);
+  return !(financialLabel && hasMoneyEvidence(normalized));
 }
 
 /**
@@ -43,13 +64,7 @@ export function pdfVisualOcrImprovesNative(nativeWords: OcrWord[], visualWords: 
   if ((visualWords.length > nativeWords.length && visualChars >= nativeChars)
     || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5)) return true;
 
-  const invoiceTotal = (words: OcrWord[]) => {
-    const text = words.map((word) => word.text).join(" ")
-      .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-    // Require a recognised amount rather than a rate (IVA 21%) or reference.
-    return /\b(?:total|importe total|a pagar)\b.{0,55}?(?:\b\d{1,3}(?:\.\d{3})*,\d{2}(?![\d%])|\b\d+\.\d{2}(?![\d%])|€\s*\d+|\b\d+\s*€|\beur\s+\d+)/.test(text);
-  };
-  if (!invoiceTotal(visualWords) || invoiceTotal(nativeWords)) return false;
+  if (!hasInvoiceTotalEvidence(visualWords) || hasInvoiceTotalEvidence(nativeWords)) return false;
   const confidences = visualWords
     .map((word) => word.confidence)
     .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
