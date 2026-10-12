@@ -191,3 +191,50 @@ test("REC-OCR-049 · doble fallo nativo y visual no borra las páginas sanas", a
   expect(result.status).toBe("needs_review");
   expect(result.principles.financialWrites).toBe(false);
 });
+
+
+class PageLoadFailsOnSecondPage extends PdfTextOcrProvider {
+  protected override async loadPdfPage<T>(
+    pdf: { getPage(pageNumber: number): Promise<T> },
+    pageNumber: number,
+  ): Promise<T> {
+    if (pageNumber === 2) throw new Error("synthetic_damaged_pdf_page_reference");
+    return super.loadPdfPage(pdf, pageNumber);
+  }
+}
+
+test("REC-OCR-079 · failure loading one PDF page preserves the healthy preceding and following pages", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "PDF.js page-loader fault injection runs once");
+  test.setTimeout(120_000);
+  const pdf = await makeThreePageNativePdf(page);
+  const provider = new PageLoadFailsOnSecondPage();
+  const result = await runDocumentOcr({
+    documentId, bytes: pdf, mimeType: "application/pdf",
+    originalFileName: "pdf-tres-paginas-referencia-danada.pdf",
+    provider,
+  });
+  expect(result.pages.map((entry) => entry.pageNumber)).toEqual([1, 2, 3]);
+  expect(result.pages[0].plainText).toContain("FACTURA NATIVA PAGINA 1");
+  expect(result.pages[1].plainText).toBe("");
+  expect(result.pages[2].plainText).toContain("FACTURA NATIVA PAGINA 3");
+  expect(result.warnings).toContain("pdf_page_load_failed:2");
+  expect(result.principles.financialWrites).toBe(false);
+  expect(result.principles.requiresHumanReview).toBe(true);
+});
+
+test("REC-OCR-080 · an invalid PDF does not poison the next valid PDF extraction", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "PDF.js cleanup regression runs once");
+  test.setTimeout(120_000);
+  const provider = new PdfTextOcrProvider();
+  await expect(provider.extract({
+    bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x69, 0x6e, 0x76, 0x61, 0x6c, 0x69, 0x64]),
+    mimeType: "application/pdf",
+    originalFileName: "invalid.pdf",
+  })).rejects.toThrow();
+  const valid = await makeThreePageNativePdf(page);
+  const result = await provider.extract({
+    bytes: valid, mimeType: "application/pdf", originalFileName: "valid-after-invalid.pdf",
+  });
+  expect(result.pages.map((entry) => entry.pageNumber)).toEqual([1, 2, 3]);
+  expect(result.pages[2].words.map((word) => word.text).join(" ")).toContain("FACTURA NATIVA PAGINA 3");
+});

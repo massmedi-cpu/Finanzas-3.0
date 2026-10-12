@@ -119,13 +119,28 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
     return content.items;
   }
 
+  // A single corrupt page reference must not discard readable earlier or
+  // later pages. Kept protected so the real PDF.js load path can be fault-
+  // injected in regression tests without mocking the whole document parser.
+  protected async loadPdfPage<T>(
+    pdf: { getPage(pageNumber: number): Promise<T> },
+    pageNumber: number,
+  ): Promise<T> {
+    return pdf.getPage(pageNumber);
+  }
+
   async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }) {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
     const task = pdfjs.getDocument({
       data: new Uint8Array(input.bytes),
       useSystemFonts: true,
     });
-    const pdf = await task.promise;
+    // A malformed PDF may reject while the document is still opening.
+    // Dispose of the loading task even on this early failure path.
+    const pdf = await task.promise.catch(async (error: unknown) => {
+      await task.destroy().catch(() => undefined);
+      throw error;
+    });
     const pageCount = Math.min(pdf.numPages, MAX_PAGES);
     const pages: Array<{ pageNumber: number; words: OcrWord[] }> = [];
     const warnings: string[] = [];
@@ -135,7 +150,16 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
 
     try {
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        const page = await pdf.getPage(pageNumber);
+        let page: Awaited<ReturnType<typeof pdf.getPage>> | null = null;
+        try {
+          page = await this.loadPdfPage(pdf, pageNumber);
+        } catch {
+          // Preserve the explicit hole in page numbering and the healthy
+          // pages. Never infer a total from a page we could not load.
+          pages.push({ pageNumber, words: [] });
+          warnings.push(`pdf_page_load_failed:${pageNumber}`);
+          continue;
+        }
         try {
           const viewport = page.getViewport({ scale: 1 });
           let nativeWords: OcrWord[] = [];
