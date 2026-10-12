@@ -256,6 +256,9 @@ export default function RecurrencesClient({
       const recurrenceId = recurrenceIdFromResponse(saved)
         ?? recurrenceIdFromResponse({ id: candidate.existingRecurrenceId });
       if (!recurrenceId) throw new Error("recurrence_write_contract_invalid");
+      // Never announce persistence or offer a forecast impact based only on
+      // POST 200. Re-read the latest bank-derived snapshot first.
+      if (!(await load(false))) throw new Error("recurrence_readback_unverified");
       setMessage(
         status === "active"
           ? candidate.existingStatus === "active"
@@ -276,7 +279,6 @@ export default function RecurrencesClient({
       } else {
         setConfirmedImpact(null);
       }
-      await load(false);
     } catch {
       setConfirmedImpact(null);
       setError("No podemos confirmar si la decisión se guardó. Recalcula patrones y comprueba su estado antes de repetirla.");
@@ -294,6 +296,9 @@ export default function RecurrencesClient({
     setMessage("");
     try {
       await sendDecision("PATCH", { id: candidate.existingRecurrenceId, status });
+      // A successful HTTP write cannot prove the displayed recurring state
+      // is fresh; keep the outcome unverified if GET fails or is malformed.
+      if (!(await load(false))) throw new Error("recurrence_readback_unverified");
       setMessage(
         status === "ignored"
           ? "Recurrencia ignorada."
@@ -302,7 +307,6 @@ export default function RecurrencesClient({
       if (confirmedImpact?.recurrenceId === candidate.existingRecurrenceId) {
         setConfirmedImpact(null);
       }
-      await load(false);
     } catch {
       setConfirmedImpact(null);
       setError("No podemos confirmar si el estado cambió. Recalcula patrones y comprueba su estado antes de repetir la operación.");
