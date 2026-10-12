@@ -530,19 +530,42 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
   }
 
   if (action === "document.drive_batch") {
-    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) throw new Error("invalid_document_drive_batch");
-    let imported = 0;
-    for (const raw of payload.files) {
+    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) {
+      throw new Error("invalid_document_drive_batch");
+    }
+
+    // Fully validate the entire Drive batch BEFORE opening a transaction.
+    // Duplicate IDs inside one batch are ambiguous and must not silently
+    // overwrite a newer revision with an older one.
+    const seenFileIds = new Set<string>();
+    const documents = payload.files.map((raw: any) => {
       const type = documentType(raw?.type ?? "other");
       const name = text(raw?.name, "document_file_name", 500);
       const mime = mimeType(raw?.mimeType);
       const fileId = text(raw?.fileId, "document_drive_file_id", 300);
       const size = safeInteger(raw?.sizeBytes, "document_size", true);
       const modifiedTime = nullableText(raw?.modifiedTime, "document_source_modified_at", 80);
-      await sql`select financial_app.register_document(${type},${name},${mime},'google_drive',${fileId},${fileId},${size}::bigint,${modifiedTime}::timestamptz)`;
-      imported += 1;
+      if (size === null || size <= 0 || size > MAX_FILE_BYTES) {
+        throw new Error("invalid_document_size");
+      }
+      if (seenFileIds.has(fileId)) throw new Error("invalid_document_drive_batch_duplicate");
+      seenFileIds.add(fileId);
+      return { type, name, mime, fileId, size, modifiedTime };
+    });
+
+    // A failed record rolls back ALL document registrations in this batch.
+    // Never report a partial import as if it had completed successfully.
+    // This affects only document metadata; original Drive files stay read-only.
+    try {
+      await sql.begin(async (tx: any) => {
+        for (const file of documents) {
+          await tx`select financial_app.register_document(${file.type},${file.name},${file.mime},'google_drive',${file.fileId},${file.fileId},${file.size}::bigint,${file.modifiedTime}::timestamptz)`;
+        }
+      });
+    } catch (error) {
+      return databaseError(error);
     }
-    return json({ imported, total: payload.files.length, ocrUsed: false });
+    return json({ imported: documents.length, total: documents.length, ocrUsed: false });
   }
 
   if (action === "test.document_engine") {
