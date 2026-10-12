@@ -357,3 +357,23 @@ test("REC-OCR-096 · header and footer including true native financial total rem
   ];
   expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
 });
+
+
+test("REC-OCR-100 · an explicit native whole-EUR total followed by sentence punctuation is valid", () => {
+  const native = words("FACTURA ORIGINAL TOTAL 45 EUR. " + boilerplate);
+  const visual = words("FACTURA TOTAL 23,45 EUR " + boilerplate.repeat(3));
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(false);
+});
+
+test("REC-OCR-101 · a numeric continuation after whole-euro currency is not a proven total", () => {
+  const native = words("FACTURA TOTAL 45 EUR,50 " + boilerplate);
+  const visual = words("FACTURA TOTAL 23,45 EUR");
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(true);
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
+});
+
+test("REC-OCR-102 · euro-symbol totals with final punctuation retain native precedence", () => {
+  const native = words("FACTURA TOTAL 45 €. " + boilerplate);
+  const visual = words("FACTURA TOTAL 23,45 " + boilerplate.repeat(4));
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(false);
+});
