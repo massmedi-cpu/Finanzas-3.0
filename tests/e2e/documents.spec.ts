@@ -1640,7 +1640,7 @@ test("REC-OCR-088 · una página PDF dañada se explica sin ocultar la incomplet
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes, [], ["pdf_page_load_failed:2"], "needs_review");
   await page.goto("/documents");
-  await page.getByRole("button", { name: /factura-demo\\.pdf/i }).click();
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
   await page.getByRole("button", { name: "Analizar documento" }).click();
   const panel = page.getByTestId("ocr-review-panel");
   const warnings = panel.getByText("Revisar antes de usar").locator("..");
