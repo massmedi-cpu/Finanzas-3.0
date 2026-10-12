@@ -7,7 +7,11 @@ const footer = "DOCUMENTO GENERADO AUTOMATICAMENTE POR EL SISTEMA DE ARCHIVO. "
   + "SE INFORMA QUE EL TEXTO SELECCIONABLE SOLO CONTIENE UNA REFERENCIA LEGAL "
   + "Y QUE LA FACTURA ORIGINAL CON EL TOTAL SE ENCUENTRA EN LA IMAGEN ESCANEADA.";
 
-function hybridPdf(selectableText = footer, headerText: string | null = null): Uint8Array {
+function hybridPdf(
+  selectableText = footer,
+  headerText: string | null = null,
+  lateralText: string | null = null,
+): Uint8Array {
   const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
@@ -22,7 +26,10 @@ function hybridPdf(selectableText = footer, headerText: string | null = null): U
   const commands = Buffer.from(
     "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
       + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n"
-      + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : ""), "ascii",
+      + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : "")
+      // A 90° selectable legal strip, not visible on the raster invoice.
+      // PDF.js reports item.width along the vertical baseline, not the X axis.
+      + (lateralText ? "BT\n/F1 2 Tf\n3 Tr\n0 1 -1 0 16 10 Tm\n(" + lateralText + ") Tj\nET\n" : ""), "ascii",
   );
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
@@ -277,4 +284,28 @@ test("REC-OCR-099 · real PDF.js keeps a native whole-EUR total with a selectabl
   expect(visualReads).toBe(0);
   expect(result.source).toBe("pdf_text");
   expect(result.pages[0].words.map(word => word.text).join(" ")).toContain("TOTAL 45 EUR");
+});
+
+
+test("REC-OCR-107 · real rotated PDF.js selectable margin does not mask the scanned invoice", async () => {
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async ({ bytes, mimeType }) => {
+      visualReads += 1;
+      expect(mimeType).toBe("image/png");
+      expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      return visualResult(0.97);
+    },
+  });
+  // A single long vertical stamp has little horizontal footprint even if
+  // PDF.js returns hundreds of selectable characters in its text layer.
+  const result = await provider.extract({
+    bytes: hybridPdf("1", null, footer.repeat(2)),
+    mimeType: "application/pdf",
+    originalFileName: "factura-escaneada-con-sello-vertical.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.pages[0].words.map(word => word.text)).toEqual(["TOTAL", "23,45"]);
+  expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
 });

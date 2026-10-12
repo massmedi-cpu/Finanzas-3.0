@@ -51,12 +51,29 @@ function wordsFromContent(
     if (transformed.length < 6 || !transformed.every(Number.isFinite)) continue;
     const fontHeight = Math.max(1, Math.hypot(transformed[2], transformed[3]));
     const rawWidth = Number(item.width);
-    const widthPx = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : Math.max(fontHeight, text.length * fontHeight * 0.45);
-    const left = Math.max(0, transformed[4]);
-    const top = Math.max(0, transformed[5] - fontHeight);
-    const right = Math.min(viewport.width, left + widthPx);
-    const bottom = Math.min(viewport.height, top + Math.max(fontHeight, Number(item.height) || 0));
-    if (right <= left || bottom <= top || viewport.width <= 0 || viewport.height <= 0) continue;
+    // The PDF.js item width is measured along the text baseline, which can
+    // be rotated or skewed. Treating it as horizontal falsely paints a
+    // vertical legal stamp across the full page width, bypassing visual OCR
+    // of an image-only invoice body. Project all four text-rectangle corners.
+    const baselineLength = Math.hypot(transformed[0], transformed[1]);
+    if (baselineLength < 0.000001 || viewport.width <= 0 || viewport.height <= 0) continue;
+    const viewportScale = Math.hypot(viewport.transform[0], viewport.transform[1]) || 1;
+    const runLength = Number.isFinite(rawWidth) && rawWidth > 0
+      ? rawWidth * viewportScale
+      : Math.max(fontHeight, text.length * fontHeight * 0.45);
+    const advanceX = (transformed[0] / baselineLength) * runLength;
+    const advanceY = (transformed[1] / baselineLength) * runLength;
+    const originX = transformed[4];
+    const originY = transformed[5];
+    const xCoordinates = [originX, originX + advanceX,
+      originX + transformed[2], originX + advanceX + transformed[2]];
+    const yCoordinates = [originY, originY + advanceY,
+      originY + transformed[3], originY + advanceY + transformed[3]];
+    const left = Math.max(0, Math.min(...xCoordinates));
+    const top = Math.max(0, Math.min(...yCoordinates));
+    const right = Math.min(viewport.width, Math.max(...xCoordinates));
+    const bottom = Math.min(viewport.height, Math.max(...yCoordinates));
+    if (right <= left || bottom <= top) continue;
 
     const x = unit(left / viewport.width);
     const y = unit(top / viewport.height);
