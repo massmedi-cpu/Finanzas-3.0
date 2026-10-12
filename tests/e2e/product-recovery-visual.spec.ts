@@ -121,6 +121,31 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
       await expect(page.getByRole("heading", { name: "12 documentos" })).toBeVisible();
+      // REC-UI-DOC-007: real browser contrast, including disabled vs enabled
+      // phases. The previous light theme used dark-on-dark colors for Drive.
+      const driveAction = page.getByTestId("drive-auto-sync").getByRole("button", { name: "Comprobar ahora" });
+      await expect(driveAction).toBeVisible();
+      const textContrast = await driveAction.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const rgb = (color: string) => {
+          const channels = color.match(/(?:\d+\.\d+|\d+)/g)?.slice(0, 3).map(Number) ?? [];
+          return color.startsWith("color(") ? channels.map(value => value * 255) : channels;
+        };
+        const lum = (values: number[]) => {
+          const normalized = values.map(value => {
+            const channel = value / 255;
+            return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+          return normalized[0] * 0.2126 + normalized[1] * 0.7152 + normalized[2] * 0.0722;
+        };
+        const fore = rgb(style.color);
+        const back = rgb(style.backgroundColor);
+        if (fore.length !== 3 || back.length !== 3) return 0;
+        const f = lum(fore);
+        const b = lum(back);
+        return (Math.max(f, b) + 0.05) / (Math.min(f, b) + 0.05);
+      });
+      expect(textContrast, `REC-UI-DOC-007 Drive action contrast in ${theme} at ${width}px`).toBeGreaterThanOrEqual(4.5);
       await expect(page.getByText(items[0].originalFileName).first()).toBeVisible();
       const selectedRow = page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ });
       await selectedRow.click();
