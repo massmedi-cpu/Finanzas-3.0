@@ -133,3 +133,47 @@
 .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem; }
 .pagination > span { flex: 1 1 100%; color: var(--color-text-muted); font-size: 0.875rem; }
 .pagination > button { min-height: 2.75rem; flex: 1 1 auto; }
+
+
+/* REC-UI-DOC-006 · Short document columns must retain useful filename labels.
+   This is scoped to the list panel's actual width, not only viewport size. */
+.listPanel { container-type: inline-size; }
+.detailPanel { scroll-margin-top: 1.5rem; }
+.detailJump {
+  display: none;
+  width: fit-content;
+  margin-top: .6rem;
+  padding: .4rem .65rem;
+  border: 1px solid var(--border-control);
+  border-radius: .65rem;
+  color: var(--color-primary-bright);
+  font-size: .875rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.detailJump:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+@container app-content (max-width: 1050px) {
+  .detailJump { display: inline-flex; }
+}
+@container (max-width: 26rem) {
+  .documentRow { grid-template-columns: 2.7rem minmax(0, 1fr); }
+  .rowMain strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  .rowSide {
+    grid-column: 2;
+    text-align: left;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .35rem .65rem;
+  }
+}
