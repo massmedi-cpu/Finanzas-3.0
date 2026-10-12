@@ -227,3 +227,10 @@ test("REC-DRIVE-130 · metadata altered after bytes read can never register a mi
     .rejects.toMatchObject({ code: "google_drive_document_source_changed" });
   expect(reads).toBe(2);
 });
+
+test("REC-DRIVE-131 · OCR reports a changed Drive revision with actionable es-ES guidance", () => {
+  const source = readFileSync(join(process.cwd(), "app/documents/ocr-review-panel.tsx"), "utf8");
+  expect(source).toContain('google_drive_document_source_changed:');
+  expect(source).toContain("Pulsa «Comprobar ahora»");
+  expect(source).toContain("No se ha guardado ninguna revisión mezclada.");
+});
