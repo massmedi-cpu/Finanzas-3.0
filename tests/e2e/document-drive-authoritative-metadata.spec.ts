@@ -234,3 +234,38 @@ test("REC-DRIVE-131 · OCR reports a changed Drive revision with actionable es-E
   expect(source).toContain("Pulsa «Comprobar ahora»");
   expect(source).toContain("No se ha guardado ninguna revisión mezclada.");
 });
+
+test("REC-DRIVE-132 · gateway validates every Drive item before transaction", () => {
+  const source = readFileSync(
+    join(process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts"), "utf8",
+  );
+  const from = source.indexOf('if (action === "document.drive_batch")');
+  const to = source.indexOf('if (action === "test.document_engine")', from);
+  expect(from).toBeGreaterThan(0);
+  expect(to).toBeGreaterThan(from);
+  const handler = source.slice(from, to);
+  const validation = handler.indexOf("const documents = payload.files.map");
+  const duplicate = handler.indexOf("seenFileIds.has(fileId)");
+  const sizeCheck = handler.indexOf("size === null || size <= 0 || size > MAX_FILE_BYTES");
+  const transaction = handler.indexOf("await sql.begin(async (tx: any)");
+  expect(validation).toBeGreaterThan(0);
+  expect(duplicate).toBeGreaterThan(validation);
+  expect(sizeCheck).toBeGreaterThan(validation);
+  expect(transaction).toBeGreaterThan(duplicate);
+  expect(transaction).toBeGreaterThan(sizeCheck);
+});
+
+test("REC-DRIVE-133 · every document registration uses ONE rollback-safe transaction", () => {
+  const source = readFileSync(
+    join(process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts"), "utf8",
+  );
+  const from = source.indexOf('if (action === "document.drive_batch")');
+  const to = source.indexOf('if (action === "test.document_engine")', from);
+  const handler = source.slice(from, to);
+  expect(handler).toContain("await sql.begin(async (tx: any) => {");
+  expect(handler).toContain("for (const file of documents)");
+  expect(handler).toContain("await tx`select financial_app.register_document(");
+  expect(handler).not.toContain("await sql`select financial_app.register_document(");
+  expect(handler).toContain("return databaseError(error)");
+  expect(handler).toContain("imported: documents.length");
+});
