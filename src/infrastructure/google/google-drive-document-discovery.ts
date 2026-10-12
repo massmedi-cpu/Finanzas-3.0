@@ -104,10 +104,13 @@ function discoveryHeaders(accessToken: string) {
 }
 
 export class GoogleDriveDocumentDiscovery {
-  constructor(
-    private readonly accessTokens: GoogleAccessTokenProvider,
-    private readonly fetcher: typeof fetch = fetch,
-  ) {}
+  private readonly accessTokens: GoogleAccessTokenProvider;
+  private readonly fetcher: typeof fetch;
+
+  constructor(accessTokens: GoogleAccessTokenProvider, fetcher: typeof fetch = fetch) {
+    this.accessTokens = accessTokens;
+    this.fetcher = fetcher;
+  }
 
   async listAuthorizedFolder(
     folderId = FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
