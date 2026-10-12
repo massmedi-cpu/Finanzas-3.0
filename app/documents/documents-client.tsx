@@ -891,6 +891,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || !data.document.originalFileName.trim()) {
         throw new Error("document_detail_mismatch");
       }
+      // A silent revalidation is still authoritative: only a successful
+      // matching, complete GET can unblock a previous failed readback.
+      setDetailLoadFailed(false);
       setDetail(data);
       if (!preserveEditor) {
         setDesignationOpen(false);
@@ -901,7 +904,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       return data;
     } catch (caught) {
       if (sequence === detailSequence.current && selectedIdRef.current === id) {
-        if (!silent) setDetailLoadFailed(true);
+        // OCR confirmation refreshes quietly, but a failed readback after a
+        // write is never proof that the old detail is still accurate. Fail
+        // closed for BOTH explicit and silent reads: stale controls must not
+        // offer metadata edits or banking associations until verification.
+        setDetailLoadFailed(true);
+        setDetail(null);
+        setCandidates(null);
+        setTransactions(null);
+        setTransactionResultQuery(null);
+        manualSearchSequence.current += 1;
         setError(friendlyError(caught));
       }
       return null;

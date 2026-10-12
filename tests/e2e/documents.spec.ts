@@ -3313,3 +3313,54 @@ test("REC-DOC-127 · valid ISO timestamps with milliseconds and timezone remain 
   await expect(page.getByTestId("documents-detail-error")).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-128 · silent OCR confirmation readback failure hides stale document actions", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirmedOnServer = false;
+  let detailReadbacks = 0;
+  await page.route("**/api/documents/ocr-review*", async route => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    const submitted = route.request().postDataJSON() as Record<string, unknown>;
+    confirmedOnServer = true;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      contractVersion: 2, revision: 1,
+      documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
+      rawEvidenceImmutable: true, bankSource: "read_only",
+      financialWrites: false, requiresHumanReview: true,
+      reviewedValues: {
+        type: submitted.type, documentDate: submitted.documentDate,
+        taxBaseCents: submitted.taxBaseCents, taxesCents: submitted.taxesCents,
+        totalCents: submitted.totalCents,
+      },
+    }) });
+  });
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (confirmedOnServer && route.request().method() === "GET"
+      && url.searchParams.get("id") === documentId) {
+      detailReadbacks++;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: { ...item, mimeType: "text/html" },
+        associations: [], principles,
+      }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
+  await expect(page.getByText("Revisión OCR confirmada y documento sincronizado.")).toHaveCount(0);
+  expect(confirmedOnServer).toBe(true);
+  expect(detailReadbacks).toBeGreaterThan(0);
+  expect(writes).toEqual([]);
+});
