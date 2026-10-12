@@ -3547,3 +3547,30 @@ test("REC-UI-DOC-009 · selection and keyboard focus remain accessible on both t
   }
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-134 · metadata write is not announced as synchronized when archive readback fails", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let failedReadbacks = 0;
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")
+      && writes.some(entry => entry.action === "metadata")) {
+      failedReadbacks++;
+      await route.fulfill({ status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "document_service_unavailable" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByLabel("Emisor").fill("Proveedor revisado");
+  await page.getByRole("button", { name: "Guardar metadatos" }).click();
+  await expect(page.getByTestId("documents-list-error")).toBeVisible();
+  await expect(page.getByTestId("documents-alert")).toContainText("El guardado puede haberse realizado");
+  await expect(page.getByText("Metadatos guardados.")).toHaveCount(0);
+  expect(failedReadbacks).toBeGreaterThan(0);
+  expect(writes.filter(entry => entry.action === "metadata")).toHaveLength(1);
+});

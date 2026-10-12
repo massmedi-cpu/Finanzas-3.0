@@ -1039,8 +1039,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   };
 
   const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
-    const [, verifiedDetail] = await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
-    return verifiedDetail?.document.id === id ? verifiedDetail : null;
+    const [listVerified, verifiedDetail] = await Promise.all([
+      loadList(), loadDetail(id, false, preserveEditor),
+    ]);
+    // Every metadata or association write requires TWO independent reads:
+    // a valid document detail and a valid archive/list snapshot. A confirmed
+    // detail is insufficient to claim the workspace has synchronized when
+    // the corresponding list returned 503 or an invalid 200 response.
+    return listVerified === true && verifiedDetail?.document.id === id ? verifiedDetail : null;
   }, [loadList, loadDetail]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
