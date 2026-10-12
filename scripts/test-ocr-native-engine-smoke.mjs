@@ -25,7 +25,7 @@ function embedRasterInPdf(jpeg, width, height, selectableStamp = false, selectab
   const stampCommands = selectableStamp ? "BT\n/F1 8 Tf\n" + (width - 25) + " " + (height - 20) + " Td\n(1) Tj\nET\n" : "";
   // 3 Tr stores selectable text in the PDF but paints no pixels. This models
   // real scanned invoices with a selectable metadata/footer layer over raster.
-  const footer = selectableFooter?.replace(/[\\()]/g, "\\  const commands = Buffer.from(imageCommands + stampCommands, "ascii");") ?? "";
+  const footer = selectableFooter?.replace(/[\\()]/g, (character) => "\\" + character) ?? "";
   const footerCommands = selectableFooter ? "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + footer + ") Tj\nET\n" : "";
   const commands = Buffer.from(imageCommands + stampCommands + footerCommands, "ascii");
   const objects = [
