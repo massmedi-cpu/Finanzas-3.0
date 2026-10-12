@@ -241,7 +241,7 @@ type DocumentList = {
 // Reject a fictitious provenance date before presenting or editing an item.
 function validDocumentTimestamp(value: unknown): value is string {
   if (typeof value !== "string"
-    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
   return formatDate(value.slice(0, 10)) !== "Fecha no válida"
     && Number.isFinite(Date.parse(value));
 }

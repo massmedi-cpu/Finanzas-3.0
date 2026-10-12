@@ -3281,3 +3281,35 @@ test("REC-DOC-126 · malformed temporal provenance in a document detail refuses 
   await expect(page.getByRole("button", { name: "Guardar metadatos" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-127 · valid ISO timestamps with milliseconds and timezone remain readable", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET") return route.fallback();
+    if (url.searchParams.has("id")) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 3, document: {
+          ...item, createdAt: "2026-09-06T20:00:00.123Z",
+          updatedAt: "2026-09-06T22:00:00.567+02:00",
+        }, associations: [], principles,
+      }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      contractVersion: 3,
+      items: [{ ...item, createdAt: "2026-09-06T20:00:00.123Z",
+        updatedAt: "2026-09-06T22:00:00.567+02:00" }],
+      total: 1, offset: 0, limit: 50, principles,
+    }) });
+  });
+  await page.goto("/documents");
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toBeVisible();
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  await expect(page.getByTestId("documents-list-error")).toHaveCount(0);
+  await expect(page.getByTestId("documents-detail-error")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
