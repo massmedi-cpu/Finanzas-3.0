@@ -309,3 +309,28 @@ test("REC-OCR-107 · real rotated PDF.js selectable margin does not mask the sca
   expect(result.pages[0].words.map(word => word.text)).toEqual(["TOTAL", "23,45"]);
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
 });
+
+
+test("REC-OCR-108 · real rotated native PDF.js total keeps geometry and outranks visual conflict", async () => {
+  let visualReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async () => {
+      visualReads += 1;
+      return visualResult(0.97);
+    },
+  });
+  const result = await provider.extract({
+    bytes: hybridPdf("1", null, "FACTURA TOTAL 45 EUR."),
+    mimeType: "application/pdf",
+    originalFileName: "factura-con-total-legible-vertical.pdf",
+  });
+  expect(visualReads).toBe(1);
+  expect(result.source).toBe("pdf_text");
+  const nativeTotal = result.pages[0].words.find(word => word.text.includes("FACTURA TOTAL 45 EUR."));
+  expect(nativeTotal).toBeDefined();
+  expect(nativeTotal!.box.x).toBeLessThan(0.05);
+  expect(nativeTotal!.box.width).toBeLessThan(0.04);
+  expect(nativeTotal!.box.height).toBeGreaterThan(nativeTotal!.box.width);
+  expect(result.pages[0].words.map(word => word.text).join(" ")).not.toContain("23,45");
+  expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
+});
