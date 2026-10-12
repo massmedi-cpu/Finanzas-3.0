@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { OcrWord } from "../../src/domain/document-ocr";
-import { pdfNativeTextNeedsVisualOcr } from "../../src/infrastructure/ocr/pdf-native-coverage";
+import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "../../src/infrastructure/ocr/pdf-native-coverage";
 
 // Isolated recognition-policy regressions: no documents, bank accounts,
 // credentials or remote OCR services are used.
@@ -75,4 +75,40 @@ test("REC-OCR-051 · long genuine native text avoids costly OCR retries", () => 
   const longText = (boilerplate + " ").repeat(3);
   expect([...longText].filter(char => /[\p{L}\p{N}]/u.test(char)).length).toBeGreaterThan(260);
   expect(pdfNativeTextNeedsVisualOcr(words(longText))).toBe(false);
+});
+
+
+test("REC-OCR-052 · short visual invoice total beats a longer native-only legal footer", () => {
+  const native = words(boilerplate);
+  const visual = words("FACTURA TOTAL 23,45 €");
+  expect(visual.length).toBeLessThan(native.length);
+  expect(pdfVisualOcrImprovesNative(native, visual)).toBe(true);
+});
+
+test("REC-OCR-053 · OCR never replaces usable native evidence with an unrelated tax rate", () => {
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), words("IVA 21%"))).toBe(false);
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), words("TOTAL 21%"))).toBe(false);
+});
+
+test("REC-OCR-054 · short unreliable OCR is never allowed to override native content", () => {
+  const unreliable = words("TOTAL 23,45").map((word) => ({ ...word, confidence: 0.28 }));
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), unreliable)).toBe(false);
+});
+
+test("REC-OCR-055 · authentic native invoice total has precedence over noisy scanned amount", () => {
+  const native = words("Factura registrada. TOTAL 45,30 €. " + boilerplate.slice(0, 110));
+  expect(pdfVisualOcrImprovesNative(native, words("TOTAL 23,45"))).toBe(false);
+});
+
+test("REC-OCR-056 · valid visual euro-prefixed total recovers missing raster document", () => {
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), words("TOTAL € 50"))).toBe(true);
+});
+
+test("REC-OCR-057 · no visual words means no apparent OCR improvement", () => {
+  expect(pdfVisualOcrImprovesNative(words(boilerplate), [])).toBe(false);
+  expect(pdfVisualOcrImprovesNative([], words("TOTAL 23,45"))).toBe(true);
+});
+
+test("REC-OCR-058 · an actually richer visual layer still takes priority", () => {
+  expect(pdfVisualOcrImprovesNative(words("Referencia 1"), words(boilerplate))).toBe(true);
 });
