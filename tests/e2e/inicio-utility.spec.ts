@@ -98,6 +98,21 @@ async function mockInicio(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
 
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true,
+        earliestMovementDate: "2026-01-01",
+        latestMovementDate: "2026-09-11",
+        sync: {
+          status: "success", startedAt: "2026-09-11T08:00:00Z",
+          finishedAt: "2026-09-11T08:05:00Z",
+          rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      });
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       if (request.method() === "POST") {
         postCount += 1;
@@ -114,6 +129,9 @@ async function mockInicio(page: Page) {
             rowsRevised: 0,
             rowsSkipped: 3172,
             rowsFailed: 0,
+            rowsMissing: 0,
+            duplicatesDetected: 0,
+            warningsCount: 0,
             errorCode: null,
             errorMessage: null,
           },
