@@ -505,9 +505,19 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
   if (action === "document.open") {
     const id = uuid(payload.id, "document_id");
     try {
-      const rows = await sql`select storage_provider,storage_key,source_drive_file_id from financial_app.documents where id=${id}::uuid`;
+      // Authorization must be explicit at this direct SQL read boundary,
+      // independently of any current or future RLS/database role settings.
+      const workspaceId = await currentWorkspaceId(sql);
+      const rows = await sql`
+        select storage_provider,storage_key,source_drive_file_id
+          from financial_app.documents
+         where id=${id}::uuid and workspace_id=${workspaceId}::uuid
+      `;
       const row = rows[0];
       if (!row) return json({ error: "document_not_found" }, 404);
+      if (row.storage_provider !== "google_drive" && row.storage_provider !== "supabase") {
+        return json({ error: "document_storage_provider_unavailable" }, 409);
+      }
       if (row.storage_provider === "google_drive") {
         if (!row.source_drive_file_id) return json({ error: "document_drive_file_unavailable" }, 409);
         return json({ provider: "google_drive", url: `https://drive.google.com/open?id=${encodeURIComponent(row.source_drive_file_id)}` });
