@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { matchesPrivateDocumentUploadPathContract, privateDocumentContentId } from "../../src/domain/private-document-content-address";
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 test("REC-DOC-113 · same bytes produce the same UUID across devices and reloads", () => {
   const sha = createHash("sha256").update("%PDF-1.4 Documento idéntico").digest("hex");
@@ -40,8 +42,8 @@ test("REC-DOC-118 · legacy v4 originals recover, unexpected UUID versions fail 
 });
 
 test("REC-DOC-119 · gateway checks the private path contract before reading private Storage", () => {
-  const source = require("node:fs").readFileSync(
-    require("node:path").join(process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts"),
+  const source = readFileSync(
+    join(process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts"),
     "utf8",
   );
   const finalize = source.indexOf('if (action === "document.upload_finalize")');
