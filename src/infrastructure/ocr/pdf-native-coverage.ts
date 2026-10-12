@@ -67,6 +67,10 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   // A single enormous native text item can still be hidden PDF metadata,
   // not a readable invoice. For that case require actual financial evidence.
   if (chars >= 260 && words.length >= 2) return false;
+  // One hidden PDF text span is not a full invoice merely because it
+  // includes a tax percentage or VAT amount after an empty TOTAL heading.
+  // Require the invoice total itself before bypassing raster recognition.
+  if (words.length === 1) return !hasInvoiceTotalEvidence(words);
   const normalized = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   const financialLabel = /\b(?:total|importe|subtotal|base imponible|precio|a pagar|iva|igic|cuota)\b/.test(normalized);
   return !(financialLabel && hasMoneyEvidence(normalized));

@@ -257,3 +257,14 @@ test("REC-OCR-078 · image-only PDF retains low-confidence OCR for explicit user
   const uncertainVisual = words("FACTURA TOTAL 23,45").map((word) => ({ ...word, confidence: 0.12 }));
   expect(pdfVisualOcrImprovesNative([], uncertainVisual)).toBe(true);
 });
+
+
+test("REC-OCR-084 · a single long native VAT span without an invoice total cannot bypass visual OCR", () => {
+  const text = "FACTURA ORIGINAL. TOTAL pendiente. IVA 12,50 € " + boilerplate.repeat(3);
+  const native: OcrWord = {
+    text, confidence: 1,
+    box: { x: 0.02, y: 0.90, width: 0.95, height: 0.04 },
+  };
+  expect(text.length).toBeGreaterThan(260);
+  expect(pdfNativeTextNeedsVisualOcr([native])).toBe(true);
+});
