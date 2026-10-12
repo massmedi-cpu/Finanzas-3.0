@@ -57,6 +57,10 @@ psql_db -f supabase/tests/financial_movements_ap1_ap2_clear_readback_disposable.
 # No production or service-key access: the synthetic workspace rolls back.
 psql_db -f supabase/tests/ap1_private_document_original_immutable.sql
 
+# AP1: real PostgreSQL 17 subtransaction rollback of an interrupted Drive
+# metadata batch, followed by exact two-row success and fixture cleanup.
+psql_db -f supabase/tests/ap1_drive_atomic_batch_disposable.sql
+
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
