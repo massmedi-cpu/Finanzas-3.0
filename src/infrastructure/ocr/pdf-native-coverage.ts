@@ -28,3 +28,32 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   const financialAmount = /(?:\d{1,3}(?:\.\d{3})*,\d{2}|\d+[,.]\d{2}|\d+\s*€|€\s*\d+|\b(?:eur|euros?)\s+\d+)/i.test(normalized);
   return !(financialLabel && financialAmount);
 }
+
+/**
+ * OCR on a scanned invoice may be shorter than an unrelated selectable
+ * footer. Prefer a confidently recognized invoice TOTAL over the footer,
+ * instead of comparing character counts alone. Native text still wins when
+ * it already carries an identifiable total or visual evidence is weak.
+ */
+export function pdfVisualOcrImprovesNative(nativeWords: OcrWord[], visualWords: OcrWord[]) {
+  if (!visualWords.length) return false;
+  if (!nativeWords.length) return true;
+  const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+  const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+  if ((visualWords.length > nativeWords.length && visualChars >= nativeChars)
+    || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5)) return true;
+
+  const invoiceTotal = (words: OcrWord[]) => {
+    const text = words.map((word) => word.text).join(" ")
+      .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    // Require a recognised amount rather than a rate (IVA 21%) or reference.
+    return /\b(?:total|importe total|a pagar)\b.{0,55}?(?:\b\d{1,3}(?:\.\d{3})*,\d{2}(?![\d%])|\b\d+\.\d{2}(?![\d%])|€\s*\d+|\b\d+\s*€|\beur\s+\d+)/.test(text);
+  };
+  if (!invoiceTotal(visualWords) || invoiceTotal(nativeWords)) return false;
+  const confidences = visualWords
+    .map((word) => word.confidence)
+    .filter((value) => Number.isFinite(value) && value >= 0 && value <= 1);
+  const meanConfidence = confidences.length
+    ? confidences.reduce((sum, value) => sum + value, 0) / confidences.length : 0;
+  return meanConfidence >= 0.55;
+}
