@@ -204,15 +204,15 @@ export default function RecurrencesClient({
       });
       const payload: unknown = await parseResponse(response);
       if (!isRecurrenceSnapshot(payload)) throw new Error("recurrence_contract_invalid");
-      if (sequence !== readSequence.current || controller.signal.aborted) return false;
+      if (sequence !== readSequence.current || controller.signal.aborted) return null;
       setSnapshot(payload);
       if (announce) setMessage("Patrones recalculados con los movimientos actuales.");
-      return true;
+      return payload;
     } catch {
-      if (sequence !== readSequence.current) return false;
+      if (sequence !== readSequence.current) return null;
       // Failed or malformed reads cannot be displayed as a genuine 0.
       setError("No se ha podido verificar el listado de patrones. Recalcula antes de tomar una decisión.");
-      return false;
+      return null;
     } finally {
       clearTimeout(timeout);
       if (activeRead.current === controller) activeRead.current = null;
@@ -258,7 +258,12 @@ export default function RecurrencesClient({
       if (!recurrenceId) throw new Error("recurrence_write_contract_invalid");
       // Never announce persistence or offer a forecast impact based only on
       // POST 200. Re-read the latest bank-derived snapshot first.
-      if (!(await load(false))) throw new Error("recurrence_readback_unverified");
+      const confirmed = await load(false);
+      const updatedCandidate = confirmed?.candidates.find((item) => item.candidateKey === candidate.candidateKey);
+      if (!updatedCandidate || updatedCandidate.existingRecurrenceId !== recurrenceId
+        || updatedCandidate.existingStatus !== status) {
+        throw new Error("recurrence_readback_mismatch");
+      }
       setMessage(
         status === "active"
           ? candidate.existingStatus === "active"
@@ -298,7 +303,12 @@ export default function RecurrencesClient({
       await sendDecision("PATCH", { id: candidate.existingRecurrenceId, status });
       // A successful HTTP write cannot prove the displayed recurring state
       // is fresh; keep the outcome unverified if GET fails or is malformed.
-      if (!(await load(false))) throw new Error("recurrence_readback_unverified");
+      const confirmed = await load(false);
+      const updatedCandidate = confirmed?.candidates.find((item) =>
+        item.existingRecurrenceId === candidate.existingRecurrenceId);
+      if (!updatedCandidate || updatedCandidate.existingStatus !== status) {
+        throw new Error("recurrence_readback_mismatch");
+      }
       setMessage(
         status === "ignored"
           ? "Recurrencia ignorada."
