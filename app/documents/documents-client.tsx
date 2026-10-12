@@ -1487,16 +1487,26 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       if (saved.contractVersion !== 3 || saved.document?.id !== id || saved.document.isTest !== isTest) {
         throw new Error("document_test_designation_incomplete");
       }
-      setDetail(saved);
+      // A PATCH acknowledgement does not prove the next GET reflects the
+      // designation or that the chosen archive scope is readable. Re-read
+      // the authoritative detail AND the target list before claiming success.
+      // Keep the owner's review intact if either reader fails; do not cause
+      // another write automatically or silently change the scope.
+      const verifiedDetail = await loadDetail(id, true, true);
+      if (verifiedDetail?.document.isTest !== isTest) {
+        throw new Error("document_revalidation_incomplete");
+      }
+      const next = new URL(listUrl, window.location.origin);
+      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
+      next.searchParams.set("offset", "0");
+      if (await loadList(next.toString(), true) !== true) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setScope(isTest ? "tests" : "ordinary");
       setOffset(0);
       setDesignationOpen(false);
       setDesignationReason("");
       setDesignationReviewed(false);
-      const next = new URL(listUrl, window.location.origin);
-      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
-      next.searchParams.set("offset", "0");
-      await loadList(next.toString(), true);
       setNotice(isTest ? "Documento designado como Prueba. Puedes encontrarlo en Pruebas y revertir el cambio." : "Documento devuelto a la vista ordinaria y a sus avisos correspondientes.");
     } catch (caught) {
       setAuthRecovery(authRecoveryFromError(caught));
