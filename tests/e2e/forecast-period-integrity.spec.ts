@@ -166,6 +166,7 @@ for (const failure of ["http_503", "stale_200"] as const) {
     await expect(page.getByRole("heading", { name: "Seguro de octubre verificado" })).toBeVisible();
     await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toBeVisible();
     expect(idempotencyKeys).toHaveLength(2);
+    expect(idempotencyKeys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     expect(idempotencyKeys[0]).toBe(idempotencyKeys[1]);
     await expect(concept).toHaveValue("");
     await expect(amount).toHaveValue("");
@@ -173,10 +174,12 @@ for (const failure of ["http_503", "stale_200"] as const) {
 }
 
 
-for (const invalidResponse of ["other_period", "invalid_amount"] as const) {
+for (const invalidResponse of ["other_period", "invalid_amount", "other_account"] as const) {
   test(invalidResponse === "other_period"
     ? "REC-FCAST-035 · HTTP 200 with a different forecast period never displays another month's money"
-    : "REC-FCAST-036 · HTTP 200 with unsafe forecast totals is not financial evidence", async ({ page }) => {
+    : invalidResponse === "invalid_amount"
+      ? "REC-FCAST-036 · HTTP 200 with unsafe forecast totals is not financial evidence"
+      : "REC-FCAST-037 · HTTP 200 with a different banking account must not become verified money", async ({ page }) => {
     let reads = 0;
     await page.route("**/api/forecast*", async (route) => {
       reads += 1;
@@ -188,7 +191,9 @@ for (const invalidResponse of ["other_period", "invalid_amount"] as const) {
       });
       const payload = invalidResponse === "other_period"
         ? { ...valid, period: { ...valid.period, dateFrom: "2026-09-01" } }
-        : { ...valid, summary: { ...valid.summary, projectedClosingBalanceCents: Number.MAX_SAFE_INTEGER + 10 } };
+        : invalidResponse === "other_account"
+          ? { ...valid, period: { ...valid.period, accountId: "10000000-0000-4000-8000-000000000073" } }
+          : { ...valid, summary: { ...valid.summary, projectedClosingBalanceCents: Number.MAX_SAFE_INTEGER + 10 } };
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
     });
     await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
