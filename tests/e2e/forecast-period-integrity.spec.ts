@@ -116,3 +116,58 @@ test("la selección avisa de un horizonte de más de 730 días sin consultar el 
   await expect(page.locator("main").getByRole("alert")).toContainText("730 días");
   expect(requestedPeriods).not.toContain("2024-01-01:2026-10-31");
 });
+
+
+for (const failure of ["http_503", "stale_200"] as const) {
+  test(failure === "http_503"
+    ? "REC-FCAST-031 · uncertain manual POST retains form and original idempotency key after GET failure"
+    : "REC-FCAST-032 · 200 with stale forecast cannot confirm a successful manual POST", async ({ page }) => {
+    let manual: { date: string; concept: string; amountCents: number } | null = null;
+    let posted = false;
+    let verifyAttempt = 0;
+    const idempotencyKeys: string[] = [];
+    await page.route("**/api/forecast*", async (route) => {
+      const req = route.request();
+      if (req.method() === "POST") {
+        const body = req.postDataJSON();
+        idempotencyKeys.push(req.headers()["idempotency-key"]);
+        posted = true;
+        manual = { date: body.date, concept: body.concept, amountCents: body.amountCents };
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: ITEM_ID, origin: "manual" }) });
+        return;
+      }
+      const url = new URL(req.url());
+      const from = url.searchParams.get("dateFrom") ?? "2026-10-01";
+      const to = url.searchParams.get("dateTo") ?? "2026-10-31";
+      if (posted && ++verifyAttempt === 1) {
+        if (failure === "http_503") {
+          await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporarily_unavailable"}' });
+        } else {
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forecastSnapshot(from, to, null)) });
+        }
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forecastSnapshot(from, to, manual)) });
+    });
+
+    await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+    const concept = page.getByLabel("Concepto");
+    const amount = page.getByLabel("Importe");
+    await concept.fill("Seguro de octubre verificado");
+    await amount.fill("18,90");
+    await page.getByRole("button", { name: "Añadir al calendario" }).click();
+    await expect.poll(() => idempotencyKeys.length).toBe(1);
+    await expect(page.locator("main").getByRole("alert")).toContainText("puede haberse");
+    await expect(concept).toHaveValue("Seguro de octubre verificado");
+    await expect(amount).toHaveValue("18,90");
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Añadir al calendario" }).click();
+    await expect(page.getByRole("heading", { name: "Seguro de octubre verificado" })).toBeVisible();
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toBeVisible();
+    expect(idempotencyKeys).toHaveLength(2);
+    expect(idempotencyKeys[0]).toBe(idempotencyKeys[1]);
+    await expect(concept).toHaveValue("");
+    await expect(amount).toHaveValue("");
+  });
+}
