@@ -886,7 +886,11 @@ export function ForecastClient({
                                 <strong>Candidatos reales ±7 días</strong>
                                 <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
                               </div>
-                              {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
+                              {busy === `candidates:${item.id}` ? (
+                                <p className={styles.candidateEmpty} role="status" aria-live="polite">
+                                  Buscando coincidencias bancarias verificables…
+                                </p>
+                              ) : candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
                                 <div key={candidate.transactionId} className={styles.candidateRow}>
                                   <div>
                                     <strong>{candidate.concept || "Movimiento bancario"}</strong>
@@ -897,8 +901,10 @@ export function ForecastClient({
                                     Conciliar
                                   </button>
                                 </div>
-                              )) : (
+                              )) : candidateData ? (
                                 <p className={styles.candidateEmpty}>No hay movimientos elegibles cercanos con el mismo signo.</p>
+                              ) : (
+                                <p className={styles.candidateEmpty} role="status">Todavía no se ha verificado la búsqueda de movimientos reales.</p>
                               )}
                             </div>
                           ) : null}
