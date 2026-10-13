@@ -691,7 +691,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
   const metadataDirty = useMemo(
     () => Boolean((detail && !editorMatchesDocument(editor, detail.document))
-      || (draftPendingVerification && selectedId && !detail)),
+      || (draftPendingVerification && selectedId)),
     [detail, editor, draftPendingVerification, selectedId],
   );
 
@@ -934,10 +934,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setDesignationReviewed(false);
         setEditor(editorFromDocument(data.document));
       }
-      if (recoveringDraft) {
-        draftPendingVerificationRef.current = false;
-        setDraftPendingVerification(false);
-      }
+      // One valid detail GET cannot certify a previously uncertain PATCH
+      // while the archive list may still be stale or unavailable.
       return data;
     } catch (caught) {
       if (sequence === detailSequence.current && selectedIdRef.current === id) {
@@ -1419,7 +1417,30 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // while the unconfirmed editor is preserved separately.
     const currentDetail = verifiedDetail ?? detail;
     if (!currentDetail || busy) return false;
-    if (editorMatchesDocument(editor, currentDetail.document)) return true;
+    if (editorMatchesDocument(editor, currentDetail.document)) {
+      if (!draftPendingVerificationRef.current) return true;
+      // The prior PATCH might have succeeded while the archive/list failed.
+      // Recheck BOTH independent sources; do not issue a duplicate write.
+      setBusy("metadata");
+      setError(null);
+      try {
+        const confirmed = await refreshAfterMutation(currentDetail.document.id, true);
+        if (!confirmed || !editorMatchesDocument(editor, confirmed.document)) {
+          setError("El guardado puede haberse realizado, pero falta verificar el documento y el listado. Conservamos el borrador para reintentarlo.");
+          return false;
+        }
+        draftPendingVerificationRef.current = false;
+        setDraftPendingVerification(false);
+        setNotice("Metadatos verificados sin repetir el guardado.");
+        return true;
+      } catch (caught) {
+        setAuthRecovery(authRecoveryFromError(caught));
+        setError(friendlyError(caught));
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    }
     const cents = parseEuroToCents(editor.total);
     if (cents === undefined) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
@@ -1449,11 +1470,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         && persisted.totalCents === cents
         && (persisted.notes ?? "") === editor.notes.trim();
       if (!matchesSave) {
-        // El PATCH pudo haberse aplicado, pero no se debe navegar ni afirmar éxito
-        // hasta que el backend permita releer el documento correcto.
+        // El PATCH pudo haberse aplicado: bloquea salir incluso si un GET
+        // de detalle aislado coincide, hasta validar también el listado.
+        draftPendingVerificationRef.current = true;
+        setDraftPendingVerification(true);
         setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
         return false;
       }
+      draftPendingVerificationRef.current = false;
+      setDraftPendingVerification(false);
       setEditor(editorFromDocument(confirmed!.document));
       setDesignationOpen(false);
       setDesignationReason("");
