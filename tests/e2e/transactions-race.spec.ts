@@ -319,3 +319,88 @@ test("REC-TXN-009 · un filtro inválido no convierte un extracto vacío bien le
   await expect(page.getByText("Histórico sin verificar", { exact: true })).toHaveCount(0);
   await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toBeVisible();
 });
+
+
+test("REC-TXN-021 · duplicate IDs inside HTTP 200 are not silently removed from the bank extract", async ({ page }) => {
+  let fixed = false;
+  const writes: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, body: "{}" });
+      return;
+    }
+    if (new URL(route.request().url()).searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(fixed
+        ? { rows: [baseRow], totalCount: 1, hasMore: false, nextCursor: null }
+        : { rows: [baseRow, baseRow], totalCount: 2, hasMore: false, nextCursor: null }),
+    });
+  });
+
+  await page.goto("/transactions");
+  await expect(page.locator("main").getByRole("alert")).toContainText("movimientos repetidos");
+  await expect(page.getByText("Histórico sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toHaveCount(0);
+
+  fixed = true;
+  await page.getByRole("button", { name: "Reintentar listado" }).click();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 movimiento", { exact: true }).first()).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("REC-TXN-022 · an overlapping cursor page keeps verified rows and can be safely retried", async ({ page }) => {
+  let cursorReads = 0;
+  const writes: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, body: "{}" });
+      return;
+    }
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    if (url.searchParams.has("cursorId")) {
+      cursorReads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          rows: [cursorReads === 1 ? baseRow : stalePageRow],
+          totalCount: 2, hasMore: false, nextCursor: null,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        rows: [baseRow], totalCount: 2, hasMore: true,
+        nextCursor: { bankDate: baseRow.bankDate, id: baseRow.id },
+      }),
+    });
+  });
+
+  await page.goto("/transactions");
+  await expect(page.getByText("1 de 2", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("movimientos repetidos");
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 de 2", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("PÁGINA ANTIGUA", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await expect(page.getByText("PÁGINA ANTIGUA", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("2 de 2", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  expect(cursorReads).toBe(2);
+  expect(writes).toEqual([]);
+});
