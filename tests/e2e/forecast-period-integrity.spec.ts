@@ -130,7 +130,7 @@ for (const failure of ["http_503", "stale_200"] as const) {
       const req = route.request();
       if (req.method() === "POST") {
         const body = req.postDataJSON();
-        idempotencyKeys.push(req.headers()["idempotency-key"]);
+        idempotencyKeys.push(req.headers()["idempotency-key"] ?? "");
         posted = true;
         manual = { date: body.date, concept: body.concept, amountCents: body.amountCents };
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: ITEM_ID, origin: "manual" }) });
