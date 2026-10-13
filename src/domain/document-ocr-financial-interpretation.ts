@@ -626,6 +626,14 @@ function extractIssuer(lines: LocatedLine[]) {
       }
       continue;
     }
+    // Headings with no following value are not evidence of the business
+    // name, even when OCR confidence is very high. Continue looking for a
+    // real name under the heading instead of displaying "DATOS DEL EMISOR"
+    // as if it were a merchant.
+    if (/^(?:datos?|informacion)\s+(?:(?:fiscales?|generales?)|(?:(?:del?|de\s+la)\s+)?(?:emisor|proveedor|vendedor|comercio))\s*[:\-]?$/.test(normalized)
+      || /^(?:emisor|proveedor|vendedor|comercio|establecimiento)\s*[:\-]?$/.test(normalized)) {
+      continue;
+    }
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
