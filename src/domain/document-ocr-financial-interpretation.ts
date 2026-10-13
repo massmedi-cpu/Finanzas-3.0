@@ -413,6 +413,8 @@ function extractDate(lines: LocatedLine[]) {
   const explicitWritten = /\b(?:emitid[oa]\s+el|fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?\s*[:\-]?)\s*\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b/;
   const embeddedNumericIssueDate = /\bemitid[oa]\s+el\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
   let unlabelled: OcrInterpretedField<string> | null = null;
+  let issueDate: OcrInterpretedField<string> | null = null;
+  let contradictoryIssueDates = false;
 
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
@@ -440,12 +442,22 @@ function extractDate(lines: LocatedLine[]) {
       // Two competing labelled dates on one OCR row cannot both be trusted.
       // Dates on continuation pages may be annex/legal dates. A perfect OCR
       // score alone does not prove that a page-two label is the issue date.
-      return item.pageNumber > 1 || (labelledNumeric && labelledWritten)
+      const attributed = item.pageNumber > 1 || (labelledNumeric && labelledWritten)
         ? fieldRequiringReview(field) : field;
+      if (issueDate && issueDate.value !== attributed.value) {
+        contradictoryIssueDates = true;
+        if (issueDate.trust !== "reliable" && attributed.trust === "reliable") {
+          issueDate = attributed;
+        }
+      } else {
+        issueDate ??= attributed;
+      }
+      continue;
     }
     // Unlabelled date text may be correct, but we cannot prove its document role.
     unlabelled ??= fieldRequiringReview(field);
   }
+  if (issueDate) return contradictoryIssueDates ? fieldRequiringReview(issueDate) : issueDate;
   return unlabelled ?? emptyField<string>();
 }
 
