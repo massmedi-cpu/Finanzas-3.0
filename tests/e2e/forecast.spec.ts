@@ -644,3 +644,21 @@ test("REC-FCAST-046 · no confunde una búsqueda en curso con ausencia de movimi
   await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toBeVisible();
   await expect(page.getByText("Buscando coincidencias bancarias verificables")).toHaveCount(0);
 });
+
+
+test("REC-FCAST-047 · candidatos HTTP 502 nunca muestran errores técnicos ni habilitan conciliar", async ({ page }) => {
+  await mockForecastApi(page, []);
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    await route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "invalid_forecast_candidates", code: "invalid_forecast_candidates_contract" }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  const alert = page.locator("main").getByRole("alert").filter({ hasText: "movimientos no verificados" });
+  await expect(alert).toBeVisible();
+  await expect(alert).not.toContainText("invalid_forecast_candidates_contract");
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+});

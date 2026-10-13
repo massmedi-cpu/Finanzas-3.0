@@ -94,7 +94,6 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
-  if (code === "invalid_forecast_candidates_contract") return "La búsqueda de movimientos reales no está verificada para esta previsión. Reintenta la lectura.";
   if (code === "forecast_snapshot_invalid_contract" || code === "invalid_forecast_snapshot_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
   if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
@@ -533,7 +532,12 @@ export function ForecastClient({
       setCandidateData(data);
       window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");
+      const code = err instanceof Error ? err.message : "";
+      setError(code === "invalid_forecast_candidates_contract"
+        ? "La búsqueda devolvió movimientos no verificados para esta previsión. No se permite conciliar hasta comprobarlos."
+        : code === "authentication_required" || code === "authentication_unavailable"
+          ? "No se pueden consultar movimientos reales sin una sesión válida. Vuelve a iniciar sesión."
+          : "No se pudieron verificar los movimientos reales. Reintenta la búsqueda.");
       setCandidateFor(null);
       window.requestAnimationFrame(() => candidateTriggerRefs.current[item.id]?.focus());
     } finally {
