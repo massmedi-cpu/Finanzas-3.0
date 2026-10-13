@@ -203,6 +203,10 @@ export default function HomeEvolution({
   const [balanceRetry, setBalanceRetry] = useState(0);
   const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
+  // The initial frame of a newly selected or refreshed Balance tab is
+  // pending, not a verified empty account history. The fetch starts in an
+  // effect after paint; do not flash a false "no balances" verdict.
+  const balanceAwaitingFirstRead = mode === "balance" && balances === null && balanceError === null;
 
   useEffect(() => {
     if (mode !== "balance" || balanceCache?.key === balanceKey) return;
@@ -332,7 +336,7 @@ export default function HomeEvolution({
         </>
       ) : null}
 
-      {mode === "balance" && balanceLoading ? (
+      {mode === "balance" && (balanceLoading || balanceAwaitingFirstRead) ? (
         <>
           <div className={styles.skeleton} role="status" aria-label="Cargando evolución del saldo" />
           {balanceSlowLoading ? <p className={styles.helper} role="status">La lectura del saldo está tardando más de lo habitual. Las otras vistas siguen disponibles.</p> : null}
@@ -350,7 +354,7 @@ export default function HomeEvolution({
           </button>
         </div>
       ) : null}
-      {mode === "balance" && !balanceLoading && !balanceError && !balanceHasAccounts ? (
+      {mode === "balance" && balances !== null && !balanceLoading && !balanceError && !balanceHasAccounts ? (
         <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
       ) : null}
       {mode === "balance" && !balanceLoading && !balanceError && balanceHasAccounts ? (
