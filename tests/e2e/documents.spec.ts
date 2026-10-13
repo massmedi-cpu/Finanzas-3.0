@@ -624,13 +624,7 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
         ocrRunId: request.ocrRunId,
         rawEvidenceImmutable: true, bankSource: "read_only",
         financialWrites: false, requiresHumanReview: true,
-        reviewedValues: {
-          type: request.type,
-          documentDate: request.documentDate,
-          taxBaseCents: request.taxBaseCents,
-          taxesCents: request.taxesCents,
-          totalCents: request.totalCents,
-        },
+        reviewedValues: { ...request },
       }),
     });
   });
@@ -669,11 +663,7 @@ test("REC-OCR-053 · guardar revisión no anuncia lista sincronizada cuando la r
         documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
         rawEvidenceImmutable: true, bankSource: "read_only",
         financialWrites: false, requiresHumanReview: true,
-        reviewedValues: {
-          type: submitted.type, documentDate: submitted.documentDate,
-          taxBaseCents: submitted.taxBaseCents, taxesCents: submitted.taxesCents,
-          totalCents: submitted.totalCents,
-        },
+        reviewedValues: { ...submitted },
       }),
     });
   });
@@ -724,11 +714,7 @@ test("REC-OCR-039 · revisión con identificador o importes cambiados no se cons
         bankSource: "read_only",
         financialWrites: corruption === "source-write",
         rawEvidenceImmutable: true, requiresHumanReview: true,
-        reviewedValues: {
-          type: requested.type, documentDate: requested.documentDate,
-          taxBaseCents: requested.taxBaseCents, taxesCents: requested.taxesCents,
-          totalCents: corruption === "wrong-total" ? 0 : requested.totalCents,
-        },
+        reviewedValues: { ...requested, totalCents: corruption === "wrong-total" ? 0 : requested.totalCents },
       };
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(response) });
     });
@@ -786,13 +772,7 @@ test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisi
         runs: [{ id: runId, extractor: "pdfjs-6.2.108-native-text", extractedAt: "2026-09-07T07:00:00.000Z" }],
         reviews: recovered && lastSubmission ? [{
           revision: 1, ocrRunId: runId,
-          reviewedValues: {
-            type: lastSubmission.type,
-            documentDate: lastSubmission.documentDate,
-            taxBaseCents: lastSubmission.taxBaseCents,
-            taxesCents: lastSubmission.taxesCents,
-            totalCents: lastSubmission.totalCents,
-          },
+          reviewedValues: { ...lastSubmission },
         }] : [],
       }),
     });
@@ -3345,11 +3325,7 @@ test("REC-DOC-128 · silent OCR confirmation readback failure hides stale docume
       documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
       rawEvidenceImmutable: true, bankSource: "read_only",
       financialWrites: false, requiresHumanReview: true,
-      reviewedValues: {
-        type: submitted.type, documentDate: submitted.documentDate,
-        taxBaseCents: submitted.taxBaseCents, taxesCents: submitted.taxesCents,
-        totalCents: submitted.totalCents,
-      },
+      reviewedValues: { ...submitted },
     }) });
   });
   await page.route("**/api/documents?*", async route => {
