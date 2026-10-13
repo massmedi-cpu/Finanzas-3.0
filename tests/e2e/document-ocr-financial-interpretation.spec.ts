@@ -647,3 +647,37 @@ test("REC-OCR-120 · a blank legal-name heading never becomes a merchant", () =>
   expect(labelled.issuer.value).toBe("EMPRESA LOCAL SL");
   expect(labelled.issuer.trust).toBe("doubtful");
 });
+
+
+test("REC-OCR-121 · a shared customer/issuer row must choose the supplier's own fiscal ID", () => {
+  const raw = result([
+    line("both", "Cliente CIF B87654321 · Emisor CIF B12345674", 0.99),
+  ]);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.taxId.value).toBe("B12345674");
+  expect(parsed.taxId.trust).toBe("reliable");
+  expect(parsed.taxId.evidence[0]?.lineId).toBe("both");
+  expect(raw.plainText).toContain("Cliente CIF B87654321");
+
+  const reversed = interpretDocumentOcrFinancially(result([
+    line("both-reversed", "Emisor CIF B12345674 / Cliente CIF B87654321", 0.97),
+  ]));
+  expect(reversed.taxId.value).toBe("B12345674");
+  expect(reversed.taxId.trust).toBe("reliable");
+});
+
+test("REC-OCR-122 · standalone customer-owned tax ID cannot be inferred as an issuer even with 99% OCR", () => {
+  const raw = result([
+    line("owner", "RAZÓN SOCIAL DEL CLIENTE", 0.99, 0.05),
+    line("tax", "CIF B12345674", 0.99, 0.10),
+  ]);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.taxId.value).toBeNull();
+  expect(parsed.taxId.trust).toBe("not_detected");
+
+  const attributed = interpretDocumentOcrFinancially(result([
+    line("tax", "CIF del destinatario B12345674", 0.99),
+  ]));
+  expect(attributed.taxId.value).toBeNull();
+  expect(attributed.taxId.trust).toBe("not_detected");
+});
