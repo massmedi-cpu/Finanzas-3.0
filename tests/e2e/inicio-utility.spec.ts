@@ -265,3 +265,40 @@ test("el cash flow de Inicio usa 12 meses y no necesita scroll horizontal", asyn
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
+
+
+test("Saldo de Inicio no presenta datos vacíos antes de consultar una serie bancaria", async ({ page }) => {
+  await mockInicio(page);
+  let releaseRead: (() => void) | null = null;
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  let reads = 0;
+  await page.route(/\/api\/financial(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") !== "balance_series") return route.fallback();
+    reads += 1;
+    await readGate;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        dateFrom: url.searchParams.get("dateFrom"),
+        dateTo: url.searchParams.get("dateTo"),
+        accountId: null,
+        rows: [],
+        principles: {
+          bankSource: "read_only",
+          balanceSource: "financial_account_balances",
+          cashFlowReconstruction: false,
+          getHasSideEffects: false,
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  const modes = page.getByRole("group", { name: "Vista de evolución financiera" });
+  await modes.getByRole("button", { name: "Saldo", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Cargando evolución del saldo" })).toBeVisible();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toHaveCount(0);
+  releaseRead?.();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
+  expect(reads).toBe(1);
+});
