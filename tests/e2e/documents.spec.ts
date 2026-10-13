@@ -390,6 +390,22 @@ test("QA Work · Documentos confirma antes de cambiar de documento con metadatos
     issuerName: "Segundo proveedor",
     totalCents: 3210,
   };
+  // This override serves the archive list, while the shared API mock handles
+  // PATCH and detail reads. Read its committed writes to keep both independent
+  // GETs on the same persisted snapshot: a stale list must fail verification.
+  const firstDocumentInArchive = () => {
+    const saved = [...writes].reverse().find((write) =>
+      write.method === "PATCH" && write.action === "metadata" && write.id === documentId);
+    return {
+      ...item,
+      associationCount: 0,
+      ...(saved ? {
+        type: saved.type, documentDate: saved.documentDate,
+        issuerName: saved.issuerName, totalCents: saved.totalCents,
+        notes: saved.notes,
+      } : {}),
+    };
+  };
 
   await page.route("**/api/documents*", async (route) => {
     const request = route.request();
@@ -422,7 +438,7 @@ test("QA Work · Documentos confirma antes de cambiar de documento con metadatos
         body: JSON.stringify({
           contractVersion: 1,
           items: [
-            { ...item, associationCount: 0 },
+            firstDocumentInArchive(),
             { ...secondItem, associationCount: 0 },
           ],
           total: 2,
