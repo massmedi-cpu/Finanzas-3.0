@@ -757,3 +757,24 @@ test("REC-OCR-127 · contradictory explicit payment times require human verifica
   expect(consistent.time.value).toBe("10:15");
   expect(consistent.time.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-128 · empty seller headers never masquerade as business names", () => {
+  for (const header of ["DATOS DEL EMISOR", "Datos del proveedor", "Información del vendedor", "Emisor:", "Datos fiscales"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("heading", header, 0.99),
+      line("number", "CIF B12345674", 0.99, 0.18),
+    ]));
+    expect(parsed.issuer.value, header).toBeNull();
+    expect(parsed.issuer.trust, header).toBe("not_detected");
+    expect(parsed.taxId.value, header).toBe("B12345674");
+  }
+
+  const hasName = interpretDocumentOcrFinancially(result([
+    line("heading", "DATOS DEL EMISOR", 0.99, 0.05),
+    line("seller", "TIENDA DEL SUR SL", 0.96, 0.10),
+  ]));
+  expect(hasName.issuer.value).toBe("TIENDA DEL SUR SL");
+  expect(hasName.issuer.trust).toBe("doubtful");
+  expect(hasName.issuer.evidence[0]?.lineId).toBe("seller");
+});
