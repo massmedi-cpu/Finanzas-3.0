@@ -322,6 +322,8 @@ function extractTaxId(lines: LocatedLine[]) {
   const issuerOwners = new Set(["emisor", "proveedor", "comercio", "vendedor"]);
   const recipientOwners = new Set(["cliente", "destinatario", "receptor", "comprador"]);
   let unassigned: OcrInterpretedField<string> | null = null;
+  let issuerId: OcrInterpretedField<string> | null = null;
+  let conflictingIssuerIds = false;
   let recipientSection = false;
   let issuerSection = false;
   let currentPage = -1;
@@ -374,15 +376,25 @@ function extractTaxId(lines: LocatedLine[]) {
         continue;
       }
       if (explicitlyIssuerOwned || issuerSection) {
-        // Checksum + issuer ownership are both mandatory for a "reliable"
-        // tax ID. The OCR confidence alone is not fiscal verification.
-        return spanishTaxIdChecksumValid(candidate.value ?? "")
+        // Even two fully readable, checksum-valid seller IDs are not a
+        // trustworthy automatic answer if they disagree across OCR lines.
+        const attributed = spanishTaxIdChecksumValid(candidate.value ?? "")
           ? candidate : fieldRequiringReview(candidate);
+        if (issuerId && issuerId.value !== attributed.value) {
+          conflictingIssuerIds = true;
+          if (issuerId.trust !== "reliable" && attributed.trust === "reliable") {
+            issuerId = attributed;
+          }
+        } else {
+          issuerId ??= attributed;
+        }
+        continue;
       }
       // An ownerless tax ID remains visible for review, not auto-confirmed.
       unassigned ??= fieldRequiringReview(candidate);
     }
   }
+  if (issuerId) return conflictingIssuerIds ? fieldRequiringReview(issuerId) : issuerId;
   return unassigned ?? emptyField<string>();
 }
 
