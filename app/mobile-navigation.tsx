@@ -106,7 +106,30 @@ export default function MobileNavigation() {
 
   return (
     <div className={styles.mobileNavigation}>
-      <div ref={panelRef} className={styles.mobileMorePanel} id="mobile-more-navigation" hidden={!moreOpen}>
+      <div
+        ref={panelRef}
+        className={styles.mobileMorePanel}
+        id="mobile-more-navigation"
+        hidden={!moreOpen}
+        onKeyDown={(event) => {
+          // The expanded menu is an overlay. Keep keyboard focus inside it
+          // until Escape, its close control or an actual navigation.
+          if (!moreOpen || event.key !== "Tab") return;
+          const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          )).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (!first || !last) return;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
+      >
         {moreOpen && <>
           <div className={styles.mobileMoreHeader}>
             <strong>Más secciones</strong>
