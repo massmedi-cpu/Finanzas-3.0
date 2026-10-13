@@ -112,7 +112,10 @@ async function mockRecurrenceApi(
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ id: confirmedRecurrenceId, status: body.status }),
+        body: JSON.stringify({
+          id: current.candidates.find((candidate) => candidate.candidateKey === body.candidateKey)?.existingRecurrenceId,
+          status: body.status,
+        }),
       });
       return;
     }
