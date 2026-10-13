@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { interpretDocumentOcrFinancially, OCR_FIELD_TRUST_LABELS } from "../../src/domain/document-ocr-financial-interpretation";
+import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 import type { DocumentOcrResult, OcrLine } from "../../src/domain/document-ocr";
 
 function line(id: string, text: string, confidence = 0.95, y = 0.1): OcrLine {
@@ -805,4 +806,16 @@ test("REC-OCR-130 · cuota correcta y redondeo máximo de un céntimo no provoca
     expect(parsed.taxLines[0]?.trust).toBe("reliable");
     expect(parsed.warnings).not.toContain("tax_rate_arithmetic_mismatch");
   }
+});
+
+test("REC-OCR-131 · la revisión visible nunca recomienda confirmar cuota contradictoria", () => {
+  const raw = result([
+    line("tax", "Base imponible 100,00 IVA 21 % 19,00", 0.99, 0.50),
+  ]);
+  const review = summarizeDocumentOcrReview(raw);
+  expect(review.financialWarnings).toContain("tax_rate_arithmetic_mismatch");
+  expect(review.nextAction).toBe("review");
+  expect(review.nextActionLabel).toContain("Compara");
+  expect(review.financialFields.find((field) => field.key === "taxBaseCents")?.trust).toBe("doubtful");
+  expect(review.financialFields.find((field) => field.key === "taxesCents")?.trust).toBe("doubtful");
 });
