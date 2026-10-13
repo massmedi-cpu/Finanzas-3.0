@@ -448,3 +448,28 @@ test("REC-OCR-111 · page-two labelled dates require review, first-page issue da
   expect(clear.date.value).toBe("2026-09-23");
   expect(clear.date.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-112 · customer CIF on a continuation line is not assigned to issuer", () => {
+  const raw = result([
+    line("head", "DATOS DEL CLIENTE", 0.99, 0.05),
+    line("customer-name", "CLIENTE COMERCIAL SA", 0.99, 0.10),
+    line("customer-tax-id", "CIF B12345674", 0.99, 0.15),
+    line("total", "TOTAL 40,00 €", 0.99, 0.85),
+  ]);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.taxId.value).toBeNull();
+  expect(parsed.taxId.trust).toBe("not_detected");
+  expect(parsed.issuer.value).toBeNull();
+  expect(raw.plainText).toContain("B12345674");
+
+  // An explicit invoice issuer supersedes the recipient block.
+  const both = result([
+    line("head", "DATOS DEL CLIENTE", 0.99, 0.05),
+    line("customer-tax-id", "CIF B12345674", 0.99, 0.10),
+    line("seller-tax-id", "Emisor CIF B12345678", 0.97, 0.20),
+  ]);
+  const owned = interpretDocumentOcrFinancially(both);
+  expect(owned.taxId.value).toBe("B12345678");
+  expect(owned.taxId.evidence[0]?.lineId).toBe("seller-tax-id");
+});
