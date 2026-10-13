@@ -565,3 +565,46 @@ test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero
   await expect(chart.getByRole("combobox", { name: "Consultar un hito de la curva" })).toBeVisible();
 });
 
+
+for (const staleAfterPatch of [true, false] as const) {
+  test(staleAfterPatch
+    ? "REC-FCAST-033 · a stale HTTP 200 cannot mark forecast exclusion as verified"
+    : "REC-FCAST-034 · independently verified forecast exclusion may display success", async ({ page }) => {
+    let patchCount = 0;
+    await page.route("**/api/forecast*", async (route) => {
+      const req = route.request();
+      if (req.method() === "PATCH") {
+        const body = req.postDataJSON();
+        expect(body.action).toBe("exclude");
+        expect(body.id).toBe(forecastItemId);
+        expect(body.excluded).toBe(true);
+        patchCount += 1;
+        await route.fulfill({ status: 200, contentType: "application/json", body: '{"result":{"updated":true}}' });
+        return;
+      }
+      const snapshot = {
+        ...baseSnapshot,
+        items: baseSnapshot.items.map((item) => patchCount > 0 && !staleAfterPatch
+          ? { ...item, excluded: true, excludedReason: "El cargo ya no se espera", status: "excluded", affectsProjection: false }
+          : item),
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+    });
+    await page.goto("/forecast");
+    await page.getByRole("button", { name: "Excluir" }).click();
+    await page.getByLabel("Motivo para excluir Seguro mensual").fill("El cargo ya no se espera");
+    await page.getByRole("button", { name: "Excluir" }).click();
+    await expect.poll(() => patchCount).toBe(1);
+
+    if (staleAfterPatch) {
+      await expect(page.locator("main").getByRole("alert")).toContainText("puede haberse aplicado");
+      await expect(page.getByText("Elemento excluido del saldo previsto.")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Excluir" })).toBeVisible();
+    } else {
+      await expect(page.getByText("Elemento excluido del saldo previsto.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Restaurar" })).toBeVisible();
+      await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+    }
+    expect(patchCount).toBe(1);
+  });
+}
