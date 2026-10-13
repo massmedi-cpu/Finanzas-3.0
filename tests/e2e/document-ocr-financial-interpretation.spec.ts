@@ -778,3 +778,31 @@ test("REC-OCR-128 · empty seller headers never masquerade as business names", (
   expect(hasName.issuer.trust).toBe("doubtful");
   expect(hasName.issuer.evidence[0]?.lineId).toBe("seller");
 });
+
+test("REC-OCR-129 · IVA o IGIC matemáticamente imposible no es fiable aunque el OCR marque 99 %", () => {
+  for (const acronym of ["IVA", "IGIC"]) {
+    const raw = result([
+      line("tax", `Base imponible 100,00 ${acronym} 21 % 19,00`, 0.99, 0.50),
+    ]);
+    const original = raw.plainText;
+    const parsed = interpretDocumentOcrFinancially(raw);
+    expect(parsed.taxLines[0]?.ratePercent, acronym).toBe(21);
+    expect(parsed.taxLines[0]?.baseCents, acronym).toBe(10000);
+    expect(parsed.taxLines[0]?.taxCents, acronym).toBe(1900);
+    expect(parsed.taxLines[0]?.trust, acronym).toBe("doubtful");
+    expect(parsed.taxBaseCents.trust, acronym).toBe("doubtful");
+    expect(parsed.taxesCents.trust, acronym).toBe("doubtful");
+    expect(parsed.warnings, acronym).toContain("tax_rate_arithmetic_mismatch");
+    expect(raw.plainText, acronym).toBe(original);
+  }
+});
+
+test("REC-OCR-130 · cuota correcta y redondeo máximo de un céntimo no provocan falsa alarma", () => {
+  for (const [base, quota] of [["100,00", "21,00"], ["10,01", "2,11"]]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("tax", `Base imponible ${base} IVA 21 % ${quota}`, 0.99),
+    ]));
+    expect(parsed.taxLines[0]?.trust).toBe("reliable");
+    expect(parsed.warnings).not.toContain("tax_rate_arithmetic_mismatch");
+  }
+});
