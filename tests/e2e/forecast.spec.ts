@@ -668,3 +668,38 @@ test("REC-FCAST-047 · candidatos HTTP 502 nunca muestran errores técnicos ni h
   await expect(alert).not.toContainText("invalid_forecast_candidates_contract");
   await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
 });
+
+
+test("REC-FCAST-052 · closing a pending lookup aborts stale candidates and releases controls", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    try {
+      await gate;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(candidates) });
+    } catch {
+      // The browser intentionally aborts an obsolete GET; there is no write.
+    }
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Buscando coincidencias bancarias verificables" })).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar" }).click();
+  release();
+  await expect(page.getByRole("button", { name: "Buscar movimiento real" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-FCAST-053 · changing forecast period invalidates even previously verified bank candidates", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toBeVisible();
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-07");
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
