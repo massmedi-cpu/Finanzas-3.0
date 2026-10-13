@@ -626,3 +626,24 @@ test("REC-OCR-119 · rejected card and pending transfers cannot become paid meth
   expect(settled.paymentMethod.value).toBe("Efectivo");
   expect(settled.paymentMethod.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-120 · a blank legal-name heading never becomes a merchant", () => {
+  const onlyLabel = interpretDocumentOcrFinancially(result([
+    line("header", "Razón social", 0.99),
+  ]));
+  expect(onlyLabel.issuer.value).toBeNull();
+  expect(onlyLabel.issuer.trust).toBe("not_detected");
+
+  const undelimited = interpretDocumentOcrFinancially(result([
+    line("company", "Razón social EMPRESA LOCAL SL", 0.99),
+  ]));
+  expect(undelimited.issuer.value).toBe("EMPRESA LOCAL SL");
+  expect(undelimited.issuer.trust).toBe("doubtful");
+
+  const labelled = interpretDocumentOcrFinancially(result([
+    line("company", "Razón social: EMPRESA LOCAL SL", 0.99),
+  ]));
+  expect(labelled.issuer.value).toBe("EMPRESA LOCAL SL");
+  expect(labelled.issuer.trust).toBe("doubtful");
+});
