@@ -13,6 +13,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
+import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
 export const dynamic = "force-dynamic";
@@ -96,6 +97,7 @@ function apiError(error: unknown) {
       document_download_source_rejected: 503,
       document_download_failed: 503,
       document_download_too_large: 413,
+      document_download_mime_mismatch: 415,
     };
     if (statuses[error.message]) return fail(error.message, statuses[error.message]);
   }
@@ -136,6 +138,9 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
     throw new Error("document_download_failed");
   }
   if (!bytes.byteLength) throw new Error("document_download_failed");
+  if (!documentBytesMatchMimeType(bytes, detail.document.mimeType)) {
+    throw new Error("document_download_mime_mismatch");
+  }
 
   return new Response(bytes, {
     status: 200,
