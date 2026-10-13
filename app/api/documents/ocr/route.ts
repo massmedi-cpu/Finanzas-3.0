@@ -372,7 +372,7 @@ async function downloadPrivateDocument(rawUrl: string) {
   } catch {
     throw new OcrApiError("ocr_source_url_invalid", 503);
   }
-  if (url.protocol !== "https:" || url.hostname !== SUPABASE_STORAGE_HOST || !url.pathname.startsWith("/storage/v1/object/sign/")) {
+  if (url.protocol !== "https:" || url.hostname !== SUPABASE_STORAGE_HOST || url.port !== "" || url.username !== "" || url.password !== "" || !url.pathname.startsWith("/storage/v1/object/sign/")) {
     throw new OcrApiError("ocr_source_url_rejected", 503);
   }
 
