@@ -9,6 +9,7 @@ import {
 } from "../../src/application/auth-recovery";
 import {
   isForecastSnapshot,
+  isForecastCandidateSnapshotForItem,
   type ForecastCandidateSnapshot,
   type ForecastItem,
   type ForecastSnapshot,
@@ -93,6 +94,7 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
+  if (code === "invalid_forecast_candidates_contract") return "La búsqueda de movimientos reales no está verificada para esta previsión. Reintenta la lectura.";
   if (code === "forecast_snapshot_invalid_contract" || code === "invalid_forecast_snapshot_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
   if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
@@ -524,8 +526,11 @@ export function ForecastClient({
     setError(null);
     try {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
-      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
-      setCandidateData(data as ForecastCandidateSnapshot);
+      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
+      if (!isForecastCandidateSnapshotForItem(data, item, 7, 8)) {
+        throw new Error("La respuesta de conciliación no corresponde a esta previsión. No se mostrarán movimientos reales sin verificar.");
+      }
+      setCandidateData(data);
       window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");

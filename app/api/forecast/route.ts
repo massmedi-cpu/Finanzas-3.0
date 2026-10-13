@@ -3,7 +3,7 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { resolveForecastSelection } from "../../../src/application/forecast/forecast-selection";
-import { isForecastSnapshotForSelection } from "../../../src/application/forecast/forecast-contract";
+import { isForecastSnapshotForSelection, isForecastCandidateSnapshotForRequest } from "../../../src/application/forecast/forecast-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -93,6 +93,13 @@ function apiError(error: unknown) {
     );
   }
 
+  if (error instanceof Error && error.message === "invalid_forecast_candidates_contract") {
+    return Response.json(
+      { error: "invalid_forecast_candidates", code: "invalid_forecast_candidates_contract" },
+      { status: 502, headers: HEADERS },
+    );
+  }
+
   if (error instanceof Error && error.message === "invalid_forecast_snapshot_contract") {
     return Response.json(
       { error: "invalid_forecast_snapshot", code: "invalid_forecast_snapshot_contract" },
@@ -111,6 +118,9 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    for (const name of ["itemId", "days", "limit", "dateFrom", "dateTo", "accountId"]) {
+      if (searchParams.getAll(name).length > 1) throw new Error("invalid_forecast_duplicate_parameters");
+    }
     const itemId = searchParams.get("itemId");
 
     if (itemId) {
@@ -120,6 +130,7 @@ export async function GET(request: Request) {
       const days = daysRaw === null ? 7 : integerValue(Number(daysRaw), "invalid_forecast_candidate_days", 0, 31);
       const limit = limitRaw === null ? 8 : integerValue(Number(limitRaw), "invalid_forecast_candidate_limit", 1, 20);
       const result = await callPersistenceGateway("forecast.candidates", { id, days, limit });
+      if (!isForecastCandidateSnapshotForRequest(result, { itemId: id, days, limit })) throw new Error("invalid_forecast_candidates_contract");
       return Response.json(result, { headers: HEADERS });
     }
 

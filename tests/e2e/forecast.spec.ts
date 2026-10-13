@@ -610,3 +610,22 @@ for (const staleAfterPatch of [true, false] as const) {
     expect(patchCount).toBe(1);
   });
 }
+
+
+test("REC-FCAST-044 · rechaza candidatos bancarios de otra previsión antes de conciliar", async ({ page }) => {
+  const writes: string[] = [];
+  await mockForecastApi(page, []);
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    if (route.request().method() !== "GET") writes.push(route.request().method());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...candidates, forecastItemId: "81000000-0000-4000-8000-000000000099" }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "no corresponde a esta previsión" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
