@@ -208,3 +208,24 @@ test("REC-UI-THEME-019 · Configuración mantiene profundidad y fondos diseñado
   // A fixed dark elevation on every background makes the light theme muddy.
   expect(shadows[0]).not.toBe(shadows[1]);
 });
+
+
+test("REC-UI-CONTRAST-020 · alto contraste respeta fondo claro y oscuro sin texto desvaído", async ({ page }) => {
+  await page.emulateMedia({ contrast: "more" });
+  await page.goto("/configuration");
+  for (const [theme, expectedMuted] of [
+    ["light", "#30475f"],
+    ["dark", "#cbd6e9"],
+  ] as const) {
+    const tokens = await page.locator("html").evaluate((element, selected) => {
+      element.dataset.theme = selected;
+      const css = getComputedStyle(element);
+      return {
+        muted: css.getPropertyValue("--color-text-muted").trim(),
+        border: css.getPropertyValue("--color-border").trim(),
+      };
+    }, theme);
+    expect(tokens.muted, theme).toBe(expectedMuted);
+    expect(tokens.border, theme).not.toBe("");
+  }
+});
