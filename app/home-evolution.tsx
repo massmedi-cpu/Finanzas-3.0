@@ -199,9 +199,11 @@ export default function HomeEvolution({
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceSlowLoading, setBalanceSlowLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState<"not_installed" | "unavailable" | "timeout" | null>(null);
+  const [balanceErrorState, setBalanceError] = useState<{ key: string; reason: "not_installed" | "unavailable" | "timeout" } | null>(null);
   const [balanceRetry, setBalanceRetry] = useState(0);
-  const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
+  // Scope both cache and errors to the exact period and retry generation.
+  const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}|${balanceRetry}`;
+  const balanceError = balanceErrorState?.key === balanceKey ? balanceErrorState.reason : null;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
   // The initial frame of a newly selected or refreshed Balance tab is
   // pending, not a verified empty account history. The fetch starts in an
@@ -222,7 +224,7 @@ export default function HomeEvolution({
       controller.abort();
       setBalanceLoading(false);
       setBalanceSlowLoading(false);
-      setBalanceError("timeout");
+      setBalanceError({ key: balanceKey, reason: "timeout" });
     }, 30_000);
     const params = new URLSearchParams({ mode: "balance_series", dateFrom, dateTo });
     void fetch(`/api/financial?${params.toString()}`, { cache: "no-store", signal: controller.signal })
@@ -244,9 +246,9 @@ export default function HomeEvolution({
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
-          setBalanceError(error instanceof Error && error.message === "financial_balance_series_not_installed"
-            ? "not_installed"
-            : "unavailable");
+          setBalanceError({ key: balanceKey, reason: error instanceof Error
+            && error.message === "financial_balance_series_not_installed"
+            ? "not_installed" : "unavailable" });
         }
       })
       .finally(() => {
