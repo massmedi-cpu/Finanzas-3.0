@@ -211,7 +211,9 @@ test("Inicio no confunde fecha del último movimiento con fallo de sincronizaci�
   await mockInicio(page);
   await page.goto("/");
 
-  await expect(page.getByText("Última sincronización completada", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos bancarios actualizados", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Estado de los datos bancarios" }))
+    .toContainText(/Actualización 15 sept/);
   await expect(page.getByText(/movimientos hasta 11 sept/i)).toBeVisible();
   await expect(page.getByText("Los datos bancarios no están al día")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Reconectar Google" })).toHaveCount(0);
