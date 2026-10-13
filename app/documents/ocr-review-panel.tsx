@@ -222,6 +222,7 @@ function errorLabel(code: string) {
     service_account_scope_invalid: "El entorno ha intentado solicitar un permiso de Google no autorizado por el contrato de solo lectura.",
     service_account_token_request_failed: "Google no ha permitido iniciar la lectura gestionada de este documento.",
     service_account_token_response_invalid: "Google no ha devuelto un token de lectura válido para este documento.",
+    ocr_document_identity_mismatch: "El servidor ha devuelto metadatos de otro documento o de un origen no verificable. No se ha realizado ninguna lectura OCR. Recarga Documentos y vuelve a comprobar el original.",
     ocr_source_download_failed: "No se ha podido descargar temporalmente el archivo privado para analizarlo.",
     ocr_source_too_large: "El documento supera el límite seguro de 15 MB para OCR.",
     ocr_image_dimensions_too_large: "La imagen tiene unas dimensiones demasiado grandes para procesarla de forma segura.",
