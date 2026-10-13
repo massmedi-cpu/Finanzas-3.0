@@ -20,6 +20,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
+import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -294,15 +295,7 @@ const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
-type DocumentDetail = {
-  document: {
-    id: string;
-    mimeType: string;
-    originalFileName: string;
-    storageProvider: "supabase" | "google_drive";
-    sourceDriveFileId: string | null;
-  };
-};
+type DocumentDetail = PrivateDocumentOriginalDetail;
 
 type DocumentOpen = {
   url: string;
@@ -439,6 +432,7 @@ async function executeOcr(request: Request) {
   if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
 
   const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
+  if (!isPrivateDocumentOriginalDetailForId(detail, id)) throw new OcrApiError("ocr_document_identity_mismatch", 502);
   const mimeType = detail.document.mimeType.toLowerCase();
   const provider = providerForMime(mimeType);
   const bytes = await documentBytes(detail);
