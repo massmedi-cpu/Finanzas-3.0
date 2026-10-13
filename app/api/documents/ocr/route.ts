@@ -19,6 +19,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -379,8 +380,18 @@ async function downloadPrivateDocument(rawUrl: string) {
   if (!response?.ok) throw new OcrApiError("ocr_source_download_failed", 503);
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BYTES) throw new OcrApiError("ocr_source_too_large", 413);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.byteLength || bytes.byteLength > MAX_BYTES) throw new OcrApiError("ocr_source_too_large", 413);
+  // Enforce the bound WHILE consuming the stream; Content-Length can be
+  // missing or dishonest and arrayBuffer() would allocate unbounded memory.
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = await readLimitedResponseBody(response, MAX_BYTES);
+  } catch (error) {
+    if (error instanceof LimitedResponseBodyError && error.reason === "too_large") {
+      throw new OcrApiError("ocr_source_too_large", 413);
+    }
+    throw new OcrApiError("ocr_source_download_failed", 503);
+  }
+  if (!bytes.byteLength) throw new OcrApiError("ocr_source_download_failed", 503);
   return bytes;
 }
 
