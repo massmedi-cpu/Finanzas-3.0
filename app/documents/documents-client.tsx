@@ -696,6 +696,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   );
 
   const listSequence = useRef(0);
+  // Keep the validated GET payload for cross-checking a persisted document.
+  // React state updates are asynchronous and cannot be read safely after await.
+  const verifiedArchiveRef = useRef<{ key: string; data: DocumentList } | null>(null);
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
   const uploadInFlight = useRef(false);
@@ -761,6 +764,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
+    verifiedArchiveRef.current = null;
     const requested = new URL(url, window.location.origin);
     const requestKey = `${requested.pathname}${requested.search}`;
     setListLoadFailed(false);
@@ -841,6 +845,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setOffset(0);
         return false;
       }
+      verifiedArchiveRef.current = { key: requestKey, data };
       setList(data);
       setLoadedListKey(requestKey);
       setListLoadFailed(false);
@@ -1071,8 +1076,21 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // a valid document detail and a valid archive/list snapshot. A confirmed
     // detail is insufficient to claim the workspace has synchronized when
     // the corresponding list returned 503 or an invalid 200 response.
-    return listVerified === true && verifiedDetail?.document.id === id ? verifiedDetail : null;
-  }, [loadList, loadDetail]);
+    if (listVerified !== true || verifiedDetail?.document.id !== id) return null;
+    const archive = verifiedArchiveRef.current;
+    // A valid HTTP 200 for the archive can still return the old document.
+    // If this document is visible within the requested page, require it to
+    // agree with the authoritative detail before accepting a write.
+    if (!archive || archive.key !== listUrl) return null;
+    const listed = archive.data.items.find((item) => item.id === id);
+    const saved = verifiedDetail.document;
+    if (listed && (listed.type !== saved.type || listed.status !== saved.status
+      || listed.documentDate !== saved.documentDate
+      || listed.issuerName !== saved.issuerName
+      || listed.totalCents !== saved.totalCents
+      || listed.notes !== saved.notes)) return null;
+    return verifiedDetail;
+  }, [loadList, loadDetail, listUrl]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
     const [listVerified, verifiedDetail] = await Promise.all([
