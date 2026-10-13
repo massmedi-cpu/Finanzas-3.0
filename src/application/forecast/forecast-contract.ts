@@ -130,6 +130,26 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
       && Number.isSafeInteger(item.projectionEffectCents)
       && Number.isSafeInteger(item.projectedBalanceAfterCents))
     && Array.isArray(snapshot.budgetContext)
+    && snapshot.budgetContext.every((month) => month
+      && typeof month.month === "string"
+      && /^\d{4}-(0[1-9]|1[0-2])$/.test(month.month)
+      && Number.isSafeInteger(month.budgetCents)
+      && Number.isSafeInteger(month.actualExpenseCents)
+      && Number.isSafeInteger(month.remainingCents)
+      && typeof month.status === "string")
+    // ForecastClient reads these two nested objects without optional chaining.
+    // A malformed HTTP 200 must not turn a source error into a React crash.
+    && Array.isArray(snapshot.balanceContext?.accounts)
+    && Boolean(snapshot.balanceContext?.quality)
+    && Number.isSafeInteger(snapshot.balanceContext?.quality?.integrityDeltaAccounts)
+    && snapshot.balanceContext.accounts.every((account) => account
+      && typeof account.id === "string"
+      && typeof account.name === "string"
+      && Number.isSafeInteger(account.balanceCents)
+      && (account.explicitBalanceDate === null || typeof account.explicitBalanceDate === "string"))
+    && Number.isSafeInteger(snapshot.summary?.plannedItems)
+    && Number.isSafeInteger(snapshot.summary?.excludedItems)
+    && Number.isSafeInteger(snapshot.summary?.confirmedItems)
     && snapshot.principles?.bankSource === "read_only"
     && snapshot.principles?.getHasSideEffects === false;
 }

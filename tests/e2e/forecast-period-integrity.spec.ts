@@ -215,3 +215,21 @@ test("REC-FCAST-041 · una respuesta 502 por contrato bancario incoherente se ex
   await expect(page.locator("main").getByRole("alert")).toContainText("no coinciden con la consulta");
   await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
 });
+
+
+test("REC-FCAST-050 · un GET 200 sin saldos estructurados da error accesible y no rompe la pantalla", async ({ page }) => {
+  await page.route("**/api/forecast*", async (route) => {
+    const from = new URL(route.request().url()).searchParams.get("dateFrom") || "2026-10-01";
+    const to = new URL(route.request().url()).searchParams.get("dateTo") || "2026-10-31";
+    const response = forecastSnapshot(from, to, null);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...response, balanceContext: { accounts: [] } }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se mostrarán como previsión verificada");
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
+});

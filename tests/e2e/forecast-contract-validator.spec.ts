@@ -22,6 +22,10 @@ function fixture() {
     },
     items: [],
     budgetContext: [],
+    balanceContext: {
+      quality: { accounts: 1, integrityDeltaAccounts: 0, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+      accounts: [],
+    },
     principles: {
       bankSource: "read_only",
       getHasSideEffects: false,
@@ -44,4 +48,32 @@ test("REC-FCAST-040 · reject malformed financial amounts instead of presenting 
   expect(isForecastSnapshot({ ...base, summary: null })).toBe(false);
   expect(isForecastSnapshot({ ...base, items: [{ id: "an-item", date: "2026-10-09", amountCents: 1.5, projectionEffectCents: 1.5, projectedBalanceAfterCents: 10000 }] })).toBe(false);
   expect(isForecastSnapshot({ ...base, items: [{ id: "an-item", date: "2026-10-09", amountCents: 500, projectionEffectCents: 500, projectedBalanceAfterCents: 10500 }] })).toBe(true);
+});
+
+
+test("REC-FCAST-048 · reject a missing or broken balance structure instead of crashing forecast UI", () => {
+  const valid = fixture();
+  expect(isForecastSnapshot(valid)).toBe(true);
+  expect(isForecastSnapshot({ ...valid, balanceContext: null })).toBe(false);
+  expect(isForecastSnapshot({ ...valid, balanceContext: { accounts: [] } })).toBe(false);
+  expect(isForecastSnapshot({
+    ...valid,
+    balanceContext: { quality: { integrityDeltaAccounts: NaN }, accounts: [] },
+  })).toBe(false);
+});
+
+test("REC-FCAST-049 · reject budget context with unsafe cents or an impossible month", () => {
+  const valid = fixture();
+  expect(isForecastSnapshot({
+    ...valid,
+    budgetContext: [{ month: "2026-10", budgetCents: 10000, actualExpenseCents: 5000, remainingCents: 5000, status: "on_track" }],
+  })).toBe(true);
+  expect(isForecastSnapshot({
+    ...valid,
+    budgetContext: [{ month: "2026-13", budgetCents: 10000, actualExpenseCents: 5000, remainingCents: 5000, status: "on_track" }],
+  })).toBe(false);
+  expect(isForecastSnapshot({
+    ...valid,
+    budgetContext: [{ month: "2026-10", budgetCents: Number.MAX_SAFE_INTEGER + 1, actualExpenseCents: 0, remainingCents: 0, status: "on_track" }],
+  })).toBe(false);
 });
