@@ -563,3 +563,30 @@ test("REC-OCR-116 · time from continuation page is doubtful, not a certified pu
   expect(ticket.date.trust).toBe("reliable");
   expect(ticket.time.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-117 · Razón social bajo bloque de destinatario nunca se presenta como vendedor", () => {
+  const original = result([
+    line("heading", "DATOS DEL CLIENTE", 0.99, 0.04),
+    line("customer-name", "Razón social: CLIENTE DE EJEMPLO SL", 0.99, 0.10),
+    line("customer-cif", "CIF B12345674", 0.99, 0.15),
+    line("total", "TOTAL 42,00 €", 0.98, 0.90),
+  ]);
+  const parsed = interpretDocumentOcrFinancially(original);
+  expect(parsed.issuer.value).toBeNull();
+  expect(parsed.issuer.trust).toBe("not_detected");
+  expect(parsed.taxId.value).toBeNull();
+  expect(parsed.totalCents.value).toBe(4200);
+  expect(original.plainText).toContain("CLIENTE DE EJEMPLO SL");
+
+  // A new explicit supplier heading returns ownership to the merchant.
+  const owned = interpretDocumentOcrFinancially(result([
+    line("heading", "DATOS DEL CLIENTE", 0.99, 0.04),
+    line("recipient", "Razón social: CLIENTE DE EJEMPLO SL", 0.99, 0.10),
+    line("supplier-heading", "DATOS DEL EMISOR", 0.99, 0.14),
+    line("supplier", "Razón social: COMERCIO DEL SUR SL", 0.97, 0.20),
+  ]));
+  expect(owned.issuer.value).toBe("COMERCIO DEL SUR SL");
+  expect(owned.issuer.trust).toBe("doubtful");
+  expect(owned.issuer.evidence[0]?.lineId).toBe("supplier");
+});
