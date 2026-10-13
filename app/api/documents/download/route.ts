@@ -13,6 +13,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
+import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -29,15 +30,7 @@ const BASE_HEADERS = {
 
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
-type DocumentDetail = {
-  document: {
-    id: string;
-    originalFileName: string;
-    mimeType: string;
-    storageProvider: "supabase" | "google_drive";
-    sourceDriveFileId: string | null;
-  };
-};
+type DocumentDetail = PrivateDocumentOriginalDetail;
 
 type DocumentOpen = { url: string };
 
@@ -99,6 +92,7 @@ function apiError(error: unknown) {
       unsupported_document_mime_type: 415,
       document_drive_file_unavailable: 409,
       document_download_url_invalid: 503,
+      document_download_source_identity_mismatch: 502,
       document_download_source_rejected: 503,
       document_download_failed: 503,
       document_download_too_large: 413,
@@ -157,6 +151,7 @@ export async function GET(request: Request) {
     if ([...searchParams.keys()].some((key) => key !== "id")) throw new Error("invalid_document_download_query");
 
     const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
+    if (!isPrivateDocumentOriginalDetailForId(detail, id)) throw new Error("document_download_source_identity_mismatch");
     const mimeType = detail.document.mimeType.toLowerCase();
     if (!MIMES.has(mimeType)) throw new Error("unsupported_document_mime_type");
 
