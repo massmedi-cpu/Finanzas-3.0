@@ -724,3 +724,36 @@ test("REC-OCR-125 · different issuer IDs require review even with valid checksu
   expect(identical.taxId.value).toBe("B12345674");
   expect(identical.taxId.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-126 · conflicting labelled invoice dates cannot be auto-trusted", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("date-first", "Fecha de emisión: 12/10/2026", 0.99, 0.10),
+    line("date-second", "Fecha de emisión: 13/10/2026", 0.99, 0.20),
+  ]));
+  expect(["2026-10-12", "2026-10-13"]).toContain(parsed.date.value);
+  expect(parsed.date.trust).toBe("doubtful");
+
+  const consistent = interpretDocumentOcrFinancially(result([
+    line("date-first", "Fecha: 12/10/2026", 0.99, 0.10),
+    line("date-repeat", "Fecha de factura: 12/10/2026", 0.99, 0.20),
+  ]));
+  expect(consistent.date.value).toBe("2026-10-12");
+  expect(consistent.date.trust).toBe("reliable");
+});
+
+test("REC-OCR-127 · contradictory explicit payment times require human verification", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("time-first", "Hora de compra: 10:15", 0.98, 0.10),
+    line("time-second", "Hora de compra: 10:45", 0.99, 0.20),
+  ]));
+  expect(parsed.time.trust).toBe("doubtful");
+  expect(["10:15", "10:45"]).toContain(parsed.time.value);
+
+  const consistent = interpretDocumentOcrFinancially(result([
+    line("time-first", "Hora: 10:15", 0.98, 0.10),
+    line("time-again", "Hora de compra: 10:15", 0.99, 0.20),
+  ]));
+  expect(consistent.time.value).toBe("10:15");
+  expect(consistent.time.trust).toBe("reliable");
+});
