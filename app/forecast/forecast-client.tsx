@@ -527,15 +527,17 @@ export function ForecastClient({
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
       const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
       if (!isForecastCandidateSnapshotForItem(data, item, 7, 8)) {
-        throw new Error("La respuesta de conciliación no corresponde a esta previsión. No se mostrarán movimientos reales sin verificar.");
+        throw new Error("forecast_candidates_untrusted_response");
       }
       setCandidateData(data);
       window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
       const code = err instanceof Error ? err.message : "";
-      setError(code === "invalid_forecast_candidates_contract"
-        ? "La búsqueda devolvió movimientos no verificados para esta previsión. No se permite conciliar hasta comprobarlos."
-        : code === "authentication_required" || code === "authentication_unavailable"
+      setError(code === "forecast_candidates_untrusted_response"
+        ? "La respuesta de conciliación no corresponde a esta previsión o contiene movimientos no verificados. No se permite conciliar hasta comprobarlos."
+        : code === "invalid_forecast_candidates_contract"
+          ? "La búsqueda devolvió movimientos no verificados para esta previsión. No se permite conciliar hasta comprobarlos."
+          : code === "authentication_required" || code === "authentication_unavailable"
           ? "No se pueden consultar movimientos reales sin una sesión válida. Vuelve a iniciar sesión."
           : "No se pudieron verificar los movimientos reales. Reintenta la búsqueda.");
       setCandidateFor(null);
