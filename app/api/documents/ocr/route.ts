@@ -1,6 +1,7 @@
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
 import type { OcrWord } from "../../../../src/domain/document-ocr";
 import { interpretDocumentOcrFinancially } from "../../../../src/domain/document-ocr-financial-interpretation";
+import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -436,6 +437,8 @@ async function executeOcr(request: Request) {
   const mimeType = detail.document.mimeType.toLowerCase();
   const provider = providerForMime(mimeType);
   const bytes = await documentBytes(detail);
+  // A signed 200 response is not proof that the bytes match the bank document format.
+  if (!documentBytesMatchMimeType(bytes, mimeType)) throw new OcrApiError("ocr_source_mime_mismatch", 415);
   const result = await runDocumentOcr({
     documentId: id,
     bytes,
