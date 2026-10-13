@@ -404,3 +404,47 @@ test("REC-OCR-108 · vencimiento y horarios no inventan compra ni hora de emisi�
   expect(observed.time.value).toBeNull();
   expect(observed.time.trust).toBe("not_detected");
 });
+
+
+test("REC-OCR-109 · customer section spread over lines cannot become an issuer", () => {
+  const raw = result([
+    line("heading", "DATOS DEL CLIENTE", 0.99, 0.05),
+    line("recipient", "CLIENTE INDUSTRIAL SL", 0.99, 0.10),
+    line("customer-tax", "CIF B12345678", 0.99, 0.14),
+    line("total", "TOTAL 30,00 €", 0.98, 0.80),
+  ]);
+  const interpretation = interpretDocumentOcrFinancially(raw);
+  expect(interpretation.issuer.value).toBeNull();
+  expect(interpretation.issuer.trust).toBe("not_detected");
+  expect(interpretation.totalCents.value).toBe(3000);
+  expect(raw.plainText).toContain("CLIENTE INDUSTRIAL SL");
+});
+
+test("REC-OCR-110 · explicitly named seller takes precedence over customer section", () => {
+  const raw = result([
+    line("heading", "DESTINATARIO", 0.99, 0.05),
+    line("recipient", "COMPRADOR EJEMPLO SL", 0.99, 0.10),
+    line("issuer", "Emisor: PROVEEDOR AUTENTICO SL", 0.96, 0.20),
+    line("total", "TOTAL 35,00 €", 0.97, 0.80),
+  ]);
+  const interpretation = interpretDocumentOcrFinancially(raw);
+  expect(interpretation.issuer.value).toBe("PROVEEDOR AUTENTICO SL");
+  expect(interpretation.issuer.trust).toBe("reliable");
+  expect(interpretation.issuer.evidence[0]?.lineId).toBe("issuer");
+});
+
+test("REC-OCR-111 · page-two labelled dates require review, first-page issue dates may be reliable", () => {
+  const raw = result([line("heading", "FACTURA DE SERVICIOS", 0.98, 0.05)]);
+  const annex = line("legal-date", "Fecha: 23/09/2026", 0.99, 0.10);
+  raw.pages.push({ pageNumber: 2, lines: [annex], plainText: annex.text, layoutText: annex.text });
+  const interpretation = interpretDocumentOcrFinancially(raw);
+  expect(interpretation.date.value).toBe("2026-09-23");
+  expect(interpretation.date.trust).toBe("doubtful");
+  expect(interpretation.date.evidence[0]?.pageNumber).toBe(2);
+
+  const clear = interpretDocumentOcrFinancially(result([
+    line("date", "Fecha de emisión: 23/09/2026", 0.96),
+  ]));
+  expect(clear.date.value).toBe("2026-09-23");
+  expect(clear.date.trust).toBe("reliable");
+});
