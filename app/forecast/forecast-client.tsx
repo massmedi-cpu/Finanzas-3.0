@@ -266,7 +266,16 @@ export function ForecastClient({
     setNotice(null);
     try {
       await task();
-      return await loadSnapshot();
+      const refreshed = await loadSnapshot();
+      if (!refreshed) {
+        // The mutation may already have committed. A failed GET must not
+        // leave a success banner from task(), nor invite a new write as
+        // though the previous response proved nothing happened.
+        setNotice(null);
+        setError("La operación puede haberse guardado, pero no se ha podido verificar al releer la previsión. Comprueba el calendario antes de repetirla.");
+        return null;
+      }
+      return refreshed;
     } catch (err) {
       const message = err instanceof Error ? err.message : "La operación no se ha podido completar";
       if (message === "forecast_write_conflict") {
