@@ -9,6 +9,8 @@ test.describe("AUD-E2E-VAL-001 · navegación móvil accesible", () => {
       const dock = page.getByRole("navigation", { name: "Navegación móvil" });
       const more = dock.getByRole("button", { name: "Más", exact: true });
       await expect(more).toBeVisible();
+      // Keyboard listeners must be hydrated: no inert pre-hydration actions.
+      await expect(more).toBeEnabled();
       await more.focus();
       await page.keyboard.press("Enter");
 
