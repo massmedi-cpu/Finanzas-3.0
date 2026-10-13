@@ -491,3 +491,31 @@ test("REC-OCR-113 · labeled legal issuer names are trusted, recipient names sti
   ]));
   expect(ambiguous.issuer.trust).not.toBe("reliable");
 });
+
+
+test("REC-OCR-114 · CIF del emisor puede seguir a su encabezado; CIF del cliente nunca hereda ese permiso", () => {
+  const validSeller = interpretDocumentOcrFinancially(result([
+    line("heading", "DATOS DEL EMISOR", 0.99, 0.05),
+    line("company", "Proveedor Comercial SL", 0.99, 0.10),
+    line("cif", "CIF B12345674", 0.97, 0.15),
+    line("recipient-heading", "DATOS DEL CLIENTE", 0.99, 0.20),
+    line("recipient-cif", "CIF B12345678", 0.99, 0.25),
+  ]));
+  expect(validSeller.taxId.value).toBe("B12345674");
+  expect(validSeller.taxId.trust).toBe("reliable");
+  expect(validSeller.taxId.evidence[0]?.lineId).toBe("cif");
+
+  const invalidSeller = interpretDocumentOcrFinancially(result([
+    line("heading", "DATOS DEL EMISOR", 0.99, 0.05),
+    line("cif", "CIF B12345678", 0.99, 0.10),
+  ]));
+  expect(invalidSeller.taxId.value).toBe("B12345678");
+  expect(invalidSeller.taxId.trust).toBe("doubtful");
+
+  const customerOnly = interpretDocumentOcrFinancially(result([
+    line("heading", "DATOS DEL CLIENTE", 0.99, 0.05),
+    line("cif", "CIF B12345674", 0.99, 0.10),
+  ]));
+  expect(customerOnly.taxId.value).toBeNull();
+  expect(customerOnly.taxId.trust).toBe("not_detected");
+});
