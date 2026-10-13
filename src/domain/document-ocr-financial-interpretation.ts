@@ -346,23 +346,29 @@ function extractTaxId(lines: LocatedLine[]) {
     // One OCR row may contain TWO IDs: "Cliente CIF ... Emisor CIF ...".
     // Never read the first ID and assign it to the second owner's label.
     for (const match of item.line.text.matchAll(pattern)) {
-      const before = normalizeToken(item.line.text.slice(0, match.index ?? 0));
+      // Split the ORIGINAL OCR text before normalizing. normalizeToken
+      // removes Unicode diacritics (including U+00B7 middle dot), which
+      // previously joined "Cliente CIF … · Emisor CIF …" into one owner
+      // span and incorrectly downgraded a valid issuer ID.
+      const prefix = item.line.text.slice(0, match.index ?? 0);
+      const boundary = Math.max(
+        prefix.lastIndexOf("·"), prefix.lastIndexOf("|"),
+        prefix.lastIndexOf(";"), prefix.lastIndexOf("/"),
+      );
+      const before = normalizeToken(prefix.slice(boundary + 1));
       const owners = [...before.matchAll(ownerBeforeId)];
-      const ownerMatch = owners.at(-1);
-      const nearest = ownerMatch?.[1] ?? null;
+      const nearest = owners.at(-1)?.[1] ?? null;
       const explicitlyIssuerOwned = nearest !== null && issuerOwners.has(nearest);
       const explicitlyRecipientOwned = nearest !== null && recipientOwners.has(nearest);
       if (explicitlyRecipientOwned) continue;
       if (recipientSection && !explicitlyIssuerOwned) continue;
       const raw = match[0].replace(/\s+/g, "");
       const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
-      // On a line headed "Cliente", a word like "Comercio" may just be
-      // part of the recipient's trading name. Require an independent
-      // owner boundary before treating a later owner word as the seller.
-      const mixedRecipientOwner = recipientHeader.test(normalized)
-        && explicitlyIssuerOwned
-        && owners.some((entry) => recipientOwners.has(entry[1]))
-        && !/[|·;/]\s*$/.test(before.slice(0, ownerMatch?.index ?? 0));
+      // "Cliente: Comercio DEL BARRIO SL CIF..." is one recipient clause,
+      // not a new seller. Two owner labels with no clear clause boundary
+      // are never grounds for a fully trusted issuer attribution.
+      const mixedRecipientOwner = explicitlyIssuerOwned
+        && owners.some((entry) => recipientOwners.has(entry[1]));
       if (mixedRecipientOwner) {
         unassigned ??= fieldRequiringReview(candidate);
         continue;
