@@ -254,6 +254,7 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
 test("REC-DOC-027 · PATCH aplicado pero listado 503 no pierde el borrador ni repite el PATCH", async ({ page }) => {
   let savedIssuer = DOCS[0].issuerName as string;
   let listUnavailable = false;
+  let listReturnsStale = false;
   let writes = 0;
   let listReads = 0;
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
@@ -298,7 +299,7 @@ test("REC-DOC-027 · PATCH aplicado pero listado 503 no pierde el borrador ni re
     }
     await route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify(list(DOCS.map((doc) => doc.id === DOCS[0].id
+      body: JSON.stringify(list(DOCS.map((doc) => doc.id === DOCS[0].id && !listReturnsStale
         ? { ...doc, issuerName: savedIssuer } : doc), url)),
     });
   });
@@ -318,14 +319,22 @@ test("REC-DOC-027 · PATCH aplicado pero listado 503 no pierde el borrador ni re
   await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
   expect(writes).toBe(1);
 
-  // Once the list recovers, two successful GETs certify the previous
-  // POST/PATCH. Do not submit the same metadata edit twice.
+  // An HTTP 200 list still cannot certify the mutation if its item contains
+  // the OLD issuer. Both responses must agree on the stored document.
   listUnavailable = false;
+  listReturnsStale = true;
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toContainText("falta verificar el documento y el listado");
+  expect(writes).toBe(1);
+  // Once the archive reflects the same committed issuer as the detail, two
+  // GETs certify the previous PATCH without sending the write a second time.
+  listReturnsStale = false;
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
   expect(writes).toBe(1);
-  expect(listReads).toBeGreaterThanOrEqual(3);
+  expect(listReads).toBeGreaterThanOrEqual(4);
 });
 
 test("AUD-E2E-UI-001 · Documentos espera una pausa antes de consultar mientras escribimos", async ({ page }) => {
