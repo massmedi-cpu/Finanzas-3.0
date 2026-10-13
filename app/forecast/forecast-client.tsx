@@ -309,6 +309,7 @@ export function ForecastClient({
       setNotice(null);
       return;
     }
+    let generated = 0;
     const refreshed = await runMutation("refresh", async () => {
       const result = await readJson(await fetch("/api/forecast", {
         method: "POST",
@@ -320,8 +321,9 @@ export function ForecastClient({
           accountId: selection.accountId,
         }),
       }));
-      setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
+      generated = Number.isSafeInteger(result.generated) && result.generated >= 0 ? result.generated : 0;
     });
+    if (refreshed) setNotice(`Recurrencias actualizadas: ${generated} fechas previstas.`);
     if (refreshed && handoffRecurrenceId) {
       const hasImpact = refreshed.items.some((item) => item.recurrenceId === handoffRecurrenceId);
       setRecurrenceFlowState(hasImpact ? "ready" : "empty");
@@ -469,7 +471,7 @@ export function ForecastClient({
     }
 
     setExcludeErrorFor((current) => current === item.id ? null : current);
-    await runMutation(`exclude:${item.id}`, async () => {
+    const verified = await runMutation(`exclude:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -481,8 +483,16 @@ export function ForecastClient({
           expectedUpdatedAt: item.updatedAt,
         }),
       }));
-      setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
     });
+    if (verified) {
+      const saved = verified.items.find((entry) => entry.id === item.id);
+      if (saved?.excluded === nextExcluded) {
+        setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
+      } else {
+        setNotice(null);
+        setError("La operación puede haberse aplicado, pero la previsión todavía muestra el estado anterior. Comprueba el calendario antes de repetirla.");
+      }
+    }
   }
 
   async function loadCandidates(item: ForecastItem) {
@@ -511,7 +521,7 @@ export function ForecastClient({
   }
 
   async function reconcile(item: ForecastItem, transactionId: string | null) {
-    await runMutation(`reconcile:${item.id}`, async () => {
+    const verified = await runMutation(`reconcile:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -523,10 +533,18 @@ export function ForecastClient({
           expectedUpdatedAt: item.updatedAt,
         }),
       }));
-      setCandidateFor(null);
-      setCandidateData(null);
-      setNotice(transactionId ? "Previsión conciliada con el movimiento real." : "Conciliación eliminada.");
     });
+    if (verified) {
+      const saved = verified.items.find((entry) => entry.id === item.id);
+      if (saved?.confirmedTransactionId === transactionId) {
+        setCandidateFor(null);
+        setCandidateData(null);
+        setNotice(transactionId ? "Previsión conciliada con el movimiento real." : "Conciliación eliminada.");
+      } else {
+        setNotice(null);
+        setError("La conciliación puede haberse guardado, pero la previsión todavía no refleja el movimiento confirmado. Comprueba el calendario antes de repetirla.");
+      }
+    }
   }
 
   const items = snapshot?.items ?? EMPTY_FORECAST_ITEMS;
