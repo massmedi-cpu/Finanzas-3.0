@@ -479,7 +479,9 @@ function extractPaymentMethod(lines: LocatedLine[]) {
 
 function extractIssuer(lines: LocatedLine[]) {
   // Explicit issuer labels take precedence over a recipient's "Razón social".
-  const explicit = findLabelled(lines, [/^(?:emisor|comercio|proveedor)\s*[:\-]\s*\S/]);
+  const explicit = findLabelled(lines, [
+    /^(?:emisor|comercio|proveedor|vendedor|establecimiento|razon social\s+(?:del?\s+)?(?:emisor|proveedor|vendedor))\s*[:\-]\s*\S/,
+  ]);
   if (explicit) {
     const raw = valueAfterLabel(explicit.line.text);
     if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) return fieldFrom(explicit, raw, raw);
