@@ -97,6 +97,7 @@ const WARNING_LABELS: Record<string, string> = {
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
   base_plus_tax_mismatch: "La base imponible y los impuestos detectados no cuadran con el total. No confirmes los importes sin revisar el original.",
+  tax_rate_arithmetic_mismatch: "El porcentaje de IVA o IGIC no cuadra con la base imponible y la cuota detectadas. Comprueba los tres importes en el original antes de confirmarlos.",
   ocr_empty: "El OCR no ha recuperado texto utilizable.",
   ocr_needs_review: "El OCR ha marcado esta lectura como pendiente de revisión.",
 };
