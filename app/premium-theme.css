@@ -36,6 +36,14 @@ main[aria-busy] article {
   color: var(--color-text);
   box-shadow: var(--shadow-card);
 }
+/* ART-010 shared surface contract: both Settings panels inherit semantic
+   foreground and border tokens, while globals.css retains their intentional
+   gradient backgrounds and theme-adaptive elevation. */
+.configuration-hero,
+.config-panel {
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
 main[aria-busy] > section[aria-label="Resumen financiero principal"] > article { min-height: 8rem; }
 .entity-card { background: transparent; }
 .entity-card:hover { background: var(--surface-interactive-soft); }
