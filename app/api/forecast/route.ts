@@ -3,6 +3,7 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { resolveForecastSelection } from "../../../src/application/forecast/forecast-selection";
+import { isForecastSnapshotForSelection } from "../../../src/application/forecast/forecast-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -92,6 +93,13 @@ function apiError(error: unknown) {
     );
   }
 
+  if (error instanceof Error && error.message === "invalid_forecast_snapshot_contract") {
+    return Response.json(
+      { error: "invalid_forecast_snapshot", code: "invalid_forecast_snapshot_contract" },
+      { status: 502, headers: HEADERS },
+    );
+  }
+
   if (error instanceof Error && error.message.startsWith("invalid_forecast_")) {
     return Response.json({ error: "invalid_request", code: error.message }, { status: 400, headers: HEADERS });
   }
@@ -117,7 +125,9 @@ export async function GET(request: Request) {
 
     const { dateFrom, dateTo } = forecastRange(searchParams.get("dateFrom"), searchParams.get("dateTo"));
     const accountId = nullableUuid(searchParams.get("accountId"), "invalid_forecast_account_id");
-    const result = await callPersistenceGateway("forecast.snapshot", { dateFrom, dateTo, accountId });
+    const selection = { dateFrom, dateTo, accountId };
+    const result = await callPersistenceGateway("forecast.snapshot", selection);
+    if (!isForecastSnapshotForSelection(result, selection)) throw new Error("invalid_forecast_snapshot_contract");
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

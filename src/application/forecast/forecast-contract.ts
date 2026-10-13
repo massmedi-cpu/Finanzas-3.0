@@ -108,11 +108,40 @@ export type ForecastCandidateSnapshot = {
 export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<ForecastSnapshot>;
+  // No unsafe cents or wrong-period money may reach server rendering.
+  const summary = snapshot.summary;
+  const period = snapshot.period;
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   return snapshot.contractVersion === 1
-    && Boolean(snapshot.period?.dateFrom)
-    && Boolean(snapshot.period?.dateTo)
+    && typeof period?.dateFrom === "string" && datePattern.test(period.dateFrom)
+    && typeof period?.dateTo === "string" && datePattern.test(period.dateTo)
+    && period.dateFrom <= period.dateTo
+    && (period.accountId === null || typeof period.accountId === "string")
+    && Boolean(summary)
+    && Number.isSafeInteger(summary?.openingBalanceCents)
+    && Number.isSafeInteger(summary?.projectedIncomeCents)
+    && Number.isSafeInteger(summary?.projectedExpenseCents)
+    && Number.isSafeInteger(summary?.projectedNetCents)
+    && Number.isSafeInteger(summary?.projectedClosingBalanceCents)
     && Array.isArray(snapshot.items)
+    && snapshot.items.every((item) => item && typeof item.id === "string"
+      && typeof item.date === "string" && datePattern.test(item.date)
+      && Number.isSafeInteger(item.amountCents)
+      && Number.isSafeInteger(item.projectionEffectCents)
+      && Number.isSafeInteger(item.projectedBalanceAfterCents))
     && Array.isArray(snapshot.budgetContext)
     && snapshot.principles?.bankSource === "read_only"
     && snapshot.principles?.getHasSideEffects === false;
+}
+
+
+/** Refuse a structurally valid response belonging to another period or account. */
+export function isForecastSnapshotForSelection(
+  value: unknown,
+  selection: { dateFrom: string; dateTo: string; accountId: string | null },
+): value is ForecastSnapshot {
+  return isForecastSnapshot(value)
+    && value.period.dateFrom === selection.dateFrom
+    && value.period.dateTo === selection.dateTo
+    && value.period.accountId === selection.accountId;
 }
