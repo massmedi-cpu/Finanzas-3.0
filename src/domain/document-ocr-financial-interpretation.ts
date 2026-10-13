@@ -755,15 +755,21 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
     const uncertain = ambiguousUnlabelled || taxAmounts.length > 1 || baseAmounts.length > 1
       || quotaAmounts.length > 1 || (quotaAmounts.length > 0 && taxAmounts.length > 0
         && quotaAmounts[0].value !== taxAmounts[0].value);
+    const ratePercent = rate ? Number(rate[1].replace(",", ".")) : null;
+    // The percentage, base and quota are independent financial evidence.
+    // Accurate OCR characters do not make a mathematically impossible VAT row reliable.
+    const arithmeticMismatch = ratePercent !== null && baseCents !== null && taxCents !== null
+      && (!Number.isSafeInteger(Math.round(baseCents * ratePercent / 100))
+        || Math.abs(Math.round(baseCents * ratePercent / 100) - taxCents) > 1);
     const confidence = item.line.confidence;
     const detected = taxCents !== null || Boolean(rate);
     result.push({
-      ratePercent: rate ? Number(rate[1].replace(",", ".")) : null,
+      ratePercent,
       baseCents,
       taxCents,
       confidence,
       trust: !detected ? "not_detected"
-        : taxCents === null || uncertain ? "doubtful"
+        : taxCents === null || uncertain || arithmeticMismatch ? "doubtful"
         : trustFor(confidence, true),
       evidence: [evidenceOf(item)],
     });
@@ -859,6 +865,15 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
   });
   const warnings: string[] = [];
   const taxLines = extractTaxLines(located);
+  const rateContradiction = taxLines.some((row) => row.ratePercent !== null
+    && row.baseCents !== null && row.taxCents !== null
+    && (!Number.isSafeInteger(Math.round(row.baseCents * row.ratePercent / 100))
+      || Math.abs(Math.round(row.baseCents * row.ratePercent / 100) - row.taxCents) > 1));
+  if (rateContradiction) {
+    warnings.push("tax_rate_arithmetic_mismatch");
+    taxBaseCents = fieldRequiringReview(taxBaseCents);
+    taxesCents = fieldRequiringReview(taxesCents);
+  }
   // Derive sums from an explicitly identified tax table ONLY if every tax
   // rate reconciles with its row and all rows reconcile to the printed total.
   // Derived sums are never automatic OCR facts: they remain "doubtful".
