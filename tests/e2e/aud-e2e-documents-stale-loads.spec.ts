@@ -251,6 +251,82 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
 });
 
 
+test("REC-DOC-027 · PATCH aplicado pero listado 503 no pierde el borrador ni repite el PATCH", async ({ page }) => {
+  let savedIssuer = DOCS[0].issuerName as string;
+  let listUnavailable = false;
+  let writes = 0;
+  let listReads = 0;
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    const id = url.searchParams.get("id");
+    if (req.method() === "PATCH") {
+      const change = req.postDataJSON() as { action: string; issuerName: string };
+      expect(change.action).toBe("metadata");
+      savedIssuer = change.issuerName;
+      writes += 1;
+      // Simulates an already committed write, but the archive remains
+      // temporarily unavailable while detail GET reflects the new value.
+      listUnavailable = true;
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+      return;
+    }
+    if (id) {
+      const source = DOCS.find((doc) => doc.id === id);
+      await route.fulfill({
+        status: source ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3,
+          document: source ? {
+            ...source,
+            issuerName: source.id === DOCS[0].id ? savedIssuer : source.issuerName,
+          } : null,
+          associations: [],
+          principles: PRINCIPLES,
+        }),
+      });
+      return;
+    }
+    listReads += 1;
+    if (listUnavailable) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: '{"error":"temporary_archive_failure"}',
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(list(DOCS, url)),
+    });
+  });
+
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  await archive.getByRole("button", { name: /Primera factura\.pdf/ }).click();
+  const issuer = page.getByRole("textbox", { name: "Emisor" });
+  await expect(issuer).toHaveValue(DOCS[0].issuerName);
+  await issuer.fill("Emisor contrastado");
+  await archive.getByRole("button", { name: /Segunda factura\.pdf/ }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+
+  await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
+  await expect(issuer).toHaveValue("Emisor contrastado");
+  await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
+  expect(writes).toBe(1);
+
+  // Once the list recovers, two successful GETs certify the previous
+  // POST/PATCH. Do not submit the same metadata edit twice.
+  listUnavailable = false;
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
+  expect(writes).toBe(1);
+  expect(listReads).toBeGreaterThanOrEqual(3);
+});
+
 test("AUD-E2E-UI-001 · Documentos espera una pausa antes de consultar mientras escribimos", async ({ page }) => {
   const requestedQueries: string[] = [];
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
