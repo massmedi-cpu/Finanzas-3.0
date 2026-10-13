@@ -519,7 +519,7 @@ function extractIssuer(lines: LocatedLine[]) {
     // A recipient/customer header can span multiple OCR lines. Never promote
     // its unlabelled name to a supposed merchant just because it is printed
     // near the top with excellent character recognition.
-    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a|factura\s+a)\b/.test(normalized)) break;
+    if (/^(?:(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a|factura\s+a)|razon social\s+(?:(?:del|de la)\s+)?(?:cliente|destinatario|receptor|comprador))\b/.test(normalized)) break;
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
