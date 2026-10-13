@@ -7,10 +7,11 @@ import {
   requestErrorCode,
   type AuthRecoveryState,
 } from "../../src/application/auth-recovery";
-import type {
-  ForecastCandidateSnapshot,
-  ForecastItem,
-  ForecastSnapshot,
+import {
+  isForecastSnapshot,
+  type ForecastCandidateSnapshot,
+  type ForecastItem,
+  type ForecastSnapshot,
 } from "../../src/application/forecast/forecast-contract";
 import {
   recurrencesHrefForForecast,
@@ -92,6 +93,7 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
+  if (code === "forecast_snapshot_invalid_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
   if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
     return "La previsión no ha podido calcularse. Los datos disponibles siguen intactos; puedes reintentar.";
@@ -219,12 +221,32 @@ export function ForecastClient({
       });
       const params = new URLSearchParams({ dateFrom: selection.dateFrom, dateTo: selection.dateTo });
       if (selection.accountId) params.set("accountId", selection.accountId);
-      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
+      // Switching periods must not keep showing an earlier period's totals
+      // if the new financial source is slow or returns an invalid HTTP 200.
+      setSnapshot((current) => current
+        && (current.period.dateFrom !== selection.dateFrom
+          || current.period.dateTo !== selection.dateTo
+          || current.period.accountId !== selection.accountId) ? null : current);
+      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       }));
       if (controller.signal.aborted || sequence !== loadSequence.current) return null;
-      const nextSnapshot = data as ForecastSnapshot;
+      if (!isForecastSnapshot(data)
+        || data.period.dateFrom !== selection.dateFrom
+        || data.period.dateTo !== selection.dateTo
+        || data.period.accountId !== selection.accountId
+        || !data.summary
+        || !Number.isSafeInteger(data.summary.openingBalanceCents)
+        || !Number.isSafeInteger(data.summary.projectedIncomeCents)
+        || !Number.isSafeInteger(data.summary.projectedExpenseCents)
+        || !Number.isSafeInteger(data.summary.projectedNetCents)
+        || !Number.isSafeInteger(data.summary.projectedClosingBalanceCents)
+        || !data.items.every((item) => item && typeof item.id === "string"
+          && typeof item.date === "string" && Number.isSafeInteger(item.amountCents))) {
+        throw new Error("forecast_snapshot_invalid_contract");
+      }
+      const nextSnapshot = data;
       accountIdRef.current = nextSnapshot.period.accountId;
       setSnapshot(nextSnapshot);
       return nextSnapshot;
