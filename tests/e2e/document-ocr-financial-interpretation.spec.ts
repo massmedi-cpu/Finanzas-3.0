@@ -607,3 +607,22 @@ test("REC-OCR-118 · invoice reference shaped as a calendar date is always doubt
   expect(genuine.documentNumber.value).toBe("F-2026-0042");
   expect(genuine.documentNumber.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-119 · rejected card and pending transfers cannot become paid methods", () => {
+  for (const raw of [
+    "Tarjeta rechazada", "Tarjeta denegada", "No se acepta efectivo",
+    "Pago pendiente por transferencia", "Sin tarjeta",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("not-paid", raw, 0.99),
+    ]));
+    expect(parsed.paymentMethod.value, raw).toBeNull();
+    expect(parsed.paymentMethod.trust, raw).toBe("not_detected");
+  }
+  const settled = interpretDocumentOcrFinancially(result([
+    line("settled", "Tarjeta rechazada. Forma de pago: Efectivo", 0.99),
+  ]));
+  expect(settled.paymentMethod.value).toBe("Efectivo");
+  expect(settled.paymentMethod.trust).toBe("reliable");
+});
