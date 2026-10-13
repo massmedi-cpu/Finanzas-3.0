@@ -298,7 +298,8 @@ test("REC-DOC-027 · PATCH aplicado pero listado 503 no pierde el borrador ni re
     }
     await route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify(list(DOCS, url)),
+      body: JSON.stringify(list(DOCS.map((doc) => doc.id === DOCS[0].id
+        ? { ...doc, issuerName: savedIssuer } : doc), url)),
     });
   });
 
