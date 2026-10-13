@@ -150,7 +150,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");
-    if (!id || !UUID.test(id)) throw new Error("invalid_document_id");
+    if (!id || !UUID.test(id) || searchParams.getAll("id").length !== 1) throw new Error("invalid_document_id");
     if ([...searchParams.keys()].some((key) => key !== "id")) throw new Error("invalid_document_download_query");
 
     const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
