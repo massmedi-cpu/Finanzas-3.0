@@ -77,11 +77,7 @@ async ({ page }) => {
         contractVersion: 2, documentId: id, ocrRunId, revision: 1,
         rawEvidenceImmutable: true, bankSource: "read_only",
         financialWrites: false, requiresHumanReview: true,
-        reviewedValues: {
-          type: posted.type, documentDate: posted.documentDate,
-          taxBaseCents: posted.taxBaseCents, taxesCents: posted.taxesCents,
-          totalCents: posted.totalCents,
-        },
+        reviewedValues: { ...posted },
       }),
     });
   });
