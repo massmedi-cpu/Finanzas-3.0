@@ -49,12 +49,48 @@ test("REC-DOC-MEM-004 · missing body never becomes a valid document", async () 
     .rejects.toMatchObject({ reason: "unavailable" } satisfies Partial<LimitedResponseBodyError>);
 });
 
-test("REC-DOC-MEM-005 · both source downloads enforce shared byte limit", () => {
+test("REC-DOC-MEM-005 · all original downloads enforce shared byte limit", () => {
   const drive = readFileSync(join(process.cwd(),
     "src/infrastructure/google/google-drive-document-downloader.ts"), "utf8");
   const privateRoute = readFileSync(join(process.cwd(),
     "app/api/documents/download/route.ts"), "utf8");
+  const ocrRoute = readFileSync(join(process.cwd(),
+    "app/api/documents/ocr/route.ts"), "utf8");
   expect(drive).toContain("readLimitedResponseBody(response, GOOGLE_DRIVE_OCR_MAX_BYTES)");
   expect(privateRoute).toContain("readLimitedResponseBody(response, MAX_FILE_BYTES)");
-  expect(privateRoute).not.toContain("await response.arrayBuffer()");
+  expect(ocrRoute).toContain("readLimitedResponseBody(response, MAX_BYTES)");
+  for (const source of [drive, privateRoute, ocrRoute]) {
+    expect(source).not.toContain("await response.arrayBuffer()");
+  }
+});
+
+test("REC-DOC-MEM-006 · OCR source with missing Content-Length cannot allocate an unbounded body", async () => {
+  let cancelCount = 0;
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([37, 80, 68, 70]));
+      controller.enqueue(new Uint8Array(64));
+      controller.enqueue(new Uint8Array(64));
+    },
+    cancel() { cancelCount += 1; },
+  }));
+  await expect(readLimitedResponseBody(response, 80))
+    .rejects.toMatchObject({ reason: "too_large" });
+  expect(cancelCount).toBe(1);
+});
+
+test("REC-DOC-MEM-007 · OCR stream exactly at cap is accepted; truncated stream is rejected", async () => {
+  const valid = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([37, 80, 68, 70]));
+      controller.enqueue(new Uint8Array([1, 2]));
+      controller.close();
+    },
+  }));
+  expect([...await readLimitedResponseBody(valid, 6)]).toEqual([37, 80, 68, 70, 1, 2]);
+  const broken = new Response(new ReadableStream<Uint8Array>({
+    pull(controller) { controller.error(new Error("truncated upstream")); },
+  }));
+  await expect(readLimitedResponseBody(broken, 6))
+    .rejects.toMatchObject({ reason: "read_failed" });
 });
