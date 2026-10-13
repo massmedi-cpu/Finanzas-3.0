@@ -695,3 +695,32 @@ test("REC-OCR-123 · comercio in a client trading name is not a certified seller
   expect(separateOwners.taxId.value).toBe("B12345674");
   expect(separateOwners.taxId.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-124 · fiscal ownership survives original OCR punctuation before normalization", () => {
+  for (const divider of [" · ", " | ", "; ", " / "]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("shared", "Cliente CIF B87654321" + divider + "Emisor CIF B12345674", 0.99),
+    ]));
+    expect(parsed.taxId.value, divider).toBe("B12345674");
+    expect(parsed.taxId.trust, divider).toBe("reliable");
+    expect(parsed.taxId.evidence[0]?.lineId).toBe("shared");
+  }
+});
+
+test("REC-OCR-125 · different issuer IDs require review even with valid checksums", () => {
+  const conflicting = interpretDocumentOcrFinancially(result([
+    line("first", "Emisor CIF B12345674", 0.99, 0.05),
+    line("second", "Emisor NIF 12345678Z", 0.99, 0.10),
+  ]));
+  expect(conflicting.taxId.trust).toBe("doubtful");
+  expect(["B12345674", "12345678Z"]).toContain(conflicting.taxId.value);
+  expect(conflicting.taxId.evidence).toHaveLength(1);
+
+  const identical = interpretDocumentOcrFinancially(result([
+    line("first", "Emisor CIF B12345674", 0.99, 0.05),
+    line("repeat", "Proveedor CIF B12345674", 0.97, 0.10),
+  ]));
+  expect(identical.taxId.value).toBe("B12345674");
+  expect(identical.taxId.trust).toBe("reliable");
+});
