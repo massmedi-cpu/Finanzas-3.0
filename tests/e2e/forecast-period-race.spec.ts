@@ -134,7 +134,7 @@ test("forecast keeps the newest period when an older request finishes later", as
   await expect(page.getByRole("heading", { name: "RESPUESTA OBSOLETA", exact: true })).toHaveCount(0);
 });
 
-test("forecast identifies the old period if loading the chosen dates fails", async ({ page }) => {
+test("forecast rejects stale totals when loading the chosen dates fails", async ({ page }) => {
   const today = madridTodayIso();
   const targetFrom = addIsoDays(today, 31);
   const baselineFrom = addIsoDays(today, 1);
@@ -158,9 +158,9 @@ test("forecast identifies the old period if loading the chosen dates fails", asy
   await page.getByLabel("Desde", { exact: true }).fill(targetFrom);
 
   const alert = page.locator("main").getByRole("alert");
-  await expect(alert).toContainText("No se pudo cargar la previsión");
   await expect(alert).toContainText("Los datos disponibles siguen intactos");
   await expect(alert).not.toContainText("source_unavailable");
-  await expect(page.locator("main").getByRole("status")).toContainText("Las cifras visibles corresponden al");
-  await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
+  // A failed request must not misrepresent the previous period as the newly selected period.
+  await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
 });

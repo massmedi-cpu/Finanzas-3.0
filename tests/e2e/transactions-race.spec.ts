@@ -399,7 +399,7 @@ test("REC-TXN-022 · an overlapping cursor page keeps verified rows and can be s
 
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await expect(page.getByText("PÁGINA ANTIGUA", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("2 de 2", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
   expect(cursorReads).toBe(2);
   expect(writes).toEqual([]);

@@ -108,7 +108,7 @@ test("Previsión premium conserva densidad, reflow y touch en seis anchos", asyn
 
   for (const width of [360, 430, 768, 1024, 1280, 1440]) {
     await page.setViewportSize({ width, height: 960 });
-    await page.goto("/forecast");
+    await page.goto("/forecast?dateFrom=2026-09-16&dateTo=2026-12-14");
 
     const heading = page.getByRole("heading", { name: "Previsión", exact: true });
     await expect(heading).toBeVisible();

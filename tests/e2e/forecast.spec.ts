@@ -282,7 +282,7 @@ test("forecast gateway validates payloads before SQL", async () => {
 test("forecast UI renders server cash flow and sends manual expense in cents", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
   const summary = page.getByRole("region", { name: "Resumen de previsión" });
@@ -329,7 +329,7 @@ test("una previsión vacía guía a recurrentes o al formulario manual", async (
     contentType: "application/json",
     body: JSON.stringify(emptySnapshot),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const empty = page.getByRole("status", { name: "Evaluación de liquidez pendiente" });
   await expect(empty.getByText("Sin datos suficientes para evaluar tensión")).toBeVisible();
@@ -374,7 +374,7 @@ test("la vuelta desde Recurrentes regenera una vez y enfoca solo el impacto conf
 test("el calendario muestra solo fechas consultadas y lleva al detalle del movimiento", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
   await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ })).toBeVisible();
@@ -424,7 +424,7 @@ test("el calendario separa la fecha real y excluye confirmados y descartados del
     contentType: "application/json",
     body: JSON.stringify({ ...baseSnapshot, items: [planned, confirmed, excluded] }),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
   await calendar.getByRole("button", { name: /15 de septiembre de 2026: 3 previsiones/ }).click();
@@ -437,7 +437,7 @@ test("el calendario separa la fecha real y excluye confirmados y descartados del
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   await page.getByRole("button", { name: "Excluir" }).click();
   await expect(page.getByText("Indica el motivo antes de excluir un elemento previsto.", { exact: true })).toBeVisible();
@@ -504,7 +504,7 @@ test("QA-21 · la curva de saldo coloca el cero en su escala real", async ({ pag
     contentType: "application/json",
     body: JSON.stringify(crossingSnapshot),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
   await expect(chart).toBeVisible();
@@ -548,7 +548,7 @@ test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero
     contentType: "application/json",
     body: JSON.stringify(zeroSnapshot),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
   await expect(chart).toBeVisible();
@@ -590,7 +590,7 @@ for (const staleAfterPatch of [true, false] as const) {
       };
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
     });
-    await page.goto("/forecast");
+    await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
     await page.getByRole("button", { name: "Excluir" }).click();
     await page.getByLabel("Motivo para excluir Seguro mensual").fill("El cargo ya no se espera");
     await page.getByRole("button", { name: "Excluir" }).click();

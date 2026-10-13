@@ -457,18 +457,32 @@ test("Preview protegido real expone el histórico persistido y revisiones en lec
   }
 });
 
-test("10.0.21 · paginación solapada no duplica filas ni selección", async ({ page }) => {
+test("10.0.21 · solapamiento se rechaza y la relectura conserva la selección", async ({ page }) => {
   await mockTransactionApi(page);
-  await page.route('**/api/transactions?*cursorBankDate*', route => route.fulfill({
-    json: { rows: [firstRow, secondRow], totalCount: 2, hasMore: false, nextCursor: null },
-  }));
+  let cursorReads = 0;
+  await page.route('**/api/transactions?*cursorBankDate*', async route => {
+    cursorReads += 1;
+    await route.fulfill({
+      json: {
+        rows: cursorReads === 1 ? [firstRow, secondRow] : [secondRow],
+        totalCount: 2, hasMore: false, nextCursor: null,
+      },
+    });
+  });
   await page.goto('/transactions');
   await page.getByTestId(`select-${firstId}`).check();
   await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toContainText('movimientos repetidos');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
+  await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
   await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByText('2 movimientos', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
   await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toContainText('2 seleccionados');
+  expect(cursorReads).toBe(2);
 });
 
 test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sola operación", async ({ page }) => {
