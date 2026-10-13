@@ -550,6 +550,22 @@ function editorMatchesDocument(editor: MetadataEditor, document: DocumentDetail[
     && editor.notes === saved.notes;
 }
 
+// An HTTP 200 for the archive is not sufficient evidence after a document
+// write. If the current page contains the document, its persisted summary must
+// match the independently re-read detail before showing "synchronized".
+// Missing items are allowed only because filters, scope and pagination can
+// legitimately exclude the document from the current archive page.
+function archiveAgreesWithDetail(archive: DocumentList, verified: DocumentDetail) {
+  const saved = verified.document;
+  const listed = archive.items.find((item) => item.id === saved.id);
+  return !listed || (listed.type === saved.type
+    && listed.status === saved.status
+    && listed.documentDate === saved.documentDate
+    && listed.issuerName === saved.issuerName
+    && listed.totalCents === saved.totalCents
+    && listed.notes === saved.notes);
+}
+
 async function getDocumentJson(url: string) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), DOCUMENT_READ_TIMEOUT_MS);
@@ -1082,13 +1098,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // If this document is visible within the requested page, require it to
     // agree with the authoritative detail before accepting a write.
     if (!archive || archive.key !== listUrl) return null;
-    const listed = archive.data.items.find((item) => item.id === id);
-    const saved = verifiedDetail.document;
-    if (listed && (listed.type !== saved.type || listed.status !== saved.status
-      || listed.documentDate !== saved.documentDate
-      || listed.issuerName !== saved.issuerName
-      || listed.totalCents !== saved.totalCents
-      || listed.notes !== saved.notes)) return null;
+    if (!archiveAgreesWithDetail(archive.data, verifiedDetail)) return null;
     return verifiedDetail;
   }, [loadList, loadDetail, listUrl]);
 
@@ -1099,7 +1109,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // Both readers handle transport errors locally; their promises can
     // resolve even when one failed. Never claim the whole document was
     // synchronized merely because Promise.all completed.
-    if (listVerified !== true || verifiedDetail?.document.id !== id) {
+    const archive = verifiedArchiveRef.current;
+    if (listVerified !== true || verifiedDetail?.document.id !== id
+      || !archive || archive.key !== listUrl
+      || !archiveAgreesWithDetail(archive.data, verifiedDetail)) {
+      // The saved OCR revision remains committed. Only the derived archive
+      // synchronization message is blocked until both reads agree.
       throw new Error("document_post_confirmation_refresh_failed");
     }
     setNotice("Revisión OCR confirmada y documento sincronizado.");
