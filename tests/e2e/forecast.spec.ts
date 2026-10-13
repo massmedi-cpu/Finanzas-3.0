@@ -596,14 +596,16 @@ for (const staleAfterPatch of [true, false] as const) {
     await page.getByRole("button", { name: "Excluir" }).click();
     await expect.poll(() => patchCount).toBe(1);
 
+    const operationAlert = page.locator("main").getByRole("alert").filter({ hasText: "puede haberse aplicado" });
     if (staleAfterPatch) {
-      await expect(page.locator("main").getByRole("alert")).toContainText("puede haberse aplicado");
+      await expect(operationAlert).toContainText("puede haberse aplicado");
       await expect(page.getByText("Elemento excluido del saldo previsto.")).toHaveCount(0);
       await expect(page.getByRole("button", { name: "Excluir" })).toBeVisible();
     } else {
       await expect(page.getByText("Elemento excluido del saldo previsto.")).toBeVisible();
       await expect(page.getByRole("button", { name: "Restaurar" })).toBeVisible();
-      await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+      // An independent chart-balance warning remains visible when appropriate.
+      await expect(operationAlert).toHaveCount(0);
     }
     expect(patchCount).toBe(1);
   });
