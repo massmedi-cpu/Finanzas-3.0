@@ -590,3 +590,20 @@ test("REC-OCR-117 · Razón social bajo bloque de destinatario nunca se presenta
   expect(owned.issuer.trust).toBe("doubtful");
   expect(owned.issuer.evidence[0]?.lineId).toBe("supplier");
 });
+
+
+test("REC-OCR-118 · invoice reference shaped as a calendar date is always doubtful", () => {
+  for (const candidate of ["12/10/2026", "12-10-2026", "2026/10/12"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("document-number", "Factura: " + candidate, 0.99),
+    ]));
+    expect(parsed.documentNumber.value).toBe(candidate);
+    expect(parsed.documentNumber.trust).toBe("doubtful");
+    expect(parsed.documentNumber.evidence[0]?.lineId).toBe("document-number");
+  }
+  const genuine = interpretDocumentOcrFinancially(result([
+    line("number", "Factura: F-2026-0042", 0.98),
+  ]));
+  expect(genuine.documentNumber.value).toBe("F-2026-0042");
+  expect(genuine.documentNumber.trust).toBe("reliable");
+});
