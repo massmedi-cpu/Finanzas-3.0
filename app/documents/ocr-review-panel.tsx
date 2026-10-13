@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
+import { sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
 import { interpretDocumentOcrFinancially, type DocumentOcrFinancialInterpretation } from "../../src/domain/document-ocr-financial-interpretation";
 import { useActionFeedback } from "../action-feedback";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
@@ -53,29 +54,9 @@ type DocumentDetailForReview = {
   notes?: string;
 };
 
-type ReviewedFinancialEvidence = {
-  type: "ticket" | "invoice" | "other";
-  documentDate: string | null;
-  taxBaseCents: number | null;
-  taxesCents: number | null;
-  totalCents: number | null;
-};
-
 type OcrHistory = {
   runs?: Array<{ id?: string; extractor?: string; extractedAt?: string }>;
-  reviews?: Array<{ revision?: number; ocrRunId?: string | null; reviewedValues?: Partial<ReviewedFinancialEvidence> }>;
-};
-
-function sameReviewedFinancialEvidence(
-  observed: Partial<ReviewedFinancialEvidence> | null | undefined,
-  expected: ReviewedFinancialEvidence | null,
-) {
-  return Boolean(expected && observed
-    && observed.type === expected.type
-    && observed.documentDate === expected.documentDate
-    && observed.taxBaseCents === expected.taxBaseCents
-    && observed.taxesCents === expected.taxesCents
-    && observed.totalCents === expected.totalCents);
+  reviews?: Array<{ revision?: number; ocrRunId?: string | null; reviewedValues?: unknown }>;
 }
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
@@ -330,7 +311,7 @@ export function OcrReviewPanel({
   const [confirmationUnverified, setConfirmationUnverified] = useState(false);
   const [checkingConfirmation, setCheckingConfirmation] = useState(false);
   const knownReviewRevision = useRef(0);
-  const pendingFinancialEvidence = useRef<ReviewedFinancialEvidence | null>(null);
+  const pendingFinancialEvidence = useRef<OcrConfirmedValues | null>(null);
   const [openingOriginal, setOpeningOriginal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
@@ -492,12 +473,15 @@ export function OcrReviewPanel({
           })),
         notes: draft.notes,
       };
+      // Keep the complete submitted payload for fail-closed reconciliation.
+      // Same totals alone cannot confirm an issuer, timestamp or product lines.
       pendingFinancialEvidence.current = {
-        type: payload.type,
-        documentDate: payload.documentDate,
-        taxBaseCents: payload.taxBaseCents,
-        taxesCents: payload.taxesCents,
-        totalCents: payload.totalCents,
+        type: payload.type, documentDate: payload.documentDate, documentTime: payload.documentTime,
+        issuerName: payload.issuerName, issuerTaxId: payload.issuerTaxId,
+        documentNumber: payload.documentNumber, billingPeriod: payload.billingPeriod,
+        taxBaseCents: payload.taxBaseCents, taxesCents: payload.taxesCents,
+        totalCents: payload.totalCents, paymentMethod: payload.paymentMethod,
+        lineItems: payload.lineItems, notes: payload.notes,
       };
       const saved = await readJson(await fetch("/api/documents/ocr-review", {
         method: "PATCH",
@@ -523,12 +507,7 @@ export function OcrReviewPanel({
         || saved?.bankSource !== "read_only"
         || saved?.financialWrites !== false
         || saved?.requiresHumanReview !== true
-        || !confirmedValues || typeof confirmedValues !== "object" || Array.isArray(confirmedValues)
-        || confirmedValues.type !== payload.type
-        || confirmedValues.documentDate !== payload.documentDate
-        || confirmedValues.taxBaseCents !== payload.taxBaseCents
-        || confirmedValues.taxesCents !== payload.taxesCents
-        || confirmedValues.totalCents !== payload.totalCents
+        || !sameConfirmedOcrValues(confirmedValues, pendingFinancialEvidence.current)
       ) {
         throw new Error("ocr_confirmation_unverified");
       }
@@ -581,7 +560,7 @@ export function OcrReviewPanel({
       const confirmed = (history.reviews ?? [])
         .filter((review) => review.ocrRunId === currentRunId
           && typeof review.revision === "number" && Number.isSafeInteger(review.revision)
-          && sameReviewedFinancialEvidence(review.reviewedValues, pendingFinancialEvidence.current))
+          && sameConfirmedOcrValues(review.reviewedValues, pendingFinancialEvidence.current))
         .reduce((max, review) => Math.max(max, review.revision ?? 0), 0);
       if (confirmed > knownReviewRevision.current) {
         knownReviewRevision.current = confirmed;
