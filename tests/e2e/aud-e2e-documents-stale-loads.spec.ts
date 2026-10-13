@@ -213,14 +213,31 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
-  // Failed detail verification blocks stale controls, while the in-memory
-  // draft is retained for the next verified recovery attempt.
+  // Failed detail verification blocks stale controls but must not silently
+  // turn the unsaved draft into a clean form or release the unload guard.
   await expect(issuer).toHaveCount(0);
+  await expect(page.getByTestId("documents-draft-protected")).toBeVisible();
+  expect(await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
   expect(patches).toBe(1);
 
+  // The user can dismiss the modal to recover the detail manually. This
+  // must NOT overwrite "Proveedor revisado" with stale persisted metadata.
+  await dialog.getByRole("button", { name: "Seguir editando" }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
   failRevalidation = false;
   needRevalidation = false;
   returnOldMetadata = true;
+  await page.getByTestId("documents-detail-error")
+    .getByRole("button", { name: "Reintentar detalle" }).click();
+  await expect(issuer).toHaveValue("Proveedor revisado");
+  await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
+
+  await archive.getByRole("button", { name: /Segunda factura\\.pdf/ }).click();
+  await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
   await expect(issuer).toHaveValue("Proveedor revisado");
