@@ -425,7 +425,11 @@ function extractTime(lines: LocatedLine[]) {
     if (unrelated.test(normalized) && !issueTimestamp.test(normalized)
       && !explicitTime.test(normalized)) continue;
     const candidate = fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
-    if (explicitTime.test(normalized) || issueTimestamp.test(normalized)) return candidate;
+    if (explicitTime.test(normalized) || issueTimestamp.test(normalized)) {
+      // A continuation page may contain legal timetables or timestamps.
+      // Textually clear does not prove this is the transaction time.
+      return item.pageNumber > 1 ? fieldRequiringReview(candidate) : candidate;
+    }
     unknown ??= fieldRequiringReview(candidate);
   }
   return unknown ?? emptyField<string>();
@@ -495,7 +499,13 @@ function extractIssuer(lines: LocatedLine[]) {
     if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) return fieldFrom(explicit, raw, raw);
   }
 
-  const ambiguous = findLabelled(lines, [/\brazon social\b/]);
+  // A label explicitly owned by the recipient is NOT an issuer candidate,
+  // even at doubtful confidence. Generic "Razón social" stays reviewable.
+  const ambiguous = lines.find((item) => {
+    const normalized = normalizeToken(item.line.text);
+    return /\brazon social\b/.test(normalized)
+      && !/\b(?:cliente|destinatario|receptor|comprador)\b/.test(normalized);
+  });
   if (ambiguous) {
     const raw = valueAfterLabel(ambiguous.line.text);
     if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) {
