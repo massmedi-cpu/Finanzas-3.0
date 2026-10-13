@@ -404,3 +404,37 @@ test("REC-TXN-022 · an overlapping cursor page keeps verified rows and can be s
   expect(cursorReads).toBe(2);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-TXN-023 · truncated final page cannot report a complete verified bank history", async ({ page }) => {
+  let repaired = false;
+  const writes: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, body: "{}" });
+      return;
+    }
+    if (new URL(route.request().url()).searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(repaired
+        ? { rows: [baseRow, stalePageRow], totalCount: 2, hasMore: false, nextCursor: null }
+        : { rows: [baseRow], totalCount: 2, hasMore: false, nextCursor: null }),
+    });
+  });
+
+  await page.goto("/transactions");
+  await expect(page.locator("main").getByRole("alert")).toContainText("recuento incoherente");
+  await expect(page.getByText("Histórico sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true })).toHaveCount(0);
+  repaired = true;
+  await page.getByRole("button", { name: "Reintentar listado" }).click();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("PÁGINA ANTIGUA", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
+  expect(writes).toEqual([]);
+});
