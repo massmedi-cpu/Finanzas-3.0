@@ -320,12 +320,14 @@ function extractTaxId(lines: LocatedLine[]) {
   const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
   let unassigned: OcrInterpretedField<string> | null = null;
   let recipientSection = false;
+  let issuerSection = false;
   let currentPage = -1;
 
   for (const item of lines) {
     if (item.pageNumber !== currentPage) {
       currentPage = item.pageNumber;
       recipientSection = false;
+      issuerSection = false;
     }
     const normalized = normalizeToken(item.line.text);
     const explicitlyIssuerOwned = explicitIssuerLabel.test(normalized);
@@ -334,8 +336,10 @@ function extractTaxId(lines: LocatedLine[]) {
     // issuer's tax ID, even if character confidence is 100%.
     if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a)\b/.test(normalized)) {
       recipientSection = true;
+      issuerSection = false;
     } else if (/^(?:datos?\s+(?:del?\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/.test(normalized)) {
       recipientSection = false;
+      issuerSection = true;
     }
     const match = item.line.text.toUpperCase().match(pattern);
     if (!match) continue;
@@ -344,7 +348,11 @@ function extractTaxId(lines: LocatedLine[]) {
     if (recipientSection && !explicitlyIssuerOwned) continue;
     const raw = match[0].replace(/\s+/g, "");
     const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
-    if (explicitlyIssuerOwned) return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
+    if (explicitlyIssuerOwned || issuerSection) {
+      // A seller heading on the preceding OCR row attributes the CIF/NIF,
+      // but a malformed checksum still requires manual verification.
+      return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
+    }
     // A bare CIF/NIF outside a recipient section is still uncertain.
     unassigned ??= fieldRequiringReview(candidate);
   }
