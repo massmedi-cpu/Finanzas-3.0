@@ -681,3 +681,17 @@ test("REC-OCR-122 · standalone customer-owned tax ID cannot be inferred as an i
   expect(attributed.taxId.value).toBeNull();
   expect(attributed.taxId.trust).toBe("not_detected");
 });
+
+
+test("REC-OCR-123 · comercio in a client trading name is not a certified seller CIF", () => {
+  const customerTradingName = interpretDocumentOcrFinancially(result([
+    line("client-trade", "Cliente: Comercio DEL BARRIO SL CIF B12345674", 0.99, 0.1),
+  ]));
+  expect(customerTradingName.taxId.trust).not.toBe("reliable");
+
+  const separateOwners = interpretDocumentOcrFinancially(result([
+    line("both", "Cliente CIF B87654321 · Emisor CIF B12345674", 0.99, 0.1),
+  ]));
+  expect(separateOwners.taxId.value).toBe("B12345674");
+  expect(separateOwners.taxId.trust).toBe("reliable");
+});
