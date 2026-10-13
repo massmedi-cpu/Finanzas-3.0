@@ -36,6 +36,38 @@ test("REC-FCAST-043 · rechaza IDs, importes, fechas y resultados repetidos pese
   expect(isForecastCandidateSnapshotForRequest({ ...source, candidates: [{ ...source.candidates[0], dayDifference: 12 }] }, query)).toBe(false);
   expect(isForecastCandidateSnapshotForRequest({ ...source, candidates: [{ ...source.candidates[0], amountCents: Number.MAX_SAFE_INTEGER + 1 }] }, query)).toBe(false);
 });
+test("REC-FCAST-050 · diferencia mostrada debe coincidir exactamente con los céntimos bancarios", () => {
+  const valid = fixture();
+  expect(isForecastCandidateSnapshotForRequest(valid, query)).toBe(true);
+  for (const differenceCents of [49, -50, 51, Number.MAX_SAFE_INTEGER]) {
+    expect(isForecastCandidateSnapshotForRequest({
+      ...valid,
+      candidates: [{ ...valid.candidates[0], differenceCents }],
+    }, query), `differenceCents=${differenceCents}`).toBe(false);
+  }
+  expect(isForecastCandidateSnapshotForRequest({
+    ...valid,
+    forecastAmountCents: Number.MAX_SAFE_INTEGER,
+    candidates: [{ ...valid.candidates[0], amountCents: -Number.MAX_SAFE_INTEGER }],
+  }, query)).toBe(false);
+});
+
+test("REC-FCAST-051 · no ofrecer candidatos de otra cuenta cuando la previsión tiene cuenta propia", () => {
+  const valid = fixture();
+  const scopedItem = { ...item, accountId };
+  expect(isForecastCandidateSnapshotForItem(valid, scopedItem, 7, 8)).toBe(true);
+  const otherAccount = "10000000-0000-4000-8000-000000000073";
+  expect(isForecastCandidateSnapshotForItem({
+    ...valid,
+    candidates: [{ ...valid.candidates[0], accountId: otherAccount }],
+  }, scopedItem, 7, 8)).toBe(false);
+  // Un forecast sin cuenta asignada permite cualquier cuenta legítima del usuario.
+  expect(isForecastCandidateSnapshotForItem({
+    ...valid,
+    candidates: [{ ...valid.candidates[0], accountId: otherAccount }],
+  }, { ...item, accountId: null }, 7, 8)).toBe(true);
+});
+
 test("REC-FCAST-045 · GET financiero rechaza parámetros de selección repetidos", async ({ request }) => {
   for (const queryString of [
     "dateFrom=2026-10-01&dateFrom=2026-10-02&dateTo=2026-10-31",
