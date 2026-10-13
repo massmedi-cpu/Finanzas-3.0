@@ -236,7 +236,7 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
   await expect(issuer).toHaveValue("Proveedor revisado");
   await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
 
-  await archive.getByRole("button", { name: /Segunda factura\\.pdf/ }).click();
+  await archive.getByRole("button", { name: /Segunda factura\.pdf/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
