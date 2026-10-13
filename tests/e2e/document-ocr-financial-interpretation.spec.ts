@@ -473,3 +473,21 @@ test("REC-OCR-112 · customer CIF on a continuation line is not assigned to issu
   expect(owned.taxId.value).toBe("B12345678");
   expect(owned.taxId.evidence[0]?.lineId).toBe("seller-tax-id");
 });
+
+
+test("REC-OCR-113 · labeled legal issuer names are trusted, recipient names still require review", () => {
+  for (const label of ["Vendedor", "Establecimiento", "Razón social del emisor", "Razón social proveedor"]) {
+    const raw = result([
+      line("recipient", "Razón social: CLIENTE EJEMPLO SL", 0.99, 0.05),
+      line("seller", label + ": TIENDA EXPRESA SL", 0.96, 0.16),
+    ]);
+    const interpretation = interpretDocumentOcrFinancially(raw);
+    expect(interpretation.issuer.value, label).toBe("TIENDA EXPRESA SL");
+    expect(interpretation.issuer.trust, label).toBe("reliable");
+    expect(interpretation.issuer.evidence[0]?.lineId, label).toBe("seller");
+  }
+  const ambiguous = interpretDocumentOcrFinancially(result([
+    line("recipient", "Razón social del destinatario: CLIENTE EJEMPLO SL", 0.99),
+  ]));
+  expect(ambiguous.issuer.trust).not.toBe("reliable");
+});
