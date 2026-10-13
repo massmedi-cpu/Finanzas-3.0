@@ -429,17 +429,32 @@ export function ForecastClient({
     manualRequestRef.current = { fingerprint, key: idempotencyKey };
 
     setManualErrors({});
-    await runMutation("manual", async () => {
-      await readJson(await fetch("/api/forecast", {
+    let acknowledgedId: string | null = null;
+    const verified = await runMutation("manual", async () => {
+      const saved = await readJson(await fetch("/api/forecast", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
         body: JSON.stringify(payload),
       }));
+      // The POST may have committed even if the following GET fails. Keep
+      // the same idempotency key and the editable draft until the created
+      // item is independently visible in the requested forecast snapshot.
+      acknowledgedId = typeof saved?.id === "string" ? saved.id : null;
+    });
+    const persisted = verified?.items.find((item) => item.id === acknowledgedId
+      && item.origin === "manual"
+      && item.date === payload.date
+      && item.concept === payload.concept
+      && item.amountCents === payload.amountCents);
+    if (persisted) {
       manualRequestRef.current = null;
       setManualConcept("");
       setManualAmount("");
-      setNotice("Previsión manual añadida.");
-    });
+      setNotice("Previsión manual añadida y verificada en el calendario.");
+    } else if (verified) {
+      setError("El alta puede haberse realizado, pero el calendario todavía no contiene la previsión identificada. Conservamos el formulario y la misma clave de operación para evitar duplicados.");
+      setNotice(null);
+    }
   }
 
   async function toggleExcluded(item: ForecastItem) {
