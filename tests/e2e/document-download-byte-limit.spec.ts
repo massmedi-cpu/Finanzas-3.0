@@ -94,3 +94,19 @@ test("REC-DOC-MEM-007 · OCR stream exactly at cap is accepted; truncated stream
   await expect(readLimitedResponseBody(broken, 6))
     .rejects.toMatchObject({ reason: "read_failed" });
 });
+
+test("REC-DOC-DOWNLOAD-008 · duplicate private document IDs are rejected before any remote fetch", async ({ request }) => {
+  const first = "93000000-0000-4000-8000-000000000117";
+  const second = "93000000-0000-4000-8000-000000000118";
+  for (const params of [
+    `id=${first}&id=${second}`,
+    `id=${first}&id=${first}`,
+  ]) {
+    const response = await request.get(`/api/documents/download?${params}`);
+    expect(response.status()).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "document_download_failed",
+      code: "invalid_document_id",
+    });
+  }
+});
