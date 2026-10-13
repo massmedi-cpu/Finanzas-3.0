@@ -186,6 +186,8 @@ export function ForecastClient({
   const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
   const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const candidateAbortRef = useRef<AbortController | null>(null);
+  const candidateSequence = useRef(0);
   const recurrenceHandoffAppliedRef = useRef<string | null>(null);
   const [recurrenceFlowState, setRecurrenceFlowState] = useState<RecurrenceFlowState>(
     recurrenceHandoff?.refresh ? "refreshing" : "review",
@@ -205,6 +207,12 @@ export function ForecastClient({
 
   const loadSnapshot = useCallback(async (): Promise<ForecastSnapshot | null> => {
     const sequence = ++loadSequence.current;
+    // Every independent snapshot reload invalidates prior reconciliation offers.
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    setCandidateFor(null);
+    setCandidateData(null);
     const requestedFrom = dateFromRef.current;
     const requestedTo = dateToRef.current;
     loadAbortRef.current?.abort();
@@ -277,6 +285,8 @@ export function ForecastClient({
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
   }, []);
 
   async function runMutation(
@@ -519,19 +529,36 @@ export function ForecastClient({
   }
 
   async function loadCandidates(item: ForecastItem) {
+    // Never search against a stale account or a period still being replaced.
+    if (!snapshot || snapshot.period.dateFrom !== dateFromRef.current
+      || snapshot.period.dateTo !== dateToRef.current
+      || !snapshot.items.some((entry) => entry.id === item.id)) return;
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    const sequence = candidateSequence.current;
+    const controller = new AbortController();
+    candidateAbortRef.current = controller;
+    const isCurrent = () => !controller.signal.aborted && sequence === candidateSequence.current;
     setCandidateFor(item.id);
     setCandidateData(null);
     setBusy(`candidates:${item.id}`);
     setError(null);
     try {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
-      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
+      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      }));
+      if (!isCurrent()) return;
       if (!isForecastCandidateSnapshotForItem(data, item, 7, 8)) {
         throw new Error("forecast_candidates_untrusted_response");
       }
       setCandidateData(data);
-      window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
+      window.requestAnimationFrame(() => {
+        if (isCurrent()) candidateCloseRef.current?.focus();
+      });
     } catch (err) {
+      if (!isCurrent()) return;
       const code = err instanceof Error ? err.message : "";
       setError(code === "forecast_candidates_untrusted_response"
         ? "La respuesta de conciliación no corresponde a esta previsión o contiene movimientos no verificados. No se permite conciliar hasta comprobarlos."
@@ -543,17 +570,35 @@ export function ForecastClient({
       setCandidateFor(null);
       window.requestAnimationFrame(() => candidateTriggerRefs.current[item.id]?.focus());
     } finally {
-      setBusy(null);
+      if (isCurrent()) {
+        candidateAbortRef.current = null;
+        setBusy(null);
+      }
     }
   }
 
   function closeCandidates(itemId: string) {
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
     setCandidateFor(null);
     setCandidateData(null);
+    setBusy((current) => current === `candidates:${itemId}` ? null : current);
     window.requestAnimationFrame(() => candidateTriggerRefs.current[itemId]?.focus());
   }
 
   async function reconcile(item: ForecastItem, transactionId: string | null) {
+    if (transactionId !== null) {
+      const visibleItem = snapshot?.items.find((entry) => entry.id === item.id);
+      const periodIsCurrent = snapshot?.period.dateFrom === dateFromRef.current
+        && snapshot?.period.dateTo === dateToRef.current;
+      if (!visibleItem || !periodIsCurrent || candidateFor !== item.id
+        || !candidateData || !isForecastCandidateSnapshotForItem(candidateData, visibleItem, 7, 8)
+        || !candidateData.candidates.some((candidate) => candidate.transactionId === transactionId)) {
+        setError("La coincidencia bancaria ya no está verificada para el periodo actual. Vuelve a buscar el movimiento real.");
+        return;
+      }
+    }
     const verified = await runMutation(`reconcile:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
@@ -886,7 +931,7 @@ export function ForecastClient({
                             ) : null}
                           </div>
 
-                          {candidateFor === item.id ? (
+                          {candidateFor === item.id && snapshot?.period.dateFrom === dateFrom && snapshot?.period.dateTo === dateTo ? (
                             <div id={candidatesId} className={styles.candidates} role="group" aria-label={`Movimientos reales candidatos para ${item.concept}`}>
                               <div className={styles.candidateHeader}>
                                 <strong>Candidatos reales ±7 días</strong>
