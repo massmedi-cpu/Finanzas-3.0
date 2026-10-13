@@ -450,7 +450,15 @@ function extractDocumentNumber(lines: LocatedLine[]) {
       // Un título genérico como “Factura simplificada” no es un número de documento.
       // Exigimos una señal estructural mínima (al menos un dígito) para no inventarlo.
       if (!candidate || !/\d/.test(candidate)) continue;
-      return fieldFrom(item, match![0], candidate);
+      const field = fieldFrom(item, match![0], candidate);
+      // Invoice numbers sometimes resemble calendar dates, and OCR can
+      // misidentify a printed issue date after "Factura:" as its number.
+      // Preserve the candidate and its evidence, but never certify a
+      // date-shaped reference without the owner's review.
+      if (/^\d{1,4}[/.\-]\d{1,2}[/.\-]\d{2,4}$/.test(candidate)) {
+        return fieldRequiringReview(field);
+      }
+      return field;
     }
   }
   return emptyField<string>();
