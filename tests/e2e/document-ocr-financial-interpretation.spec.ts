@@ -519,3 +519,47 @@ test("REC-OCR-114 · CIF del emisor puede seguir a su encabezado; CIF del client
   expect(customerOnly.taxId.value).toBeNull();
   expect(customerOnly.taxId.trust).toBe("not_detected");
 });
+
+
+test("REC-OCR-115 · razón social explícita de destinatario no produce falso emisor", () => {
+  const raw = result([
+    line("recipient", "Razón social del destinatario: CLIENTE INDUSTRIAL SL", 0.99, 0.05),
+    line("total", "TOTAL 40,00 €", 0.96, 0.8),
+  ]);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.issuer.value).toBeNull();
+  expect(parsed.issuer.trust).toBe("not_detected");
+  expect(parsed.totalCents.value).toBe(4000);
+  expect(raw.plainText).toContain("CLIENTE INDUSTRIAL SL");
+
+  // A standalone legal-name label has ambiguous ownership; expose it
+  // for human review without elevating the field to "reliable".
+  const unknown = interpretDocumentOcrFinancially(result([
+    line("legal", "Razón social: EMPRESA NO ATRIBUIDA SL", 0.99),
+  ]));
+  expect(unknown.issuer.value).toBe("EMPRESA NO ATRIBUIDA SL");
+  expect(unknown.issuer.trust).toBe("doubtful");
+});
+
+test("REC-OCR-116 · time from continuation page is doubtful, not a certified purchase timestamp", () => {
+  const raw = result([line("header", "FACTURA SERVICIOS", 0.99, 0.03)]);
+  const annex = line("annex-time", "FECHA/HORA: 13/10/2026 14:05", 0.99, 0.08);
+  raw.pages.push({
+    pageNumber: 2,
+    lines: [annex],
+    plainText: annex.text,
+    layoutText: annex.text,
+  });
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.date.value).toBe("2026-10-13");
+  expect(parsed.date.trust).toBe("doubtful");
+  expect(parsed.time.value).toBe("14:05");
+  expect(parsed.time.trust).toBe("doubtful");
+  expect(parsed.time.evidence[0]?.pageNumber).toBe(2);
+
+  const ticket = interpretDocumentOcrFinancially(result([
+    line("ticket-time", "FECHA/HORA: 13/10/2026 14:05", 0.97, 0.08),
+  ]));
+  expect(ticket.date.trust).toBe("reliable");
+  expect(ticket.time.trust).toBe("reliable");
+});
