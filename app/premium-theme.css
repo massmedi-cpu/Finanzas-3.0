@@ -29,7 +29,6 @@ nav[aria-label="Navegación principal"] a[aria-current="page"] {
 }
 main[aria-busy] > section[aria-label="Estado de los datos bancarios"],
 main[aria-busy] article,
-.reset-card,
 .configuration-hero,
 .config-panel {
   border-color: var(--color-border);
