@@ -171,3 +171,30 @@ for (const failure of ["http_503", "stale_200"] as const) {
     await expect(amount).toHaveValue("");
   });
 }
+
+
+for (const invalidResponse of ["other_period", "invalid_amount"] as const) {
+  test(invalidResponse === "other_period"
+    ? "REC-FCAST-035 · HTTP 200 with a different forecast period never displays another month's money"
+    : "REC-FCAST-036 · HTTP 200 with unsafe forecast totals is not financial evidence", async ({ page }) => {
+    let reads = 0;
+    await page.route("**/api/forecast*", async (route) => {
+      reads += 1;
+      const url = new URL(route.request().url());
+      const from = url.searchParams.get("dateFrom") ?? "2026-10-01";
+      const to = url.searchParams.get("dateTo") ?? "2026-10-31";
+      const valid = forecastSnapshot(from, to, {
+        date: "2026-10-15", concept: "DATO AJENO NO VERIFICADO", amountCents: -8999,
+      });
+      const payload = invalidResponse === "other_period"
+        ? { ...valid, period: { ...valid.period, dateFrom: "2026-09-01" } }
+        : { ...valid, summary: { ...valid.summary, projectedClosingBalanceCents: Number.MAX_SAFE_INTEGER + 10 } };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+    });
+    await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+    await expect(page.locator("main").getByRole("alert")).toContainText("No se mostrarán como previsión verificada");
+    await expect(page.getByRole("heading", { name: "DATO AJENO NO VERIFICADO" })).toHaveCount(0);
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toHaveCount(0);
+    expect(reads).toBeGreaterThanOrEqual(1);
+  });
+}
