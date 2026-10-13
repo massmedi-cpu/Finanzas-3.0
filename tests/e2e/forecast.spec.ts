@@ -633,14 +633,20 @@ test("REC-FCAST-044 · rechaza candidatos bancarios de otra previsión antes de 
 
 test("REC-FCAST-046 · no confunde una búsqueda en curso con ausencia de movimientos reales", async ({ page }) => {
   await mockForecastApi(page, []);
+  let releaseLookup: () => void = () => {};
+  const lookupGate = new Promise<void>((resolve) => { releaseLookup = resolve; });
   await page.route("**/api/forecast?*itemId*", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await lookupGate;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(candidates) });
   });
   await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
   await page.getByRole("button", { name: "Buscar movimiento real" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Buscando coincidencias bancarias verificables" })).toBeVisible();
-  await expect(page.getByText("No hay movimientos elegibles cercanos con el mismo signo.")).toHaveCount(0);
+  try {
+    await expect(page.getByRole("status").filter({ hasText: "Buscando coincidencias bancarias verificables" })).toBeVisible();
+    await expect(page.getByText("No hay movimientos elegibles cercanos con el mismo signo.")).toHaveCount(0);
+  } finally {
+    releaseLookup();
+  }
   await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toBeVisible();
   await expect(page.getByText("Buscando coincidencias bancarias verificables")).toHaveCount(0);
 });
