@@ -38,15 +38,6 @@ nav[aria-label="Más secciones"] button:focus-visible {
     --color-text-muted: #cbd6e9;
   }
 
-  /* The light theme defines its tokens on html[data-theme], which has higher
-     specificity than :root. Explicitly override that scope when the user
-     requests additional contrast rather than retaining pale borders. */
-  html[data-theme="light"] {
-    --color-text-muted: #30475f;
-    --color-border: #758195;
-    --color-border-strong: #4a617e;
-  }
-
   .financial-brand,
   .premium-primary-nav,
   nav[aria-label="Navegación móvil"] {
