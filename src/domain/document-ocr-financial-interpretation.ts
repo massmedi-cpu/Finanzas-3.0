@@ -533,6 +533,16 @@ function extractIssuer(lines: LocatedLine[]) {
     // its unlabelled name to a supposed merchant just because it is printed
     // near the top with excellent character recognition.
     if (/^(?:(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a|factura\s+a)|razon social\s+(?:(?:del|de la)\s+)?(?:cliente|destinatario|receptor|comprador))\b/.test(normalized)) break;
+    // If a labelled legal-name row reaches this low-confidence fallback,
+    // never render its "Razón social:" prefix as part of the merchant name.
+    // Recipient-owned labels were stopped above; ownership remains doubtful.
+    if (/^razon\s+social\s*[:\-]/.test(normalized)) {
+      const name = valueAfterLabel(text);
+      if (name && (name.match(/\p{L}/gu) ?? []).length >= 2) {
+        return fieldRequiringReview(fieldFrom(item, name, name));
+      }
+      continue;
+    }
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
