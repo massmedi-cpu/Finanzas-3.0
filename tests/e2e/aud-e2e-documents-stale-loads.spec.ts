@@ -196,7 +196,8 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
     }
     await route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify(list(DOCS, url)),
+      body: JSON.stringify(list(DOCS.map((doc) => doc.id === DOCS[0].id
+        ? { ...doc, issuerName: updatedIssuer } : doc), url)),
     });
   });
 
