@@ -302,3 +302,50 @@ test("Saldo de Inicio no presenta datos vacíos antes de consultar una serie ban
   await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
   expect(reads).toBe(1);
 });
+
+
+test("REC-HOME-BAL-002 · retry clears a stale balance error before any new bank evidence", async ({ page }) => {
+  await mockInicio(page);
+  let reads = 0;
+  let releaseRead: (() => void) | null = null;
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  await page.route(/\/api\/financial(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") !== "balance_series") return route.fallback();
+    reads += 1;
+    if (reads === 1) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "temporarily_unavailable" }),
+      });
+      return;
+    }
+    await readGate;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        dateFrom: url.searchParams.get("dateFrom"),
+        dateTo: url.searchParams.get("dateTo"),
+        accountId: null, rows: [],
+        principles: {
+          bankSource: "read_only",
+          balanceSource: "financial_account_balances",
+          cashFlowReconstruction: false,
+          getHasSideEffects: false,
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("group", { name: "Vista de evolución financiera" })
+    .getByRole("button", { name: "Saldo", exact: true }).click();
+  const failure = page.getByText("No se ha podido cargar la evolución del saldo.", { exact: false });
+  await expect(failure).toBeVisible();
+  await page.getByRole("button", { name: "Reintentar saldo" }).click();
+  await expect(failure).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Cargando evolución del saldo" })).toBeVisible();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toHaveCount(0);
+  releaseRead?.();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
+  expect(reads).toBe(2);
+});
