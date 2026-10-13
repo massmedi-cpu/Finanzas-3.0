@@ -200,12 +200,15 @@ export function isForecastCandidateSnapshotForRequest(
       || candidate.amountCents === 0
       || Math.sign(candidate.amountCents) !== Math.sign(data.forecastAmountCents!)
       || !Number.isSafeInteger(candidate.differenceCents)
+      || candidate.differenceCents < 0
       || !Number.isSafeInteger(candidate.dayDifference)
       || candidate.dayDifference < 0
       || candidate.dayDifference > requested.days) return false;
     const actualDays = Math.round(Math.abs(
       Date.parse(candidate.date + "T00:00:00Z") - Date.parse(data.forecastDate + "T00:00:00Z"),
     ) / 86_400_000);
+    const calculatedDifference = Math.abs(candidate.amountCents - data.forecastAmountCents!);
+    if (!Number.isSafeInteger(calculatedDifference) || candidate.differenceCents !== calculatedDifference) return false;
     if (actualDays !== candidate.dayDifference) return false;
     ids.add(candidate.transactionId);
     return true;
@@ -214,11 +217,13 @@ export function isForecastCandidateSnapshotForRequest(
 
 export function isForecastCandidateSnapshotForItem(
   value: unknown,
-  item: Pick<ForecastItem, "id" | "date" | "amountCents">,
+  item: Pick<ForecastItem, "id" | "date" | "amountCents"> & Partial<Pick<ForecastItem, "accountId">>,
   days: number,
   limit: number,
 ): value is ForecastCandidateSnapshot {
   return isForecastCandidateSnapshotForRequest(value, { itemId: item.id, days, limit })
     && value.forecastDate === item.date
-    && value.forecastAmountCents === item.amountCents;
+    && value.forecastAmountCents === item.amountCents
+    // A forecast tied to one bank account must never offer another account for reconciliation.
+    && (item.accountId == null || value.candidates.every((candidate) => candidate.accountId === item.accountId));
 }
