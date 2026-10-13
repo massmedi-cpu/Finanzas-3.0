@@ -213,6 +213,8 @@ export function ForecastClient({
     candidateAbortRef.current = null;
     setCandidateFor(null);
     setCandidateData(null);
+    // An aborted GET never reaches its own finalizer; release only lookup busy state.
+    setBusy((current) => current?.startsWith("candidates:") ? null : current);
     const requestedFrom = dateFromRef.current;
     const requestedTo = dateToRef.current;
     loadAbortRef.current?.abort();
