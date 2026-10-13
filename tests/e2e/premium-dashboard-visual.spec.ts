@@ -176,3 +176,35 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
   ).toBe(true);
 });
+
+
+test("REC-UI-THEME-019 · Configuración mantiene profundidad y fondos diseñados en claro y oscuro", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: '{"error":"theme_visual_fixture_no_financial_data"}',
+    });
+  });
+  await page.goto("/configuration");
+  const hero = page.locator(".configuration-hero");
+  await expect(hero).toBeVisible();
+
+  const shadows: string[] = [];
+  for (const theme of ["dark", "light"]) {
+    await page.locator("html").evaluate((node, value) => node.setAttribute("data-theme", value), theme);
+    const computed = await hero.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        background: style.backgroundImage,
+        shadow: style.boxShadow,
+        textColor: style.color,
+      };
+    });
+    expect(computed.background, theme).toContain("linear-gradient(");
+    expect(computed.shadow, theme).not.toBe("none");
+    expect(computed.textColor, theme).not.toBe("transparent");
+    shadows.push(computed.shadow);
+  }
+  // A fixed dark elevation on every background makes the light theme muddy.
+  expect(shadows[0]).not.toBe(shadows[1]);
+});
