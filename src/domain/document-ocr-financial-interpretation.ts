@@ -315,9 +315,12 @@ function spanishTaxIdChecksumValid(raw: string): boolean {
 }
 
 function extractTaxId(lines: LocatedLine[]) {
-  const pattern = /\b(?:[XYZ]\s*[- ]?\s*\d{7}\s*[- ]?\s*[A-Z]|[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
-  const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
-  const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
+  const pattern = /\b(?:[XYZ]\s*[- ]?\s*\d{7}\s*[- ]?\s*[A-Z]|[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/gi;
+  const recipientHeader = /^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a)\b|^razon\s+social\s+(?:del|de\s+la)\s+(?:cliente|destinatario|receptor|comprador)\b/;
+  const issuerHeader = /^(?:datos?\s+(?:del?\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/;
+  const ownerBeforeId = /\b(emisor|proveedor|comercio|vendedor|cliente|destinatario|receptor|comprador)\b/g;
+  const issuerOwners = new Set(["emisor", "proveedor", "comercio", "vendedor"]);
+  const recipientOwners = new Set(["cliente", "destinatario", "receptor", "comprador"]);
   let unassigned: OcrInterpretedField<string> | null = null;
   let recipientSection = false;
   let issuerSection = false;
@@ -330,31 +333,37 @@ function extractTaxId(lines: LocatedLine[]) {
       issuerSection = false;
     }
     const normalized = normalizeToken(item.line.text);
-    const explicitlyIssuerOwned = explicitIssuerLabel.test(normalized);
-    // Recipient headers frequently occupy a separate OCR line from the
-    // customer's CIF/NIF. Never adopt that following identifier as the
-    // issuer's tax ID, even if character confidence is 100%.
-    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a)\b/.test(normalized)) {
+    // Ownership often appears on a separate OCR line. Carry it only within
+    // the same page, and reset when an opposing block header is encountered.
+    if (recipientHeader.test(normalized)) {
       recipientSection = true;
       issuerSection = false;
-    } else if (/^(?:datos?\s+(?:del?\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/.test(normalized)) {
+    } else if (issuerHeader.test(normalized)) {
       recipientSection = false;
       issuerSection = true;
     }
-    const match = item.line.text.toUpperCase().match(pattern);
-    if (!match) continue;
-    // An explicit issuer label overrides an earlier recipient header.
-    if (recipientLabel.test(normalized) && !explicitlyIssuerOwned) continue;
-    if (recipientSection && !explicitlyIssuerOwned) continue;
-    const raw = match[0].replace(/\s+/g, "");
-    const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
-    if (explicitlyIssuerOwned || issuerSection) {
-      // A seller heading on the preceding OCR row attributes the CIF/NIF,
-      // but a malformed checksum still requires manual verification.
-      return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
+
+    // One OCR row may contain TWO IDs: "Cliente CIF ... Emisor CIF ...".
+    // Never read the first ID and assign it to the second owner's label.
+    for (const match of item.line.text.matchAll(pattern)) {
+      const before = normalizeToken(item.line.text.slice(0, match.index ?? 0));
+      const owners = [...before.matchAll(ownerBeforeId)];
+      const nearest = owners.at(-1)?.[1] ?? null;
+      const explicitlyIssuerOwned = nearest !== null && issuerOwners.has(nearest);
+      const explicitlyRecipientOwned = nearest !== null && recipientOwners.has(nearest);
+      if (explicitlyRecipientOwned) continue;
+      if (recipientSection && !explicitlyIssuerOwned) continue;
+      const raw = match[0].replace(/\s+/g, "");
+      const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
+      if (explicitlyIssuerOwned || issuerSection) {
+        // Checksum + issuer ownership are both mandatory for a "reliable"
+        // tax ID. The OCR confidence alone is not fiscal verification.
+        return spanishTaxIdChecksumValid(candidate.value ?? "")
+          ? candidate : fieldRequiringReview(candidate);
+      }
+      // An ownerless tax ID remains visible for review, not auto-confirmed.
+      unassigned ??= fieldRequiringReview(candidate);
     }
-    // A bare CIF/NIF outside a recipient section is still uncertain.
-    unassigned ??= fieldRequiringReview(candidate);
   }
   return unassigned ?? emptyField<string>();
 }
