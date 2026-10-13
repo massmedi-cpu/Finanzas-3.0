@@ -482,9 +482,16 @@ function extractPaymentMethod(lines: LocatedLine[]) {
   let unlabelled: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
-    // A denied direct debit is not a confirmed payment method.
-    if (/\b(?:no|sin)\s+domiciliad[oa]s?\b/.test(normalized)) continue;
-    const hit = keywords.find((entry) => entry.pattern.test(normalized));
+    // A rejected payment, a future intention to pay and a payment-method
+    // restriction are not proof of a completed charge.
+    if (/\b(?:pago\s+pendiente|pendiente\s+de\s+pago|sin\s+pagar|no\s+pagad[oa]|operacion\s+denegada|transaccion\s+rechazada)\b/.test(normalized)) continue;
+    const rejectedCard = /\b(?:tarjeta|visa|mastercard)\s+(?:rechazad[ao]s?|denegad[ao]s?)\b|\b(?:no\s+se\s+acepta|sin)\s+(?:pagos?\s+(?:en|con)\s+)?(?:tarjeta|visa|mastercard)\b/.test(normalized);
+    const rejectedCash = /\b(?:no\s+se\s+acepta|sin)\s+(?:pago\s+en\s+)?efectivo\b/.test(normalized);
+    const rejectedDebit = /\b(?:no|sin)\s+domiciliad[oa]s?\b/.test(normalized);
+    const hit = keywords.find((entry) => entry.pattern.test(normalized)
+      && !(rejectedCard && entry.value === "Tarjeta")
+      && !(rejectedCash && entry.value === "Efectivo")
+      && !(rejectedDebit && entry.value === "Domiciliación"));
     if (!hit) continue;
     const field = fieldFrom(item, item.line.text.trim(), hit.value);
     const explicitlyLabelled = /\b(?:forma|medio|metodo)\s+de\s+pago\b|\bpago\s*[:=-]/.test(normalized);
