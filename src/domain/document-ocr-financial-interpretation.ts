@@ -469,6 +469,8 @@ function extractTime(lines: LocatedLine[]) {
   // FECHA/HORA or FECHA Y HORA. Prefer that timestamp, not opening hours.
   const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
   let unknown: OcrInterpretedField<string> | null = null;
+  let issueTime: OcrInterpretedField<string> | null = null;
+  let contradictoryIssueTimes = false;
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
@@ -479,10 +481,20 @@ function extractTime(lines: LocatedLine[]) {
     if (explicitTime.test(normalized) || issueTimestamp.test(normalized)) {
       // A continuation page may contain legal timetables or timestamps.
       // Textually clear does not prove this is the transaction time.
-      return item.pageNumber > 1 ? fieldRequiringReview(candidate) : candidate;
+      const attributed = item.pageNumber > 1 ? fieldRequiringReview(candidate) : candidate;
+      if (issueTime && issueTime.value !== attributed.value) {
+        contradictoryIssueTimes = true;
+        if (issueTime.trust !== "reliable" && attributed.trust === "reliable") {
+          issueTime = attributed;
+        }
+      } else {
+        issueTime ??= attributed;
+      }
+      continue;
     }
     unknown ??= fieldRequiringReview(candidate);
   }
+  if (issueTime) return contradictoryIssueTimes ? fieldRequiringReview(issueTime) : issueTime;
   return unknown ?? emptyField<string>();
 }
 
