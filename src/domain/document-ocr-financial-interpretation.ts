@@ -501,9 +501,22 @@ function extractIssuer(lines: LocatedLine[]) {
 
   // A label explicitly owned by the recipient is NOT an issuer candidate,
   // even at doubtful confidence. Generic "Razón social" stays reviewable.
+  let inRecipientSection = false;
+  let lastPage = -1;
   const ambiguous = lines.find((item) => {
+    if (item.pageNumber !== lastPage) {
+      lastPage = item.pageNumber;
+      inRecipientSection = false;
+    }
     const normalized = normalizeToken(item.line.text);
-    return /\brazon social\b/.test(normalized)
+    // Owner context may be on an earlier OCR row, not in the "Razón
+    // social" row itself. Recipient legal names are never merchant leads.
+    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador)\b/.test(normalized)) {
+      inRecipientSection = true;
+    } else if (/^(?:datos?\s+(?:del?\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/.test(normalized)) {
+      inRecipientSection = false;
+    }
+    return !inRecipientSection && /\brazon social\b/.test(normalized)
       && !/\b(?:cliente|destinatario|receptor|comprador)\b/.test(normalized);
   });
   if (ambiguous) {
