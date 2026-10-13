@@ -27,10 +27,10 @@ nav[aria-label="Navegación principal"] a[aria-current="page"] {
   color: var(--color-text);
   box-shadow: var(--shadow-primary-inset);
 }
+/* Keep the custom Settings hero/panel gradients and panel-depth shadows.
+   The generic card rule previously flattened both themes on those screens. */
 main[aria-busy] > section[aria-label="Estado de los datos bancarios"],
-main[aria-busy] article,
-.configuration-hero,
-.config-panel {
+main[aria-busy] article {
   border-color: var(--color-border);
   background: var(--surface-card);
   color: var(--color-text);
