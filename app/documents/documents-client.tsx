@@ -686,10 +686,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [uploadUnverified, setUploadUnverified] = useState(false);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
+  // Preserve unsaved changes even when the detail is hidden after a failed read.
+  const [draftPendingVerification, setDraftPendingVerification] = useState(false);
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
   const metadataDirty = useMemo(
-    () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
-    [detail, editor],
+    () => Boolean((detail && !editorMatchesDocument(editor, detail.document))
+      || (draftPendingVerification && selectedId && !detail)),
+    [detail, editor, draftPendingVerification, selectedId],
   );
 
   const listSequence = useRef(0);
@@ -735,6 +738,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
+  const draftPendingVerificationRef = useRef(false);
   const bypassUnloadOnceRef = useRef(false);
   const exitReturnFocusRef = useRef<HTMLElement | null>(null);
   selectedIdRef.current = selectedId;
@@ -923,12 +927,17 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // matching, complete GET can unblock a previous failed readback.
       setDetailLoadFailed(false);
       setDetail(data);
-      if (!preserveEditor) {
+      const recoveringDraft = draftPendingVerificationRef.current;
+      if (!preserveEditor && !recoveringDraft) {
         setDesignationOpen(false);
         setDesignationReason("");
         setDesignationReviewed(false);
+        setEditor(editorFromDocument(data.document));
       }
-      if (!preserveEditor) setEditor(editorFromDocument(data.document));
+      if (recoveringDraft) {
+        draftPendingVerificationRef.current = false;
+        setDraftPendingVerification(false);
+      }
       return data;
     } catch (caught) {
       if (sequence === detailSequence.current && selectedIdRef.current === id) {
@@ -936,6 +945,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         // write is never proof that the old detail is still accurate. Fail
         // closed for BOTH explicit and silent reads: stale controls must not
         // offer metadata edits or banking associations until verification.
+        // Fail closed for stale controls, but keep the unsaved draft dirty.
+        if (metadataDirtyRef.current || draftPendingVerificationRef.current) {
+          draftPendingVerificationRef.current = true;
+          setDraftPendingVerification(true);
+          metadataDirtyRef.current = true;
+        }
         setDetailLoadFailed(true);
         setDetail(null);
         setCandidates(null);
@@ -1037,6 +1052,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const continueDocumentExit = (target: PendingDocumentExit) => {
     setPendingExit(null);
     metadataDirtyRef.current = false;
+    draftPendingVerificationRef.current = false;
+    setDraftPendingVerification(false);
     if (target.type === "document") {
       if (detail) setEditor(editorFromDocument(detail.document));
       setAuthRecovery(null);
@@ -1856,6 +1873,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
                 <p>No podemos verificar la ficha. Para proteger tus datos, se han desactivado la edición, el OCR y las asociaciones hasta que la consulta sea válida.</p>
+                {draftPendingVerification ? <p role="alert" data-testid="documents-draft-protected">Tu borrador sigue protegido en esta pestaña. Reintentar el detalle no sustituirá sus cambios; no cierres esta pestaña antes de guardarlos o descartarlos.</p> : null}
                 <button type="button" className={styles.secondaryButton} onClick={() => void loadDetail(selectedId)}>Reintentar detalle</button>
               </div>
             ) : (
