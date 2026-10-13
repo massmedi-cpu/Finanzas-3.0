@@ -34,7 +34,11 @@ const ocr = {
   principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
 };
 
-test("REC-DOC-OCR-028 · successful OCR revision cannot claim archive sync while GET list remains stale", async ({ page }) => {
+for (const staleAfterPatch of [true, false] as const) {
+test(staleAfterPatch
+  ? "REC-DOC-OCR-028 · successful OCR revision cannot claim archive sync while GET list remains stale"
+  : "REC-DOC-OCR-029 · consistent independent detail and archive permit synchronized success",
+async ({ page }) => {
   let savedDocument = { ...baseDocument };
   let staleList = false;
   let confirmations = 0;
@@ -66,7 +70,7 @@ test("REC-DOC-OCR-028 · successful OCR revision cannot claim archive sync while
       notes: posted.notes, type: posted.type,
       updatedAt: "2026-10-13T08:11:00Z",
     };
-    staleList = true;
+    staleList = staleAfterPatch;
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
@@ -120,8 +124,13 @@ test("REC-DOC-OCR-028 · successful OCR revision cannot claim archive sync while
   await button.click();
 
   await expect.poll(() => confirmations).toBe(1);
-  await expect(panel.getByText(/La revisión se ha guardado, pero no se pudo actualizar el listado/)).toBeVisible();
-  await expect(page.getByText("Revisión OCR confirmada y documento sincronizado.")).toHaveCount(0);
+  if (staleAfterPatch) {
+    await expect(panel.getByText(/La revisión se ha guardado, pero no se pudo actualizar el listado/)).toBeVisible();
+    await expect(page.getByText("Revisión OCR confirmada y documento sincronizado.")).toHaveCount(0);
+  } else {
+    await expect(page.getByText("Revisión OCR confirmada y documento sincronizado.")).toBeVisible();
+    await expect(panel.getByText(/La revisión se ha guardado, pero no se pudo actualizar el listado/)).toHaveCount(0);
+  }
   await expect(panel.getByRole("button", { name: /Confirmado/ })).toBeVisible();
   expect(confirmations).toBe(1);
   expect(writes).toEqual([]);
@@ -129,3 +138,4 @@ test("REC-DOC-OCR-028 · successful OCR revision cannot claim archive sync while
   // disagree. The UI must not turn this into a false all-green status.
   expect(savedDocument.issuerName).toBe("PROVEEDOR CONFIRMADO");
 });
+}
