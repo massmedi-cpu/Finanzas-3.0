@@ -375,7 +375,10 @@ function extractDate(lines: LocatedLine[]) {
     const field = fieldFrom(item, numeric?.[0] ?? written?.[0] ?? "", iso);
     if (labelledNumeric || labelledWritten) {
       // Two competing labelled dates on one OCR row cannot both be trusted.
-      return labelledNumeric && labelledWritten ? fieldRequiringReview(field) : field;
+      // Dates on continuation pages may be annex/legal dates. A perfect OCR
+      // score alone does not prove that a page-two label is the issue date.
+      return item.pageNumber > 1 || (labelledNumeric && labelledWritten)
+        ? fieldRequiringReview(field) : field;
     }
     // Unlabelled date text may be correct, but we cannot prove its document role.
     unlabelled ??= fieldRequiringReview(field);
@@ -477,6 +480,10 @@ function extractIssuer(lines: LocatedLine[]) {
   for (const item of lines.slice(0, 8)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
+    // A recipient/customer header can span multiple OCR lines. Never promote
+    // its unlabelled name to a supposed merchant just because it is printed
+    // near the top with excellent character recognition.
+    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a|factura\s+a)\b/.test(normalized)) break;
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
