@@ -189,24 +189,34 @@ test("REC-UI-THEME-019 · Configuración mantiene profundidad y fondos diseñado
   const hero = page.locator(".configuration-hero");
   await expect(hero).toBeVisible();
 
-  const shadows: string[] = [];
-  for (const theme of ["dark", "light"]) {
-    await page.locator("html").evaluate((node, value) => node.setAttribute("data-theme", value), theme);
-    const computed = await hero.evaluate((element) => {
-      const style = getComputedStyle(element);
-      return {
-        background: style.backgroundImage,
-        shadow: style.boxShadow,
-        textColor: style.color,
-      };
-    });
-    expect(computed.background, theme).toContain("linear-gradient(");
-    expect(computed.shadow, theme).not.toBe("none");
-    expect(computed.textColor, theme).not.toBe("transparent");
-    shadows.push(computed.shadow);
+  // Compare both semantic CSS states in one browser task. A separate evaluate()
+  // per theme can race VisualPreferencesProvider's hydration and overwrite data-theme.
+  const computedThemes = await hero.evaluate((element) => {
+    const root = document.documentElement;
+    const originalTheme = root.getAttribute("data-theme");
+    try {
+      return (["dark", "light"] as const).map((theme) => {
+        root.setAttribute("data-theme", theme);
+        const style = getComputedStyle(element);
+        return {
+          theme,
+          background: style.backgroundImage,
+          shadow: style.boxShadow,
+          textColor: style.color,
+        };
+      });
+    } finally {
+      if (originalTheme === null) root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", originalTheme);
+    }
+  });
+  for (const computed of computedThemes) {
+    expect(computed.background, computed.theme).toContain("linear-gradient(");
+    expect(computed.shadow, computed.theme).not.toBe("none");
+    expect(computed.textColor, computed.theme).not.toBe("transparent");
   }
   // A fixed dark elevation on every background makes the light theme muddy.
-  expect(shadows[0]).not.toBe(shadows[1]);
+  expect(computedThemes[0].shadow).not.toBe(computedThemes[1].shadow);
 });
 
 
