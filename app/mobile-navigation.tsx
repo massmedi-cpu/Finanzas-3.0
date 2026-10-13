@@ -20,11 +20,16 @@ export default function MobileNavigation() {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  // An SSR button has no click/keyboard listeners until React hydrates.
+  // Prevent an apparently active mobile menu from swallowing its first tap
+  // or Enter before the client component is ready.
+  const [hydrated, setHydrated] = useState(false);
   const [favoriteHref, setFavoriteHref] = useState<MobileFavoriteHref>("/review");
   const panelRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    setHydrated(true);
     try {
       setFavoriteHref(readMobileFavorite(window.localStorage));
     } catch {
@@ -172,6 +177,7 @@ export default function MobileNavigation() {
           className={`${styles.mobileDockLink} ${styles.mobileMoreButton}${moreActive ? ` ${styles.mobileActive}` : ""}`}
           aria-expanded={moreOpen}
           aria-controls="mobile-more-navigation"
+          disabled={!hydrated}
           onClick={() => setMoreOpen((value) => !value)}
         >
           <span className={styles.mobileMoreGlyph}><ProductIcon name="more" /></span>
