@@ -120,6 +120,9 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
   if (
     url.protocol !== "https:"
     || url.hostname !== SUPABASE_STORAGE_HOST
+    || url.port !== ""
+    || url.username !== ""
+    || url.password !== ""
     || !url.pathname.startsWith("/storage/v1/object/sign/")
   ) {
     throw new Error("document_download_source_rejected");
