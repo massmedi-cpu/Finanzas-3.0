@@ -427,6 +427,10 @@ export default function TransactionsClient() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
   const [rows, setRows] = useState<TransactionRow[]>([]);
+  // A page is authoritative only if each movement has one stable identity.
+  // Track accepted page IDs synchronously outside React's deferred render,
+  // so an overlapping cursor cannot silently overwrite an earlier bank row.
+  const loadedTransactionIdsRef = useRef<Set<string>>(new Set());
   const [totalCount, setTotalCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<Cursor | null>(null);
@@ -532,7 +536,22 @@ export default function TransactionsClient() {
         && typeof result.hasMore === "boolean"
         && cursorValid && (!result.hasMore || (incoming.length > 0 && result.nextCursor != null));
       if (!valid) throw new Error("La respuesta del histórico es incompleta o incoherente. No se interpretará como una lista sin movimientos; reintenta la lectura.");
-      setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
+      const incomingIds = incoming.map((row) => row.id);
+      const accepted = append ? loadedTransactionIdsRef.current : new Set<string>();
+      const duplicated = new Set(incomingIds).size !== incomingIds.length
+        || incomingIds.some((id) => accepted.has(id));
+      const nextLoadedCount = accepted.size + incomingIds.length;
+      if (duplicated || nextLoadedCount > result.totalCount!
+        || (!result.hasMore && nextLoadedCount !== result.totalCount!)
+        || (result.hasMore && nextLoadedCount >= result.totalCount!)) {
+        // Do not turn a duplicate cursor page or a truncated HTTP 200 into
+        // an apparently correct bank history by de-duplicating its rows.
+        // On append failure the last verified page remains visible and
+        // "Cargar más" remains retryable, without writing anything.
+        throw new Error("La paginación bancaria ha devuelto movimientos repetidos o un recuento incoherente. Los datos anteriores siguen conservados; reintenta la lectura.");
+      }
+      loadedTransactionIdsRef.current = new Set([...accepted, ...incomingIds]);
+      setRows((current) => append ? [...current, ...incoming] : incoming);
       setTotalCount(result.totalCount!);
       setHasMore(result.hasMore!);
       setNextCursor(result.nextCursor ?? null);
@@ -547,6 +566,7 @@ export default function TransactionsClient() {
         ? "La consulta de movimientos ha superado 30 segundos. Puedes volver a leer el listado sin modificar los datos bancarios."
         : cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
+        loadedTransactionIdsRef.current = new Set();
         setListReadFailed(true);
         setRows([]);
         setTotalCount(0);
