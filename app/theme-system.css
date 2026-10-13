@@ -114,3 +114,13 @@ html[data-theme="light"] :is(input, select, textarea) {
     color-scheme: light dark;
   }
 }
+
+/* High-contrast overrides must follow the theme's scoped light tokens.
+   This file loads after the shared hardening layer in RootLayout. */
+@media (prefers-contrast: more) {
+  html[data-theme="light"] {
+    --color-text-muted: #30475f;
+    --color-border: #758195;
+    --color-border-strong: #4a617e;
+  }
+}
