@@ -319,17 +319,33 @@ function extractTaxId(lines: LocatedLine[]) {
   const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
   const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
   let unassigned: OcrInterpretedField<string> | null = null;
+  let recipientSection = false;
+  let currentPage = -1;
 
   for (const item of lines) {
+    if (item.pageNumber !== currentPage) {
+      currentPage = item.pageNumber;
+      recipientSection = false;
+    }
+    const normalized = normalizeToken(item.line.text);
+    const explicitlyIssuerOwned = explicitIssuerLabel.test(normalized);
+    // Recipient headers frequently occupy a separate OCR line from the
+    // customer's CIF/NIF. Never adopt that following identifier as the
+    // issuer's tax ID, even if character confidence is 100%.
+    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|facturar\s+a)\b/.test(normalized)) {
+      recipientSection = true;
+    } else if (/^(?:datos?\s+(?:del?\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/.test(normalized)) {
+      recipientSection = false;
+    }
     const match = item.line.text.toUpperCase().match(pattern);
     if (!match) continue;
-    const normalized = normalizeToken(item.line.text);
-    // Do not show the customer or recipient tax identifier as the issuer ID.
-    if (recipientLabel.test(normalized)) continue;
+    // An explicit issuer label overrides an earlier recipient header.
+    if (recipientLabel.test(normalized) && !explicitlyIssuerOwned) continue;
+    if (recipientSection && !explicitlyIssuerOwned) continue;
     const raw = match[0].replace(/\s+/g, "");
     const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
-    if (explicitIssuerLabel.test(normalized)) return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
-    // A bare CIF/NIF is recognized text, but its owner is not proven.
+    if (explicitlyIssuerOwned) return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
+    // A bare CIF/NIF outside a recipient section is still uncertain.
     unassigned ??= fieldRequiringReview(candidate);
   }
   return unassigned ?? emptyField<string>();
