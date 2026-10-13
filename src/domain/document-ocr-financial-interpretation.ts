@@ -535,8 +535,12 @@ function extractIssuer(lines: LocatedLine[]) {
       && !/\b(?:cliente|destinatario|receptor|comprador)\b/.test(normalized);
   });
   if (ambiguous) {
-    const raw = valueAfterLabel(ambiguous.line.text);
-    if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) {
+    // A standalone "Razón social" header is NOT a business name. The
+    // generic valueAfterLabel fallback would otherwise produce "social".
+    const raw = ambiguous.line.text.trim()
+      .replace(/^raz[oó]n\s+social\s*[:\-–—]?\s*/i, "").trim();
+    if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2
+      && !/^(?:de(?:l| la)\s+)?(?:emisor|proveedor|vendedor|cliente|destinatario)$/i.test(raw)) {
       return fieldRequiringReview(fieldFrom(ambiguous, raw, raw));
     }
   }
@@ -551,9 +555,10 @@ function extractIssuer(lines: LocatedLine[]) {
     // If a labelled legal-name row reaches this low-confidence fallback,
     // never render its "Razón social:" prefix as part of the merchant name.
     // Recipient-owned labels were stopped above; ownership remains doubtful.
-    if (/^razon\s+social\s*[:\-]/.test(normalized)) {
-      const name = valueAfterLabel(text);
-      if (name && (name.match(/\p{L}/gu) ?? []).length >= 2) {
+    if (/^razon\s+social\b/.test(normalized)) {
+      const name = text.replace(/^raz[oó]n\s+social\s*[:\-–—]?\s*/i, "").trim();
+      if (name && (name.match(/\p{L}/gu) ?? []).length >= 2
+        && !/^(?:de(?:l| la)\s+)?(?:emisor|proveedor|vendedor|cliente|destinatario)$/i.test(name)) {
         return fieldRequiringReview(fieldFrom(item, name, name));
       }
       continue;
