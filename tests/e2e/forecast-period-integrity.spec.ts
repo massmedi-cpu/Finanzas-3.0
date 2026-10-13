@@ -203,3 +203,15 @@ for (const invalidResponse of ["other_period", "invalid_amount", "other_account"
     expect(reads).toBeGreaterThanOrEqual(1);
   });
 }
+
+
+test("REC-FCAST-041 · una respuesta 502 por contrato bancario incoherente se explica sin mostrar dinero", async ({ page }) => {
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 502,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "invalid_forecast_snapshot", code: "invalid_forecast_snapshot_contract" }),
+  }));
+  await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no coinciden con la consulta");
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
+});

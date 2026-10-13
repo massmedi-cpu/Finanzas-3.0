@@ -93,7 +93,7 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
-  if (code === "forecast_snapshot_invalid_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
+  if (code === "forecast_snapshot_invalid_contract" || code === "invalid_forecast_snapshot_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
   if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
     return "La previsión no ha podido calcularse. Los datos disponibles siguen intactos; puedes reintentar.";
