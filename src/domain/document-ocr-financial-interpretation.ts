@@ -348,13 +348,25 @@ function extractTaxId(lines: LocatedLine[]) {
     for (const match of item.line.text.matchAll(pattern)) {
       const before = normalizeToken(item.line.text.slice(0, match.index ?? 0));
       const owners = [...before.matchAll(ownerBeforeId)];
-      const nearest = owners.at(-1)?.[1] ?? null;
+      const ownerMatch = owners.at(-1);
+      const nearest = ownerMatch?.[1] ?? null;
       const explicitlyIssuerOwned = nearest !== null && issuerOwners.has(nearest);
       const explicitlyRecipientOwned = nearest !== null && recipientOwners.has(nearest);
       if (explicitlyRecipientOwned) continue;
       if (recipientSection && !explicitlyIssuerOwned) continue;
       const raw = match[0].replace(/\s+/g, "");
       const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
+      // On a line headed "Cliente", a word like "Comercio" may just be
+      // part of the recipient's trading name. Require an independent
+      // owner boundary before treating a later owner word as the seller.
+      const mixedRecipientOwner = recipientHeader.test(normalized)
+        && explicitlyIssuerOwned
+        && owners.some((entry) => recipientOwners.has(entry[1]))
+        && !/[|·;/]\s*$/.test(before.slice(0, ownerMatch?.index ?? 0));
+      if (mixedRecipientOwner) {
+        unassigned ??= fieldRequiringReview(candidate);
+        continue;
+      }
       if (explicitlyIssuerOwned || issuerSection) {
         // Checksum + issuer ownership are both mandatory for a "reliable"
         // tax ID. The OCR confidence alone is not fiscal verification.
