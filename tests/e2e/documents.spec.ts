@@ -698,7 +698,7 @@ test("REC-OCR-053 · guardar revisión no anuncia lista sincronizada cuando la r
 
 test("REC-OCR-039 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
   const corruptions = [
-    "wrong-document", "wrong-ocr-run", "wrong-total", "source-write",
+    "wrong-document", "wrong-ocr-run", "wrong-total", "wrong-issuer", "wrong-lines", "wrong-notes", "source-write",
   ] as const;
   let writes = 0;
   for (const corruption of corruptions) {
@@ -714,7 +714,15 @@ test("REC-OCR-039 · revisión con identificador o importes cambiados no se cons
         bankSource: "read_only",
         financialWrites: corruption === "source-write",
         rawEvidenceImmutable: true, requiresHumanReview: true,
-        reviewedValues: { ...requested, totalCents: corruption === "wrong-total" ? 0 : requested.totalCents },
+        reviewedValues: {
+          ...requested,
+          totalCents: corruption === "wrong-total" ? 0 : requested.totalCents,
+          issuerName: corruption === "wrong-issuer" ? "UNRELATED ISSUER" : requested.issuerName,
+          lineItems: corruption === "wrong-lines"
+            ? [{ description: "UNRELATED PRODUCT", quantity: 1, unitPriceCents: 500, totalCents: 500 }]
+            : requested.lineItems,
+          notes: corruption === "wrong-notes" ? "UNRELATED CONFIRMATION" : requested.notes,
+        },
       };
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(response) });
     });
