@@ -1,3 +1,4 @@
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import { ConfigurationValidationError } from "../../../src/application/configuration-commands";
 import {
   ConfigurationRequestError,
@@ -11,6 +12,8 @@ import {
 import { createEdgeConfigurationService } from "../../../src/infrastructure/persistence/edge-configuration-runtime";
 
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 128 * 1024;
 const ERROR_HEADERS = { "cache-control": "private, no-store", "x-robots-tag": "noindex" };
 
 type CategoryImpact = {
@@ -26,6 +29,13 @@ type CategoryImpact = {
 };
 
 export function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "configuration_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: ERROR_HEADERS },
+    );
+  }
   if (error instanceof ConfigurationRequestError) {
     return Response.json({ error: "invalid_request", code: error.code, message: error.message }, { status: 400, headers: ERROR_HEADERS });
   }
@@ -64,7 +74,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const command = parseConfigurationApiCommand(await request.json());
+    const command = parseConfigurationApiCommand(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const service = createEdgeConfigurationService();
 
     switch (command.operation) {
