@@ -109,6 +109,7 @@ jobs:
           tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/dashboard-envelope-integrity.spec.ts
           tests/e2e/financial-api-query-guards.spec.ts
+          tests/e2e/global-search.spec.ts
           tests/e2e/dashboard-source-safety.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts
           tests/e2e/home-expense-average-coverage.spec.ts
