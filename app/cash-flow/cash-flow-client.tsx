@@ -91,7 +91,8 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
         ? `Sin cobertura bancaria confirmada para este mes${view.actualCoverage.latestMovementDate ? `; último movimiento ${formatDate(view.actualCoverage.latestMovementDate)}` : ""}.`
         : "Cobertura bancaria desconocida; no se muestran ceros como datos reales.";
 
-  const actualCoveredOn = (date: string) => actualReady && dateHasConfirmedCoverage(date, view.actualCoverage);
+  const actualCoveredOn = (date: string) =>
+    actualReady && view.bankDailyVerified && dateHasConfirmedCoverage(date, view.actualCoverage);
   const nextMonth = shiftCashFlowMonth(view.month, 1);
   const previousMonth = shiftCashFlowMonth(view.month, -1);
 

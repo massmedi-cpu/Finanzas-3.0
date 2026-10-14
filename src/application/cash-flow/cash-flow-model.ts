@@ -1,4 +1,6 @@
 import { isForecastSnapshot, type ForecastItem, type ForecastSnapshot } from "../forecast/forecast-contract";
+import { resolveHomeBankCoverage, type HomeBankFreshness } from "../dashboard/home-bank-coverage";
+import { hasCompletedSourceSyncEvidence, hasSourceSyncIncidents } from "../source-sync-incidents";
 import {
   dateHasConfirmedCoverage,
   periodHasObservedData,
@@ -61,6 +63,7 @@ export type CashFlowView = {
   dateTo: string;
   actualState: "ready" | "unavailable" | "incomplete" | "mismatch";
   actualCoverage: PeriodCoverage;
+  bankDailyVerified: boolean;
   forecastState: "ready" | "unavailable" | "mismatch";
   actualIncomeCents: number | null;
   actualExpenseCents: number | null;
@@ -173,11 +176,20 @@ export function assembleCashFlow(input: {
   period: unknown;
   forecast: unknown;
   latestMovementDate?: string | null;
+  bankFreshness?: HomeBankFreshness | null;
 }): CashFlowView {
   const { month, dateFrom, dateTo, transactions, transactionState } = input;
   const periodValid = isFinancialPeriod(input.period, dateFrom, dateTo);
   const forecast = isCashFlowForecast(input.forecast, dateFrom, dateTo) ? input.forecast : null;
-  const actualCoverage = resolvePeriodCoverage({ dateFrom, dateTo, latestMovementDate: input.latestMovementDate });
+  const actualCoverage = input.bankFreshness
+    ? resolveHomeBankCoverage({
+      dateFrom, dateTo, freshness: input.bankFreshness,
+      activityLatestDate: input.latestMovementDate ?? null,
+    })
+    : resolvePeriodCoverage({ dateFrom, dateTo, latestMovementDate: input.latestMovementDate });
+  const bankDailyVerified = Boolean(input.bankFreshness
+    && hasCompletedSourceSyncEvidence(input.bankFreshness.sync)
+    && !hasSourceSyncIncidents(input.bankFreshness.sync));
   const actualRows = transactions ?? [];
   const eligible = actualRows.filter((row) => !row.excludedFromAnalytics && row.duplicateState !== "confirmed");
   const cashFlowRows = actualRows.filter(countsInCashFlow);
@@ -219,7 +231,7 @@ export function assembleCashFlow(input: {
   for (let day = dateFrom; day <= dateTo;) {
     const real = transactionsByDate.get(day) ?? [];
     const forecasts = forecastsByDate.get(day) ?? [];
-    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day, actualCoverage);
+    const realCovered = actualState === "ready" && bankDailyVerified && dateHasConfirmedCoverage(day, actualCoverage);
     const effects = realCovered ? real.filter(countsInCashFlow) : [];
     const planned = forecastState === "ready" ? forecasts : [];
     const realIncomeCents = effects.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
@@ -237,7 +249,7 @@ export function assembleCashFlow(input: {
   let realCumulativeCents = 0;
   let plannedCumulativeCents = 0;
   const evolution = days.map((day): CashFlowEvolutionPoint => {
-    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day.date, actualCoverage);
+    const realCovered = actualState === "ready" && bankDailyVerified && dateHasConfirmedCoverage(day.date, actualCoverage);
     if (realCovered) realCumulativeCents += day.realNetCents;
     plannedCumulativeCents += day.plannedNetCents;
     return {
@@ -259,7 +271,7 @@ export function assembleCashFlow(input: {
   ) : null;
 
   return {
-    month, dateFrom, dateTo, actualState, actualCoverage, forecastState,
+    month, dateFrom, dateTo, actualState, actualCoverage, bankDailyVerified, forecastState,
     actualIncomeCents: actualObserved ? derivedRealIncome : null,
     actualExpenseCents: actualObserved ? derivedRealExpense : null,
     actualNetCents: actualObserved ? derivedRealNet : null,

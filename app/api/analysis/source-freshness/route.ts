@@ -4,6 +4,9 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
+import { sourceConnectionFileId, syncSummary } from "../../../../src/application/source-freshness-summary";
+
+export { syncSummary };
 export const dynamic = "force-dynamic";
 
 const HEADERS = {
@@ -28,39 +31,11 @@ function text(value: unknown) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function integer(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
-}
-
 function transactionDate(payload: unknown) {
   const root = record(payload);
   const rows = Array.isArray(root?.rows) ? root.rows : [];
   const first = record(rows[0]);
   return text(first?.bankDate) ?? text(first?.bank_date);
-}
-
-function connectionSourceFileId(payload: unknown) {
-  const connection = record(record(payload)?.connection);
-  return text(connection?.source_file_id) ?? text(connection?.sourceFileId);
-}
-
-export function syncSummary(payload: unknown) {
-  const run = record(record(payload)?.run);
-  if (!run) return null;
-
-  const status = text(run.status);
-  if (status !== "success" && status !== "failed" && status !== "started" && status !== "partial") return null;
-
-  return {
-    status,
-    finishedAt: text(run.finished_at) ?? text(run.finishedAt),
-    startedAt: text(run.started_at) ?? text(run.startedAt),
-    rowsSeen: integer(run.rows_seen) ?? integer(run.rowsSeen),
-    rowsFailed: integer(run.rows_failed) ?? integer(run.rowsFailed),
-    rowsMissing: integer(run.rows_missing) ?? integer(run.rowsMissing),
-    duplicatesDetected: integer(run.duplicates_detected) ?? integer(run.duplicatesDetected),
-    warningsCount: integer(run.warnings_count) ?? integer(run.warningsCount),
-  };
 }
 
 function logGatewayFailure(scope: string, error: unknown) {
@@ -118,7 +93,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const sourceFileId = connectionSourceFileId(connectionResult.value);
+    const sourceFileId = sourceConnectionFileId(connectionResult.value);
     if (!sourceFileId) {
       return Response.json(
         { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },

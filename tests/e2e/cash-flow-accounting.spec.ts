@@ -8,6 +8,7 @@ import {
   type CashFlowTransaction,
 } from "../../src/application/cash-flow/cash-flow-model";
 import type { ForecastItem, ForecastSnapshot } from "../../src/application/forecast/forecast-contract";
+import type { HomeBankFreshness } from "../../src/application/dashboard/home-bank-coverage";
 
 function transaction(id: string, bankDate: string, amountCents: number,
   kind: CashFlowTransaction["kind"]["effective"], options: Partial<CashFlowTransaction> = {}): CashFlowTransaction {
@@ -65,14 +66,27 @@ const forecastSnapshot: ForecastSnapshot = {
   principles: { bankSource: "read_only", openingBalanceSource: "financial_account_balances", recurrenceSource: "recurring", budgetsCreateDatedItems: false, excludedItemsAffectCashFlow: false, confirmedItemsAffectCashFlow: false, getHasSideEffects: false },
 };
 
+const completedFreshness: HomeBankFreshness = {
+  available: true,
+  earliestMovementDate: "2026-09-10",
+  latestMovementDate: "2026-09-12",
+  sync: {
+    status: "success", finishedAt: "2026-09-12T20:00:00.000Z",
+    rowsSeen: 8, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+  },
+};
+
 function view(options: { net?: number; rows?: CashFlowTransaction[] | null;
-  state?: "complete" | "incomplete" | "unavailable"; forecast?: unknown } = {}) {
+  state?: "complete" | "incomplete" | "unavailable"; forecast?: unknown;
+  freshness?: HomeBankFreshness | null } = {}) {
   return assembleCashFlow({
     month: "2026-09", dateFrom: "2026-09-01", dateTo: "2026-09-30",
     period: { dateFrom: "2026-09-01", dateTo: "2026-09-30", accountId: null, operatingNetCents: options.net ?? 4_400, quality: { scopedRows: 8, includedRows: 6 } },
     transactions: options.rows === undefined ? actualRows : options.rows,
     transactionState: options.state ?? "complete",
     forecast: options.forecast === undefined ? forecastSnapshot : options.forecast,
+    latestMovementDate: "2026-09-12",
+    bankFreshness: options.freshness === undefined ? completedFreshness : options.freshness,
   });
 }
 
@@ -99,10 +113,16 @@ test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya 
     plannedCumulativeCents: 800,
     combinedCumulativeCents: 8_200,
   });
-  expect(result.evolution.at(-1)).toMatchObject({
+  expect(result.evolution.find((point) => point.date === "2026-09-12")).toMatchObject({
     realCumulativeCents: 4_400,
     plannedCumulativeCents: 800,
     combinedCumulativeCents: 5_200,
+  });
+  // Bank evidence ends on the 12th; a zero through September 30 is not a fact.
+  expect(result.evolution.at(-1)).toMatchObject({
+    realCumulativeCents: null,
+    plannedCumulativeCents: 800,
+    combinedCumulativeCents: null,
   });
   expect(forecastItems.map(cashFlowEventState)).toEqual(["confirmed", "suggested", "realized", "discarded"]);
 });
@@ -147,4 +167,32 @@ test("QA-04 · Cash Flow plano usa una única referencia 0 € y no fabrica cén
   expect(source).toContain("const flatZero = maximum === 0 && minimum === 0");
   expect(source).toContain("flatZero\n      ? [0]");
   expect(source).toContain("la escala se mantiene en 0 € sin fabricar céntimos");
+});
+
+test("REC-CFLOW-022 · days with confirmed bank evidence form real curve through the last imported movement", () => {
+  const result = view();
+  expect(result.bankDailyVerified).toBe(true);
+  expect(result.actualCoverage.state).toBe("partial");
+  expect(result.evolution.find((p) => p.date === "2026-09-09")?.realCumulativeCents).toBeNull();
+  expect(result.evolution.find((p) => p.date === "2026-09-10")?.realCumulativeCents).toBe(7_400);
+  expect(result.evolution.find((p) => p.date === "2026-09-12")?.realCumulativeCents).toBe(4_400);
+  expect(result.evolution.find((p) => p.date === "2026-09-13")?.realCumulativeCents).toBeNull();
+});
+
+test("REC-CFLOW-023 · no completed sync or damaged source may color an unverified real day", () => {
+  for (const freshness of [
+    { ...completedFreshness, sync: null },
+    { ...completedFreshness, sync: { ...completedFreshness.sync, status: "partial" } },
+    { ...completedFreshness, sync: { ...completedFreshness.sync, rowsMissing: 1 } },
+    { ...completedFreshness, earliestMovementDate: null },
+    { ...completedFreshness, latestMovementDate: "2026-09-11" },
+  ]) {
+    const result = view({ freshness });
+    if (freshness.sync === null || freshness.sync?.status !== "success"
+      || (freshness.sync && freshness.sync.rowsMissing === 1)) {
+      expect(result.bankDailyVerified).toBe(false);
+    }
+    expect(result.evolution.every((point) => point.realCumulativeCents === null)).toBe(true);
+    expect(result.evolution.every((point) => point.combinedCumulativeCents === null)).toBe(true);
+  }
 });
