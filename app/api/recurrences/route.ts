@@ -3,7 +3,10 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 64 * 1024;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -75,6 +78,13 @@ function candidateKeyValue(value: unknown) {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "recurrence_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: HEADERS },
+    );
+  }
   if (error instanceof PersistenceGatewayError) {
     if (
       error.status === 404 &&
@@ -140,7 +150,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const payload = {
       candidateKey: candidateKeyValue(row.candidateKey),
       status: enumValue(row.status, "invalid_recurrence_status", STATUSES),
@@ -161,7 +171,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const id = requiredUuid(row.id, "invalid_recurrence_id");
     const status = enumValue(row.status, "invalid_recurrence_status", STATUSES);
     const result = await callPersistenceGateway("recurrence.status", { id, status });
