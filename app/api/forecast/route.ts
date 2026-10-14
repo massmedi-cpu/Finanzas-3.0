@@ -3,9 +3,12 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { resolveForecastSelection } from "../../../src/application/forecast/forecast-selection";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import { isForecastSnapshotForSelection, isForecastCandidateSnapshotForRequest } from "../../../src/application/forecast/forecast-contract";
 
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 64 * 1024;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -87,6 +90,13 @@ function confidenceValue(value: unknown) {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "forecast_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: HEADERS },
+    );
+  }
   if (error instanceof PersistenceGatewayError) {
     if (error.status === 404) {
       return Response.json({ error: "not_found", code: error.code ?? null }, { status: 404, headers: HEADERS });
@@ -162,7 +172,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const action = stringValue(row.action, "invalid_forecast_action", 32);
 
     if (action === "refresh") {
@@ -202,7 +212,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const action = stringValue(row.action, "invalid_forecast_action", 32);
     const id = requiredUuid(row.id, "invalid_forecast_item_id");
 
