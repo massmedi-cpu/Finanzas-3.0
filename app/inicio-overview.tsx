@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
+import { isHomeExpenseAverageVerified } from "../src/application/dashboard/home-expense-average-evidence";
 import {
   periodComparisonIsReliable,
   periodHasObservedData,
@@ -628,7 +629,18 @@ export default function InicioOverview() {
       activityLatestDate: dataThroughDate,
     }),
   } : null, [homeAnalysis, sourceFreshness, dataThroughDate]);
-  const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
+  const unverifiedExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
+  // The Analysis engine calculates this number, but Inicio only presents it
+  // as a monthly average when the whole historical interval is bank-verified.
+  // Incomplete/discordant sources must not masquerade as a trusted average.
+  const averageVerified = unverifiedExpenseAverage !== null
+    && isHomeExpenseAverageVerified({
+      periodEnd: homeAnalysis!.period.dateTo,
+      months: unverifiedExpenseAverage.months,
+      freshness: sourceFreshness,
+      activityLatestDate: dataThroughDate,
+    });
+  const recentExpenseAverage = averageVerified ? unverifiedExpenseAverage : null;
 
   const topBudgetCategories = useMemo(() => {
     const categories = budget?.categories.filter((item) => item.categoryName) ?? [];
@@ -871,7 +883,10 @@ export default function InicioOverview() {
           <small>
             {recentExpenseAverage
               ? `Media histórica · ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes" : "meses"}`
-              : analysisLoading ? "Calculando desde Análisis…" : "Análisis no disponible"}
+              : analysisLoading ? "Calculando desde Análisis…"
+              : unverifiedExpenseAverage
+                ? "Media no verificable con la cobertura bancaria disponible"
+                : "Análisis no disponible"}
           </small>
           <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver análisis</Link>
         </article>
