@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
+import { sourceConnectionFileId, syncSummary } from "../../src/application/source-freshness-summary";
 import { analysisSelectionFromSearchParams } from "../../src/application/analysis/analysis-query-state";
 
 const EMPTY_TREND = {
@@ -195,6 +196,7 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
 
 test("Análisis · la frescura de fuente admite sincronización parcial y conserva la fecha bancaria útil", () => {
   const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/source-freshness/route.ts"), "utf8");
+  const summarySource = readFileSync(resolve(process.cwd(), "src/application/source-freshness-summary.ts"), "utf8");
   const freshnessSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-source-freshness.tsx"), "utf8");
   const pageClientSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
   const loaderSource = readFileSync(resolve(process.cwd(), "src/application/analysis/analysis-loader.ts"), "utf8");
@@ -209,13 +211,15 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
   expect(routeSource).toContain("latestMovementDate = text(bounds?.latestMovementDate)");
   expect(routeSource).toContain("latestMovementDate = transactionDate(legacy)");
   expect(routeSource).toContain('"source.status"');
-  expect(routeSource).toContain('status !== "partial"');
-  expect(routeSource).toContain("value >= 0");
+  expect(routeSource).toContain("sourceConnectionFileId(connectionResult.value)");
+  expect(routeSource).toContain("syncSummary(statusPayload)");
+  expect(summarySource).toContain('status !== "partial"');
+  expect(summarySource).toContain("value >= 0");
   expect(routeSource).toContain("available: Boolean(latestMovementDate)");
-  expect(routeSource).toContain("rowsFailed: integer(run.rows_failed)");
-  expect(routeSource).toContain("rowsMissing: integer(run.rows_missing)");
-  expect(routeSource).toContain("duplicatesDetected: integer(run.duplicates_detected)");
-  expect(routeSource).toContain("warningsCount: integer(run.warnings_count)");
+  expect(summarySource).toContain("rowsFailed: count(run.rows_failed)");
+  expect(summarySource).toContain("rowsMissing: count(run.rows_missing)");
+  expect(summarySource).toContain("duplicatesDetected: count(run.duplicates_detected)");
+  expect(summarySource).toContain("warningsCount: count(run.warnings_count)");
   expect(freshnessSource).toContain('type SyncStatus = "success" | "partial" | "failed" | "started"');
   expect(freshnessSource).toContain('value.sync.status === "partial"');
   expect(freshnessSource).toContain("Datos sincronizados parcialmente");
@@ -301,4 +305,21 @@ test("Análisis v5 · un ingreso residual o todavía inexistente no fabrica una 
       savingsRateBps: null,
     },
   })).toEqual(pending);
+});
+
+test("REC-AN-SOURCE-014 · shared sync parser retains partial and successful import evidence", () => {
+  expect(sourceConnectionFileId({ connection: { source_file_id: "synthetic-source" } })).toBe("synthetic-source");
+  expect(sourceConnectionFileId({ connection: { sourceFileId: "fallback-source" } })).toBe("fallback-source");
+  expect(sourceConnectionFileId({ connection: { source_file_id: null, sourceFileId: null } })).toBeNull();
+  expect(syncSummary({ run: {
+    status: "partial", finished_at: null, started_at: "2026-10-14T12:00:00.000Z",
+    rows_seen: 17, rows_failed: 2, rows_missing: 1,
+    duplicates_detected: 3, warnings_count: 4,
+  } })).toEqual({
+    status: "partial", finishedAt: null, startedAt: "2026-10-14T12:00:00.000Z",
+    rowsSeen: 17, rowsFailed: 2, rowsMissing: 1,
+    duplicatesDetected: 3, warningsCount: 4,
+  });
+  expect(syncSummary({ run: { status: "unsupported", rows_seen: 8 } })).toBeNull();
+  expect(syncSummary({ run: null })).toBeNull();
 });
