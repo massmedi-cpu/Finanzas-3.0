@@ -19,6 +19,8 @@ on:
       - 'src/application/document-drive-inventory.ts'
       - 'src/application/private-document-original-detail.ts'
       - 'src/application/document-ocr-confirmation-integrity.ts'
+      - 'src/application/dashboard/dashboard-envelope-integrity.ts'
+      - 'src/application/dashboard/dashboard-source-safety.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
       - 'scripts/test-document-drive-inventory.mjs'
       - 'scripts/test-drive-atomic-batch.mjs'
@@ -106,6 +108,7 @@ jobs:
           tests/e2e/gateway-request-body-limit.spec.ts
           tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/dashboard-envelope-integrity.spec.ts
+          tests/e2e/dashboard-source-safety.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts
           tests/e2e/home-expense-average-coverage.spec.ts
           tests/e2e/inicio-utility.spec.ts
