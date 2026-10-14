@@ -10,9 +10,10 @@ const samples = {
   budgets: { month: "2026-09", total: { effectiveAmountCents: 90000, actualExpenseCents: 50000 },
     categories: [{ actualExpenseCents: 50000 }] },
   forecast: { summary: { plannedItems: 1, projectedNetCents: 22000, projectedClosingBalanceCents: 58000 },
-    items: [{ id: "f1", date: "2026-10-15", status: "planned", affectsProjection: true }] },
-  transactions: { rows: [{ bankDate: "2026-10-14", amountCents: -2000, account: { name: "Cuenta" },
-    concept: { effective: "Compra" } }], totalCount: 1 },
+    items: [{ id: "f1", concept: "Internet", amountCents: -2500, date: "2026-10-15", status: "planned", affectsProjection: true }] },
+  transactions: { rows: [{ id: "t1", bankDate: "2026-10-14", amountCents: -2000, account: { name: "Cuenta" },
+    concept: { effective: "Compra" }, category: { effectiveId: null, effectiveName: null },
+    kind: { effective: "expense" }, merchant: { effectiveName: null } }], totalCount: 1 },
 };
 
 test("REC-HOME-DATA-001 · all five canonical Inicio sources have renderable minimum contracts", () => {
@@ -47,4 +48,37 @@ test("REC-HOME-DATA-004 · incomplete transaction rows cannot be trusted as bank
     rows: [{ ...samples.transactions.rows[0], amountCents: Number.POSITIVE_INFINITY }] })).toBe(false);
   expect(isHomeDashboardSourceSafe("transactions", { ...samples.transactions,
     rows: [{ ...samples.transactions.rows[0], concept: null }] })).toBe(false);
+});
+
+test("REC-HOME-DATA-006 · movements with malformed category, type or merchant cannot crash Inicio", () => {
+  const row = samples.transactions.rows[0];
+  for (const altered of [
+    { ...row, category: null },
+    { ...row, category: { effectiveName: "Hogar" } },
+    { ...row, kind: null },
+    { ...row, kind: { effective: "unexpected_bank_type" } },
+    { ...row, merchant: { effectiveName: 1234 } },
+    { ...row, id: "" },
+  ]) {
+    expect(isHomeDashboardSourceSafe("transactions", {
+      ...samples.transactions, rows: [altered],
+    })).toBe(false);
+  }
+  expect(isHomeDashboardSourceSafe("transactions", {
+    ...samples.transactions, rows: [{ ...row, merchant: null }],
+  })).toBe(true);
+});
+
+test("REC-HOME-DATA-007 · invalid projected amounts and labels cannot reach currency or React", () => {
+  const item = samples.forecast.items[0];
+  for (const altered of [
+    { ...item, amountCents: Number.NaN },
+    { ...item, amountCents: undefined },
+    { ...item, concept: { unsafe: "unexpected React child" } },
+    { ...item, id: "" },
+  ]) {
+    expect(isHomeDashboardSourceSafe("forecast", {
+      ...samples.forecast, items: [altered],
+    })).toBe(false);
+  }
 });
