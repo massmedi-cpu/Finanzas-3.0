@@ -65,8 +65,8 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
             basePlusTaxMatchesTotal: true,
           },
           lines: [
-            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center" },
-            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left" },
+            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center", box: { x: 0.3, y: 0.05, width: 0.4, height: 0.04 }, words: [] },
+            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left", box: { x: 0.1, y: 0.12, width: 0.5, height: 0.04 }, words: [] },
           ],
         }],
         warnings: ["low_confidence"],
