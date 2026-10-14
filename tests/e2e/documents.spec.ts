@@ -70,8 +70,8 @@ async function mockDocumentApi(
           plainText: ocrStatus === "empty" ? "" : "FACTURA DEMO\nTOTAL 54,04 EUR",
           layoutText: ocrStatus === "empty" ? "" : "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
           lines: ocrStatus === "empty" ? [] : [
-            { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", words: [] },
-            { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", words: [] },
+            { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", box: { x: 0.25, y: 0.05, width: 0.5, height: 0.04 }, words: [] },
+            { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", box: { x: 0.55, y: 0.14, width: 0.4, height: 0.04 }, words: [] },
           ],
         }],
       }),
