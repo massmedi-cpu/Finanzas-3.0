@@ -85,3 +85,17 @@ test("REC-HOME-DATA-007 · invalid projected amounts and labels cannot reach cur
     })).toBe(false);
   }
 });
+
+test("REC-HOME-DATA-008 · invalid category labels cannot crash budget or forecast cards", () => {
+  expect(isHomeDashboardSourceSafe("budgets", {
+    ...samples.budgets, categories: [{ categoryId: null, categoryName: 42, actualExpenseCents: 1500 }],
+  })).toBe(false);
+  expect(isHomeDashboardSourceSafe("forecast", {
+    ...samples.forecast, items: [{
+      ...samples.forecast.items[0], categoryId: "c1", categoryName: { label: "unexpected JSX" },
+    }],
+  })).toBe(false);
+  expect(isHomeDashboardSourceSafe("budgets", {
+    ...samples.budgets, categories: [{ categoryName: null, actualExpenseCents: 0 }],
+  })).toBe(true);
+});
