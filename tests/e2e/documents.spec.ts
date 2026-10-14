@@ -151,7 +151,7 @@ async function mockDocumentApi(
 test("REC-OCR-139 · malformed page geometry cannot certify an HTTP 200 OCR response", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
-  await page.route(/\\/api\\/documents\\/ocr(?:\\?.*)?$/, async (route) => {
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
       contractVersion: 1, documentId, status: "needs_review", source: "pdf_text",
       extractor: "pdfjs-6.2.108-native-text", extractedAt: "2026-09-07T07:00:00.000Z",
