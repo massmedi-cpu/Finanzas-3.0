@@ -3699,3 +3699,99 @@ test("REC-OCR-MEM-015 · HTTP 413 rejects the OCR review without locking editabl
   expect(rejects).toBe(1);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-OCR-134 · OCR run from another document never unlocks human confirmation", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 500, body: "Unexpected OCR confirmation" });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        documentId: unknownDocumentId,
+        runs: [{
+          id: "98000000-0000-4000-8000-000000000098",
+          extractor: "pdfjs-6.2.108-native-text",
+          extractedAt: "2026-09-07T07:00:00.000Z",
+        }],
+        reviews: [],
+      }),
+    });
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(panel.getByText("Texto nativo PDF")).toBeVisible();
+  await expect(panel.getByRole("alert")).toContainText("no se ha podido preparar la confirmación persistente");
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-135 · mismatched document metadata cannot initialize OCR confirmation", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let switched = false;
+  await page.route("**/api/documents?id=*", async (route) => {
+    if (!switched) return route.fallback();
+    const response = {
+      contractVersion: 3,
+      document: { ...item, id: unknownDocumentId },
+      associations: [], principles,
+    };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(response) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  switched = true;
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(panel.getByText("Texto nativo PDF")).toBeVisible();
+  await expect(panel.getByRole("alert")).toContainText("no se ha podido preparar la confirmación persistente");
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-136 · uncertain PATCH cannot be recovered using another document's history", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let historyReads = 0;
+  let saveCalls = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() === "PATCH") {
+      saveCalls += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"persistence_failed"}' });
+      return;
+    }
+    historyReads += 1;
+    const requested = historyReads === 1 ? documentId : unknownDocumentId;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        documentId: requested,
+        runs: [{ id: "98000000-0000-4000-8000-000000000098",
+          extractor: "pdfjs-6.2.108-native-text",
+          extractedAt: "2026-09-07T07:00:00.000Z" }],
+        reviews: [{ ocrRunId: "98000000-0000-4000-8000-000000000098",
+          revision: 1, reviewedValues: { type: "invoice", totalCents: 5404 } }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await panel.getByRole("button", { name: "Confirmar revisión" }).click();
+  await panel.getByRole("button", { name: "Comprobar revisión sin volver a guardar" }).click();
+  await expect(panel.getByRole("alert")).toContainText("historial no corresponde a este documento");
+  await expect(panel.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(saveCalls).toBe(1);
+  expect(writes).toEqual([]);
+});
