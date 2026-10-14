@@ -10,7 +10,10 @@ import {
   type BudgetSnapshot,
 } from "../../../src/application/budgets/budget-planning";
 
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 64 * 1024;
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -83,6 +86,13 @@ function budgetSnapshot(value: unknown, expectedMonth: string): BudgetSnapshot {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "budget_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: HEADERS },
+    );
+  }
   if (error instanceof BudgetSnapshotContractError) {
     return Response.json(
       { error: "persistence_failed", code: error.message },
@@ -160,7 +170,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const month = monthValue(row.month);
     const snapshot = await callPersistenceGateway("budget.refresh", { month });
     const result = await addPlanningContext(month, snapshot);
@@ -172,7 +182,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const month = monthValue(row.month);
     if (!Object.prototype.hasOwnProperty.call(row, "categoryId")) {
       throw new Error("invalid_budget_category_id");
