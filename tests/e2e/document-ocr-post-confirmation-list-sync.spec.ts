@@ -114,7 +114,9 @@ async ({ page }) => {
   await panel.getByRole("button", { name: "Analizar documento" }).click();
   const issuer = panel.getByRole("textbox", { name: "Emisor" });
   await expect(issuer).toBeEnabled();
-  await issuer.fill("PROVEEDOR CONFIRMADO");
+  // A paste with surrounding whitespace must persist the same canonical text
+  // that the confirmation readback returns, without a false unverified state.
+  await issuer.fill("  PROVEEDOR CONFIRMADO  ");
   const button = panel.getByRole("button", { name: "Confirmar revisión" });
   await expect(button).toBeEnabled();
   await button.click();
