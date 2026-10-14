@@ -1,8 +1,6 @@
 import { gunzipSync } from "node:zlib";
-import {
-  LimitedResponseBodyError,
-  readLimitedResponseBody,
-} from "./limited-response-body";
+// This module is shared by Next.js tests and a Deno Edge entrypoint.
+// Its imports must remain extension-independent across both runtimes.
 
 export const MAX_COMPRESSED_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
 export const MAX_DECOMPRESSED_GATEWAY_BODY_BYTES = 16 * 1024 * 1024;
@@ -26,6 +24,48 @@ function parseGatewayJsonBody(bytes: Uint8Array): Record<string, unknown> {
  * Keep this independently testable: the Edge handler calls it only after
  * validating Vercel OIDC and before opening a workspace-scoped connection.
  */
+async function readBoundedGatewayBytes(
+  request: Request,
+  limit: number,
+  limitError: string,
+): Promise<Uint8Array> {
+  if (!request.body) return new Uint8Array(0);
+  let reader: ReadableStreamDefaultReader<Uint8Array>;
+  try {
+    reader = request.body.getReader();
+  } catch {
+    throw new Error("gateway_body_read_failed");
+  }
+  let total = 0;
+  const chunks: Uint8Array[] = [];
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.byteLength) continue;
+      total += value.byteLength;
+      if (total > limit) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(limitError);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message === limitError) throw error;
+    throw new Error("gateway_body_read_failed");
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export async function readGatewayJsonBody(request: Request): Promise<Record<string, unknown>> {
   const encoding = (request.headers.get("content-encoding") ?? "").trim().toLowerCase();
   if (encoding && encoding !== "identity" && encoding !== "gzip") {
@@ -40,21 +80,7 @@ export async function readGatewayJsonBody(request: Request): Promise<Record<stri
     throw new Error(sizeError);
   }
 
-  let input: Uint8Array;
-  if (!request.body) {
-    input = new Uint8Array(0);
-  } else {
-    try {
-      // Request.body and Response.body are Web Streams. Reusing the bounded
-      // reader also ensures an oversized stream is cancelled at its cap.
-      input = await readLimitedResponseBody(new Response(request.body), inputLimit);
-    } catch (error) {
-      if (error instanceof LimitedResponseBodyError && error.reason === "too_large") {
-        throw new Error(sizeError);
-      }
-      throw new Error("gateway_body_read_failed");
-    }
-  }
+  const input = await readBoundedGatewayBytes(request, inputLimit, sizeError);
 
   if (!compressed) return parseGatewayJsonBody(input);
 
