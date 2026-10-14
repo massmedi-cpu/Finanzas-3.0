@@ -47,7 +47,9 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
       && record(value.total) && cents(value.total.effectiveAmountCents)
       && cents(value.total.actualExpenseCents)
       && Array.isArray(value.categories) && value.categories.every((category: unknown) =>
-        record(category) && cents(category.actualExpenseCents));
+        record(category) && cents(category.actualExpenseCents)
+        && (category.categoryId == null || typeof category.categoryId === "string")
+        && (category.categoryName == null || typeof category.categoryName === "string"));
   }
 
   if (source === "forecast") {
@@ -59,6 +61,8 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
         record(item) && typeof item.id === "string" && item.id.trim().length > 0
         && date(item.date) && typeof item.concept === "string"
         && cents(item.amountCents)
+        && (item.categoryId == null || typeof item.categoryId === "string")
+        && (item.categoryName == null || typeof item.categoryName === "string")
         && typeof item.status === "string"
         && typeof item.affectsProjection === "boolean");
   }
