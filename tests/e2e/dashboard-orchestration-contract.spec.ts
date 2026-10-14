@@ -294,3 +294,27 @@ test("Inicio preserves newer activity after a delayed older refresh", async ({ p
   await expect(page.getByText("Actividad actualizada", { exact: true })).toBeVisible();
   await expect(page.getByText("Carrefour", { exact: true })).toHaveCount(0);
 });
+
+
+test("REC-HOME-SCOPE-006 · HTTP 200 from another scope never replaces the real account balance", async ({ page }) => {
+  await installDashboardMocks(page);
+  let independentReads = 0;
+  // The browser can receive a structurally valid but wrongly scoped envelope
+  // from a cache/proxy. Do not trust its money: use the independent read.
+  await page.route("**/api/dashboard?scope=critical", async (route) => {
+    const altered = { ...financial, balances: { ...financial.balances, activeBalanceCents: 99999 } };
+    await fulfillJson(route, envelope("activity", { financial: altered }, ["financial"]));
+  });
+  await page.route("**/api/financial?*", async (route) => {
+    const mode = new URL(route.request().url()).searchParams.get("mode");
+    if (mode !== "snapshot") return route.fallback();
+    independentReads++;
+    await fulfillJson(route, financial);
+  });
+
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(summary.getByText("999,99 €", { exact: true })).toHaveCount(0);
+  expect(independentReads).toBe(1);
+});
