@@ -3690,7 +3690,7 @@ test("REC-OCR-MEM-015 · HTTP 413 rejects the OCR review without locking editabl
   await expect(confirm).toBeEnabled();
   await confirm.click();
 
-  await expect(form.getByRole("alert")).toContainText("límite de 256 KB");
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("límite de 256 KB");
   await expect(page.locator('[data-ocr-confirmation="unverified"]')).toHaveCount(0);
   await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
   await expect(form.getByLabel("Emisor")).toBeEnabled();
