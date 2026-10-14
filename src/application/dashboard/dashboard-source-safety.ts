@@ -56,16 +56,27 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
       && cents(value.summary.projectedNetCents)
       && cents(value.summary.projectedClosingBalanceCents)
       && Array.isArray(value.items) && value.items.every((item: unknown) =>
-        record(item) && typeof item.id === "string" && date(item.date)
+        record(item) && typeof item.id === "string" && item.id.trim().length > 0
+        && date(item.date) && typeof item.concept === "string"
+        && cents(item.amountCents)
         && typeof item.status === "string"
         && typeof item.affectsProjection === "boolean");
   }
 
   return Array.isArray(value.rows)
-    && (value.totalCount === undefined || cents(value.totalCount))
+    && (value.totalCount === undefined || (cents(value.totalCount) && value.totalCount >= 0))
     && value.rows.every((transaction: unknown) =>
-      record(transaction) && date(transaction.bankDate)
-      && cents(transaction.amountCents)
+      record(transaction) && typeof transaction.id === "string" && transaction.id.trim().length > 0
+      && date(transaction.bankDate) && cents(transaction.amountCents)
       && record(transaction.account) && typeof transaction.account.name === "string"
-      && record(transaction.concept) && typeof transaction.concept.effective === "string");
+      && record(transaction.concept) && typeof transaction.concept.effective === "string"
+      && record(transaction.category)
+      && (transaction.category.effectiveId === null || typeof transaction.category.effectiveId === "string")
+      && (transaction.category.effectiveName === null || typeof transaction.category.effectiveName === "string")
+      && record(transaction.kind)
+      && ["income", "expense", "transfer", "refund", "adjustment"].includes(String(transaction.kind.effective))
+      && (transaction.merchant == null || (
+        record(transaction.merchant)
+        && (transaction.merchant.effectiveName === null || typeof transaction.merchant.effectiveName === "string")
+      )));
 }
