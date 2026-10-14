@@ -338,3 +338,22 @@ test("REC-HOME-DATA-005 · an HTTP 200 with malformed balances is independently 
   expect(recovered).toBe(1);
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
 });
+
+test("REC-HOME-DATA-009 · malformed activity metadata is recovered without crashing Inicio", async ({ page }) => {
+  await installDashboardMocks(page);
+  let recovered = 0;
+  await page.route("**/api/dashboard?scope=activity", async (route) => {
+    const unsafeRow = { ...transactions.rows[0], category: null, merchant: { effectiveName: 42 } };
+    await fulfillJson(route, envelope("activity", {
+      transactions: { ...transactions, rows: [unsafeRow] },
+    }, ["transactions"]));
+  });
+  await page.route("**/api/transactions?*", async (route) => {
+    recovered += 1;
+    await fulfillJson(route, transactions);
+  });
+  await page.goto("/");
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
+  await expect(page.getByText("Alimentación · Cuenta principal", { exact: true })).toBeVisible();
+  expect(recovered).toBe(1);
+});
