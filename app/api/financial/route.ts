@@ -92,8 +92,11 @@ export async function GET(request: Request) {
     // Never silently select the first value of an ambiguous account/date.
     // Competing account IDs could otherwise show a different financial scope
     // from the one the UI displays. Reject before contacting persistence.
-    for (const name of FINANCIAL_SCOPE_PARAMETERS) {
-      if (searchParams.getAll(name).length > 1) {
+    for (const name of searchParams.keys()) {
+      if (!FINANCIAL_SCOPE_PARAMETERS.some((allowed) => allowed === name)) {
+        throw new Error("invalid_financial_parameter");
+      }
+      if (searchParams.getAll(name).length !== 1) {
         throw new Error("invalid_duplicate_financial_parameter");
       }
     }

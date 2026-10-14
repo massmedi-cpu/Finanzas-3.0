@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { GET as movementsGET, apiError as movementsApiError } from "../../app/api/transactions/route";
+import { GET as financialGET } from "../../app/api/financial/route";
+import { GET as budgetsGET } from "../../app/api/budgets/route";
 import { apiError as merchantsApiError, POST as merchantsPOST } from "../../app/api/merchants/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
 import { GET as searchGET, apiError as searchApiError, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
@@ -149,4 +151,22 @@ test("REC-API-ERR-004 · Configuración y Búsqueda separan JSON incorrecto de f
   }));
   expect(malformed.status).toBe(400);
   expect(await malformed.json()).toMatchObject({ error: "invalid_request", code: "invalid_json" });
+});
+
+test("REC-FIN-041 · Finanzas no ignora parámetros de cuenta desconocidos", async () => {
+  await invalidBeforeGateway(financialGET, "financial", [
+    ["scope=other", "invalid_financial_parameter"],
+    ["mode=balances&unknown=1", "invalid_financial_parameter"],
+    ["mode=snapshot&accountId=" + ID + "&accountId=" + ID, "invalid_duplicate_financial_parameter"],
+  ]);
+});
+
+test("REC-BUD-008 · Presupuestos no presenta un total global como si hubiera filtrado una cuenta", async () => {
+  await invalidBeforeGateway(budgetsGET, "budgets", [
+    ["month=2026-10&accountId=" + ID, "invalid_budget_query_parameters"],
+    ["month=2026-10&categoryId=" + ID, "invalid_budget_query_parameters"],
+    ["month=2026-10&filter=none", "invalid_budget_query_parameters"],
+    ["month=2026-10&month=2026-10", "invalid_budget_month"],
+    ["month=2026-13", "invalid_budget_month"],
+  ]);
 });

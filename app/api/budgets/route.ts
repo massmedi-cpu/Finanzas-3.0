@@ -138,6 +138,10 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // The snapshot is for all accounts; an ignored account filter would be misleading.
+    if ([...searchParams.keys()].some((key) => key !== "month")) {
+      throw new Error("invalid_budget_query_parameters");
+    }
     const requestedMonths = searchParams.getAll("month");
     if (requestedMonths.length !== 1) throw new Error("invalid_budget_month");
     const month = monthValue(requestedMonths[0]);
