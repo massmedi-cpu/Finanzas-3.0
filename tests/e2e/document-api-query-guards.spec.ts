@@ -14,12 +14,12 @@ test("REC-DOC-QUERY-021 · private document modes reject extra selectors before 
     [`id=${ID}&scope=tests`, "invalid_document_query_parameters"],
     [`id=${ID}&mode=candidates&offset=100`, "invalid_document_query_parameters"],
     [`id=${ID}&mode=candidates&scope=all`, "invalid_document_query_parameters"],
-    ["mode=open", "invalid_document_query_parameters"],
-    ["mode=candidates&days=7", "invalid_document_query_parameters"],
+    ["mode=open", "invalid_document_mode"],
+    ["mode=candidates&days=7", "invalid_document_mode"],
     ["q=factura&unknown=1", "invalid_document_query_parameters"],
     ["q=factura&q=factura", "invalid_document_query_duplicate"],
     [`id=${ID}&id=${ID}`, "invalid_document_query_duplicate"],
-    [`id=${ID}&mode=bad`, "invalid_document_query_parameters"],
+    [`id=${ID}&mode=bad`, "invalid_document_mode"],
   ];
   for (const [query, code] of malformed) {
     const response = await getDocuments(new Request(`https://test.local/api/documents?${query}`));

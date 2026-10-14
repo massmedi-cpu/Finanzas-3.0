@@ -156,6 +156,13 @@ export async function GET(request: Request) {
     }
     const idRaw = searchParams.get("id");
     const mode = searchParams.get("mode");
+    // Preserve the established public contract for unknown/empty modes
+    // while still rejecting extra selectors on valid mode requests.
+    // Existing browser clients distinguish invalid_document_mode from
+    // invalid_document_query_parameters.
+    if (mode !== null && (idRaw === null || (mode !== "open" && mode !== "candidates"))) {
+      throw new Error("invalid_document_mode");
+    }
     const allowedKeys = idRaw !== null
       ? mode === "candidates" ? DOCUMENT_CANDIDATE_KEYS
         : mode === "open" ? DOCUMENT_OPEN_KEYS : DOCUMENT_DETAIL_KEYS
