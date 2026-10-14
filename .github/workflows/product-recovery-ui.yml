@@ -107,10 +107,15 @@ jobs:
           tests/e2e/private-document-replay.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
+          tests/e2e/document-api-json-limits.spec.ts
+          tests/e2e/document-ocr-json-byte-limit.spec.ts
+          tests/e2e/document-original-mime-evidence.spec.ts
+          tests/e2e/document-ocr-confirmation-integrity.spec.ts
           tests/e2e/gateway-request-body-limit.spec.ts
           tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/dashboard-envelope-integrity.spec.ts
           tests/e2e/financial-api-query-guards.spec.ts
+          tests/e2e/financial-api-json-byte-limits.spec.ts
           tests/e2e/document-api-query-guards.spec.ts
           tests/e2e/global-search.spec.ts
           tests/e2e/dashboard-source-safety.spec.ts
