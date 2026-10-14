@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { GET as movementsGET } from "../../app/api/transactions/route";
+import { GET as movementsGET, apiError as movementsApiError } from "../../app/api/transactions/route";
+import { apiError as merchantsApiError, POST as merchantsPOST } from "../../app/api/merchants/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
 import { GET as searchGET, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
@@ -78,4 +79,36 @@ test("REC-SEARCH-009 · all failed sources never turn into a fictitious empty se
   expect(globalSearchNeedsSession([rejected(403, "workspace_access_denied"), rejected(503, "gateway_failed")])).toBe(false);
   expect(allGlobalSearchSourcesFailed([ok, rejected(503, "gateway_failed"), rejected(503, "gateway_failed")])).toBe(false);
   expect(allGlobalSearchSourcesFailed([])).toBe(false);
+});
+
+test("REC-API-ERR-001 · errores internos de Movimientos nunca se presentan como culpa del usuario ni filtran información", async () => {
+  const sensitive = "SQL failed on account=SECRET_PRIVATE_ACCOUNT";
+  const response = movementsApiError(new Error(sensitive));
+  expect(response.status).toBe(500);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  const body = await response.json();
+  expect(body).toEqual({ error: "internal_error", code: null });
+  expect(JSON.stringify(body)).not.toContain(sensitive);
+  const validation = movementsApiError(new Error("invalid_transaction_ids"));
+  expect(validation.status).toBe(400);
+  expect(await validation.json()).toMatchObject({ code: "invalid_transaction_ids" });
+});
+
+test("REC-API-ERR-002 · Comercios rechaza JSON inválido con 400 y oculta mensajes imprevistos", async () => {
+  const malformed = await merchantsPOST(new Request("https://test.local/api/merchants", {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{not-json}",
+  }));
+  expect(malformed.status).toBe(400);
+  expect(await malformed.json()).toMatchObject({ code: "invalid_request" });
+  const unsupported = await merchantsPOST(new Request("https://test.local/api/merchants", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "merchant.drop" }),
+  }));
+  expect(unsupported.status).toBe(400);
+  expect(await unsupported.json()).toMatchObject({ code: "unsupported_operation" });
+  const sensitive = "Database credential in unexpected exception";
+  const failure = merchantsApiError(new Error(sensitive));
+  expect(failure.status).toBe(500);
+  const payload = await failure.json();
+  expect(payload).toEqual({ error: "internal_error", code: null });
+  expect(JSON.stringify(payload)).not.toContain(sensitive);
 });
