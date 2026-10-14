@@ -703,3 +703,24 @@ test("REC-FCAST-053 · changing forecast period invalidates even previously veri
   await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-FCAST-057 · inconsistent bank snapshot cannot populate a trusted forecast chart", async ({ page }) => {
+  const forged = {
+    ...baseSnapshot,
+    summary: {
+      ...baseSnapshot.summary,
+      // The response keeps well-typed cents but claims a closing balance
+      // one euro too high. That is a source contradiction, not rounding.
+      projectedClosingBalanceCents: baseSnapshot.summary.projectedClosingBalanceCents + 100,
+    },
+  };
+  await page.route("**/api/forecast*", async (route) => {
+    if (route.request().method() !== "GET") throw new Error("Unexpected financial write");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forged) });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await expect(page.locator("main").getByRole("alert")).toContainText("previsión");
+  await expect(page.getByRole("region", { name: "Curva de saldo prevista" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Buscar movimiento real" })).toHaveCount(0);
+});
