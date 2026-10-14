@@ -6,7 +6,13 @@ import { GET as recurrenceGET, POST as recurrencePOST } from "../../app/api/recu
 import { GET as rulesGET, POST as rulesPOST, apiError as ruleApiError } from "../../app/api/rules/route";
 import { apiError as merchantsApiError, POST as merchantsPOST } from "../../app/api/merchants/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
-import { GET as searchGET, apiError as searchApiError, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
+import {
+  GET as searchGET,
+  apiError as searchApiError,
+  allGlobalSearchSourcesFailed,
+  globalSearchNeedsSession,
+  verifiedGlobalSearchSource,
+} from "../../app/api/search/route";
 import { apiError as analysisApiError } from "../../app/api/analysis/route";
 import { apiError as comparisonApiError } from "../../app/api/compare/route";
 import { apiError as configurationApiError, POST as configurationPOST } from "../../app/api/configuration/route";
@@ -228,4 +234,27 @@ test("REC-RULES-032 · JSON inválido da 400 y errores internos permanecen priva
   const body = await unexpected.json();
   expect(body).toEqual({ error: "internal_error", code: null });
   expect(JSON.stringify(body)).not.toContain(raw);
+});
+
+test("REC-SEARCH-011 · malformed successful bank or document responses are not trustworthy empty results", () => {
+  const fulfilled = (value: unknown): PromiseSettledResult<unknown> => ({ status: "fulfilled", value });
+  const valid = [
+    verifiedGlobalSearchSource(fulfilled({ rows: [] }), "transactions"),
+    verifiedGlobalSearchSource(fulfilled({ items: [] }), "documents"),
+    verifiedGlobalSearchSource(fulfilled({ merchants: [], categories: [], accounts: [] }), "facets"),
+  ];
+  expect(valid.every((result) => result.status === "fulfilled")).toBe(true);
+  const malformed = [
+    verifiedGlobalSearchSource(fulfilled({ rows: "not-an-array" }), "transactions"),
+    verifiedGlobalSearchSource(fulfilled({ rows: [{ id: null }] }), "transactions"),
+    verifiedGlobalSearchSource(fulfilled({ rows: [{ id: ID, amountCents: Number.MAX_SAFE_INTEGER + 1 }] }), "transactions"),
+    verifiedGlobalSearchSource(fulfilled({ items: null }), "documents"),
+    verifiedGlobalSearchSource(fulfilled({ items: [{ id: ID, totalCents: "invalid" }] }), "documents"),
+    verifiedGlobalSearchSource(fulfilled({ merchants: [], categories: [] }), "facets"),
+    verifiedGlobalSearchSource(fulfilled({ merchants: [{ id: null, name: "Missing ID" }], categories: [], accounts: [] }), "facets"),
+  ];
+  expect(malformed.every((result) => result.status === "rejected")).toBe(true);
+  expect(allGlobalSearchSourcesFailed(malformed)).toBe(true);
+  expect(globalSearchNeedsSession(malformed)).toBe(false);
+  expect(allGlobalSearchSourcesFailed([valid[0], ...malformed])).toBe(false);
 });
