@@ -39,6 +39,7 @@ type ReviewDraft = {
 };
 
 type DocumentDetailForReview = {
+  id?: string;
   type?: "ticket" | "invoice" | "other";
   documentDate?: string | null;
   documentTime?: string | null;
@@ -55,6 +56,7 @@ type DocumentDetailForReview = {
 };
 
 type OcrHistory = {
+  documentId?: string;
   runs?: Array<{ id?: string; extractor?: string; extractedAt?: string }>;
   reviews?: Array<{ revision?: number; ocrRunId?: string | null; reviewedValues?: unknown }>;
 }
@@ -370,6 +372,11 @@ export function OcrReviewPanel({
         ? detailResponse.document as DocumentDetailForReview
         : null;
       const history = historyResponse as OcrHistory;
+      // These two independent server reads must belong to the OCR document,
+      // otherwise a matching extractor/timestamp could link unrelated evidence.
+      if (detail?.id !== documentId || history?.documentId !== documentId) {
+        throw new Error("ocr_hydration_document_identity_mismatch");
+      }
       const run = history.runs?.find((candidate) => candidate.extractor === parsed.extractor && sameInstant(candidate.extractedAt, parsed.extractedAt));
       setDraft(reviewDraft(interpretation, detail));
       setOcrRunId(typeof run?.id === "string" ? run.id : null);
@@ -563,7 +570,11 @@ export function OcrReviewPanel({
         { cache: "no-store" },
       )) as OcrHistory;
       if (generation !== documentGeneration.current || activeDocumentId.current !== documentId) return;
-      const confirmed = (history.reviews ?? [])
+      if (history?.documentId !== documentId || !Array.isArray(history.reviews)) {
+        setError("El historial no corresponde a este documento o no es verificable. No se ha repetido ninguna confirmación.");
+        return;
+      }
+      const confirmed = history.reviews
         .filter((review) => review.ocrRunId === currentRunId
           && typeof review.revision === "number" && Number.isSafeInteger(review.revision)
           && sameConfirmedOcrValues(review.reviewedValues, pendingFinancialEvidence.current))
@@ -585,7 +596,7 @@ export function OcrReviewPanel({
           }
         }
       } else {
-        setError("El historial no muestra una revisión nueva que coincida con esta lectura y los importes solicitados. La confirmación sigue sin verificarse; solo repítela tras revisar el original y el resultado actual.");
+        setError("El historial no muestra una revisión nueva que coincida con esta lectura y todos los datos confirmados. La confirmación sigue sin verificarse; solo repítela tras revisar el original y el resultado actual.");
       }
     } catch {
       if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
