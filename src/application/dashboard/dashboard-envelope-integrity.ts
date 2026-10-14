@@ -51,12 +51,16 @@ export function isDashboardEnvelopeForScope(
     || !record(value.data)) return false;
 
   const expected = HOME_SCOPE_SOURCES[scope];
-  if (value.requestedSources.length !== expected.length
-    || expected.some((source, index) => value.requestedSources[index] !== source)
-    || value.failedSources.length > expected.length) return false;
+  // Capture the narrowed arrays in locals before callbacks; TypeScript does
+  // not preserve a property-narrowing across an asynchronous closure boundary.
+  const requestedSources = value.requestedSources;
+  const failedSources = value.failedSources;
+  if (requestedSources.length !== expected.length
+    || expected.some((source, index) => requestedSources[index] !== source)
+    || failedSources.length > expected.length) return false;
 
   const failed = new Set<HomeDashboardSource>();
-  for (const source of value.failedSources) {
+  for (const source of failedSources) {
     if (typeof source !== "string" || !expected.includes(source as HomeDashboardSource)
       || failed.has(source as HomeDashboardSource)) return false;
     failed.add(source as HomeDashboardSource);
