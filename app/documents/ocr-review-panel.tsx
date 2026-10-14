@@ -530,11 +530,17 @@ export function OcrReviewPanel({
     } catch (caught) {
       if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
-      const message = code.startsWith("invalid_")
-        ? "Hay un dato de la revisión con formato no válido. Corrígelo antes de confirmar."
-        : "No se pudo comprobar si la revisión OCR llegó a guardarse. Consulta su historial antes de volver a confirmar para evitar duplicados.";
+      // HTTP 413 and local validation failures happen before persistence;
+      // unlike a lost connection, these must not lock the human review form
+      // behind a needless history reconciliation.
+      const safelyRejected = code.startsWith("invalid_") || code === "document_review_too_large";
+      const message = code === "document_review_too_large"
+        ? "La revisión contiene demasiados datos para guardarla (límite de 256 KB). Reduce las líneas o las notas y vuelve a confirmar."
+        : safelyRejected
+          ? "Hay un dato de la revisión con formato no válido. Corrígelo antes de confirmar."
+          : "No se pudo comprobar si la revisión OCR llegó a guardarse. Consulta su historial antes de volver a confirmar para evitar duplicados.";
       setError(message);
-      if (!code.startsWith("invalid_")) setConfirmationUnverified(true);
+      if (!safelyRejected) setConfirmationUnverified(true);
       else pendingFinancialEvidence.current = null;
       actionFeedback.error(feedbackId, message);
     } finally {
