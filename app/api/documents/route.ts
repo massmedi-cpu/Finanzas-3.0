@@ -14,6 +14,7 @@ import {
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/application/document-query-integer";
 import { verifyDriveDocumentBatchMetadata } from "../../../src/application/document-drive-batch-verification";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,6 +27,8 @@ const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]
 const METHODS = new Set(["manual", "suggested"]);
 const SCOPES = new Set(["ordinary", "tests", "all"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+// Includes the largest supported batch of 200 original Drive metadata rows.
+const MAX_DOCUMENT_JSON_BYTES = 512 * 1024;
 const DOCUMENT_LIST_KEYS = new Set(["status", "q", "limit", "offset", "scope", "unassociated"]);
 const DOCUMENT_DETAIL_KEYS = new Set(["id"]);
 const DOCUMENT_OPEN_KEYS = new Set(["id", "mode"]);
@@ -105,6 +108,10 @@ function driveDownloader() {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const status = error.reason === "too_large" ? 413 : 400;
+    return Response.json({ error: "invalid_request", code: status === 413 ? "document_body_too_large" : "invalid_document_body" }, { status, headers: HEADERS });
+  }
   if (error instanceof GoogleDriveDocumentError) {
     const status: Record<GoogleDriveDocumentError["code"], number> = {
       google_drive_document_id_invalid: 400,
@@ -212,7 +219,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
 
     if (action === "upload_sign") {
@@ -298,7 +305,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
 
     if (action === "test_designation") {
