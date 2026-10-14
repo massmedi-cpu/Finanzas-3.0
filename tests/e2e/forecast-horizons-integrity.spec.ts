@@ -139,13 +139,13 @@ test("REC-HORIZON-005 · malformed annual HTTP 200 stays recoverable without cra
   expect(crashes).toEqual([]);
 });
 
-test("REC-HORIZON-006 · usable horizon cards in both themes across phone, tablet and desktop", async ({ page }, info) => {
+for (const theme of ["light", "dark"] as const) test(`REC-HORIZON-006 · usable ${theme} horizon cards across phone, tablet and desktop`, async ({ page }, info) => {
   test.skip(info.project.name !== "chromium-desktop", "The width matrix runs once per build.");
   await page.route("**/api/forecast*", async (route) => {
     const query = new URL(route.request().url()).searchParams;
     await route.fulfill({ json: fixture(query.get("dateFrom")!, query.get("dateTo")!) });
   });
-  for (const theme of ["light", "dark"] as const) {
+  {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
     for (const width of [360, 390, 768, 1024, 1100, 1280, 1366, 1440]) {
       await page.setViewportSize({ width, height: 960 });

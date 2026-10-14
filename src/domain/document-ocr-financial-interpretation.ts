@@ -400,6 +400,8 @@ function extractTaxId(lines: LocatedLine[]) {
 
 function extractDate(lines: LocatedLine[]) {
   const pattern = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/;
+  const isoPattern = /\b(\d{4})([-./])(\d{1,2})\2(\d{1,2})\b/;
+  const numericDateText = "(?:\\d{4}[-./]\\d{1,2}[-./]\\d{1,2}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})";
   const writtenPattern = /\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})\b/i;
   const namedMonth: Record<string, number> = {
     enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
@@ -409,9 +411,9 @@ function extractDate(lines: LocatedLine[]) {
   // Billing dates, contract expiry and legal conditions are not evidence of
   // a receipt purchase or invoice issue date.
   const unrelated = /\b(?:nacimiento|vencimiento|caducidad|vigencia|registro|periodo|hasta|desde|legal)\b/;
-  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  const directLabel = new RegExp("^(?:fecha(?:\\s+de\\s+(?:emision|expedicion|compra|factura))?|fecha\\s*(?:/|y)\\s*hora|emitid[oa]\\s+el)\\s*[:\\-]?\\s*" + numericDateText + "\\b");
   const explicitWritten = /\b(?:emitid[oa]\s+el|fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?\s*[:\-]?)\s*\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b/;
-  const embeddedNumericIssueDate = /\bemitid[oa]\s+el\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  const embeddedNumericIssueDate = new RegExp("\\b(?:emitid[oa]\\s+el|fecha\\s+de\\s+(?:emision|expedicion|compra|factura)\\s*[:\\-]?)\\s*" + numericDateText + "\\b");
   let unlabelled: OcrInterpretedField<string> | null = null;
   let issueDate: OcrInterpretedField<string> | null = null;
   let contradictoryIssueDates = false;
@@ -425,20 +427,23 @@ function extractDate(lines: LocatedLine[]) {
     // Match the date FOLLOWING its issue label, not an unrelated number
     // earlier on the same invoice row (e.g. order date before "emitida el").
     const labelledWritten = normalized.match(explicitWritten)?.[0].match(writtenPattern) ?? null;
-    const labelledNumeric = (normalized.match(directLabel)?.[0]
-      ?? normalized.match(embeddedNumericIssueDate)?.[0])?.match(pattern) ?? null;
-    const numeric = labelledNumeric ?? (labelledWritten ? null : item.line.text.match(pattern));
-    const written = labelledWritten ?? (numeric ? null : item.line.text.match(writtenPattern));
-    if (!numeric && !written) continue;
-    const day = Number(numeric?.[1] ?? written?.[1]);
-    const month = numeric ? Number(numeric[2]) : namedMonth[(written?.[2] ?? "").toLowerCase()];
-    const sourceYear = numeric?.[3] ?? written?.[3] ?? "";
+    const labelledText = normalized.match(directLabel)?.[0]
+      ?? normalized.match(embeddedNumericIssueDate)?.[0];
+    const labelledIso = labelledText?.match(isoPattern) ?? null;
+    const labelledNumeric = labelledIso ? null : labelledText?.match(pattern) ?? null;
+    const isoDate = labelledIso ?? (labelledNumeric || labelledWritten ? null : item.line.text.match(isoPattern));
+    const numeric = labelledNumeric ?? (labelledWritten || isoDate ? null : item.line.text.match(pattern));
+    const written = labelledWritten ?? (numeric || isoDate ? null : item.line.text.match(writtenPattern));
+    if (!numeric && !written && !isoDate) continue;
+    const day = Number(isoDate?.[4] ?? numeric?.[1] ?? written?.[1]);
+    const month = isoDate ? Number(isoDate[3]) : numeric ? Number(numeric[2]) : namedMonth[(written?.[2] ?? "").toLowerCase()];
+    const sourceYear = isoDate?.[1] ?? numeric?.[3] ?? written?.[3] ?? "";
     const year = Number(sourceYear.length === 2 ? "20" + sourceYear : sourceYear);
     const candidate = new Date(Date.UTC(year, month - 1, day));
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
     const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
-    const field = fieldFrom(item, numeric?.[0] ?? written?.[0] ?? "", iso);
-    if (labelledNumeric || labelledWritten) {
+    const field = fieldFrom(item, isoDate?.[0] ?? numeric?.[0] ?? written?.[0] ?? "", iso);
+    if (labelledNumeric || labelledWritten || labelledIso) {
       // Two competing labelled dates on one OCR row cannot both be trusted.
       // Dates on continuation pages may be annex/legal dates. A perfect OCR
       // score alone does not prove that a page-two label is the issue date.
@@ -608,7 +613,36 @@ function extractIssuer(lines: LocatedLine[]) {
     }
   }
 
-  for (const item of lines.slice(0, 8)) {
+  const recipientNames = new Set(lines.flatMap((item) => {
+    const match = item.line.text.match(/\b(?:cliente|destinatario|receptor|comprador|nombre|titular(?:\s+del\s+contrato)?)\s*:\s*(.+)/i);
+    if (!match) return [];
+    return [normalizeToken(match[1].replace(/\b(?:nif|cif|direccion)\s*:.*/i, "").trim())];
+  }));
+  const recipientLayout = lines.some((item) => /^(?:datos\s+del\s+cliente|facturacion\s*:)|\b(?:cliente|nombre|titular)\s*:/.test(normalizeToken(item.line.text)));
+  let recipientBlock = false;
+  const header = lines.filter((item) => {
+    const normalized = normalizeToken(item.line.text);
+    if (/^(?:(?:datos|informacion)\s+(?:de|del|de la)\s+)?(?:cliente|destinatario|receptor|comprador|titular)\b|^razon\s+social\s+(?:del|de la)\s+(?:cliente|destinatario|receptor|comprador)\b/.test(normalized)) recipientBlock = true;
+    else if (/^(?:datos?\s+(?:(?:del?|de la)\s+)?(?:emisor|proveedor|comercio|vendedor)|emisor|proveedor|vendedor|comercio)\b/.test(normalized)) recipientBlock = false;
+    return item.pageNumber === 1 && item.line.box.y <= 0.3
+      && item.line.box.height <= 0.1 && !recipientBlock;
+  });
+  // A legal business name in the header is stronger evidence than the
+  // first arbitrary line. It still requires review without seller ownership.
+  const legalName = header.find((item) => {
+    const text = item.line.text.trim();
+    const name = text.replace(/\s+(?:cif|nif)\s*[:\-]?.*$/i, "").trim();
+    return /\b(?:s\.?\s*a\.?(?:\s*u\.?)?|s\.?\s*l\.?(?:\s*u\.?)?)(?=\s|$|[,;])/i.test(text)
+      && !/^(?:cliente|destinatario|receptor|comprador|titular)\b/.test(normalizeToken(text))
+      && !recipientNames.has(normalizeToken(name));
+  });
+  if (legalName) {
+    const text = legalName.line.text.trim().replace(/^raz[oó]n\s+social\s*[:\-–—]?\s*/i, "")
+      .replace(/\s+(?:(?:cif|nif)\s*[:\-]?|fecha(?:\s+de)?\s+\w+\s*:).*$/i, "")
+      .replace(/\s+[A-Z]-?\d{7}[0-9A-Z](?:\s.*)?$/i, "").trim();
+    return fieldRequiringReview(fieldFrom(legalName, text, text));
+  }
+  for (const item of header.slice(0, 16)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     // A recipient/customer header can span multiple OCR lines. Never promote
@@ -634,7 +668,13 @@ function extractIssuer(lines: LocatedLine[]) {
       || /^(?:emisor|proveedor|vendedor|comercio|establecimiento)\s*[:\-]?$/.test(normalized)) {
       continue;
     }
-    if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
+    if (!text || /[\u0000-\u001f\u007f]/.test(text) || recipientNames.has(normalized)
+      || /^(?:c\/|cl\.?\s|calle\s|avda\.?\s)/.test(normalized)
+      || /^(?:bloque|piso|puerta|localidad|provincia)\b/.test(normalized)
+      || /^(?:pedido|referencia|ref\.?\s+domiciliacion|lugar\s+de\s+emision)\b/.test(normalized)
+      || /^(?:pag(?:ina)?\.?\s*\d|n[º°o]?\s*(?:de\s+)?(?:cuenta|pedido|contrato|recibo)|periodo|direccion|telefono|codigo\s+postal)\b/.test(normalized)
+      || /\b(factura|ticket|fecha|nif|cif|total|base|iva|periodo\s+de\s+consumo)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
+    if (recipientLayout) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
     }
@@ -777,37 +817,114 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
   return result;
 }
 
+type ProductColumn = {
+  center: number;
+  role: "description" | "quantity" | "unit" | "total" | "other";
+};
+
+function productColumns(line: OcrLine): ProductColumn[] | null {
+  if (line.words.length < 3) return null;
+  const columns: ProductColumn[] = line.words.map((word) => {
+    const name = normalizeToken(word.text).trim();
+    const role: ProductColumn["role"] = /^(?:descripcion|concepto|articulos?|productos?|modelo)$/.test(name) ? "description"
+      : /^(?:cantidad|unidades|uds?\.?|#)$/.test(name) ? "quantity"
+      : /^(?:p\.?\s*unit(?:ario)?|precio\s+(?:neto|unitario))$/.test(name) ? "unit"
+      : /^(?:importe(?:\s+total)?|total\s+pvp|total)$/.test(name) ? "total" : "other";
+    return { center: word.box.x + word.box.width / 2, role };
+  });
+  // Some invoices have both a unit total and the row total. Only the
+  // explicitly named amount column owns the payable line amount.
+  const explicitTotal = line.words.findIndex((word) => /^(?:importe\s+total|total\s+pvp)$/.test(normalizeToken(word.text).trim()));
+  if (explicitTotal >= 0) columns.forEach((column, index) => {
+    if (column.role === "total" && index !== explicitTotal) column.role = "other";
+  });
+  if (columns.filter((column) => column.role === "description").length !== 1
+    || columns.filter((column) => column.role === "total").length !== 1) return null;
+  return columns.sort((a, b) => a.center - b.center);
+}
+
+function productFromColumns(item: LocatedLine, columns: ProductColumn[]): OcrDocumentLineItem | null {
+  const cells = new Map<ProductColumn["role"], string[]>();
+  for (const word of item.line.words) {
+    const numeric = /^[\d\s,.\-−–€]+$/.test(word.text.trim());
+    const position = word.box.x + word.box.width * (numeric ? 0.5 : 0.05);
+    const column = columns.reduce((nearest, candidate) =>
+      Math.abs(candidate.center - position) < Math.abs(nearest.center - position) ? candidate : nearest);
+    const cell = cells.get(column.role) ?? [];
+    cell.push(word.text.trim());
+    cells.set(column.role, cell);
+  }
+  let description = (cells.get("description") ?? []).join(" ").trim();
+  if ((description.match(/\p{L}/gu) ?? []).length < 2) return null;
+  const money = (role: "unit" | "total") => {
+    const matches = (cells.get(role) ?? []).flatMap((text) => exactFinancialAmountMatches(text));
+    return matches.length === 1 ? parseMoneyCents(matches[0][0]) : null;
+  };
+  const quantityText = (cells.get("quantity") ?? []).join(" ");
+  let quantity = /^\d{1,6}(?:[,.]\d{1,3})?$/.test(quantityText)
+    ? Number(quantityText.replace(",", ".")) : null;
+  if (!columns.some((column) => column.role === "quantity")) {
+    const prefix = /^(\d{1,6})\s+(?=\p{L})/u.exec(description);
+    if (prefix) {
+      quantity = Number(prefix[1]);
+      description = description.slice(prefix[0].length).trim();
+    }
+  }
+  const unitPriceCents = money("unit");
+  const totalCents = money("total");
+  if (quantity === null && unitPriceCents === null && totalCents === null) return null;
+  const mismatch = quantity !== null && unitPriceCents !== null && totalCents !== null
+    && Math.abs(Math.round(quantity * unitPriceCents) - totalCents) > 1;
+  return {
+    description, quantity, unitPriceCents, totalCents,
+    confidence: item.line.confidence,
+    trust: totalCents === null || mismatch ? "doubtful" : trustFor(item.line.confidence, true),
+    evidence: [evidenceOf(item)],
+  };
+}
+
 function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   const result: OcrDocumentLineItem[] = [];
   // Compute product-table page membership only once; long multi-page bills
   // must not scan all OCR lines again for each potential product.
-  const headerPages = new Set(lines.filter((item) => {
+  const headers = new Map<LocatedLine, ProductColumn[] | null>();
+  for (const item of lines) {
+    const columns = productColumns(item.line);
     const text = normalizeToken(item.line.text);
-    return /^(?:descripcion|concepto|articulos?|productos?)\b/.test(text)
-      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(text);
-  }).map((item) => item.pageNumber));
+    if (columns || (/^(?:descripcion|concepto|articulos?|productos?)\b/.test(text)
+      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(text))) headers.set(item, columns);
+  }
+  const headerPages = new Set([...headers.keys()].map((item) => item.pageNumber));
   // A receipt header explicitly scopes product rows. Stop before totals,
   // payment methods and tax tables instead of manufacturing purchases from
   // legal paragraphs or VAT summary rows elsewhere in the document.
   let tablePage = -1;
   let tableOpen = false;
+  let columns: ProductColumn[] | null = null;
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
     if (tablePage !== item.pageNumber) {
       tablePage = item.pageNumber;
       tableOpen = false;
+      columns = null;
     }
-    if (/^(?:descripcion|concepto|articulos?|productos?)\b/.test(normalized)
-      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(normalized)) {
+    if (headers.has(item)) {
       tableOpen = true;
+      columns = headers.get(item) ?? null;
       continue;
     }
-    if (tableOpen && /^(?:total|subtotal|base\s+imponible|efectivo|tarjeta|forma\s+de\s+pago)\b/.test(normalized)) {
+    if (tableOpen && /^(?:total|subtotal|importe\s+bruto|base\s+imponible|efectivo|tarjeta|forma\s+de\s+pago|tipo\s+%?\s*impuesto|iva|igic)\b/.test(normalized)) {
       tableOpen = false;
+      columns = null;
     }
     // Retain unstructured candidates for human review, but a table header
     // on this page means figures outside its product rows are not items.
     if (headerPages.has(item.pageNumber) && !tableOpen) continue;
+    if (columns) {
+      const product = productFromColumns(item, columns);
+      if (product) result.push(product);
+      continue;
+    }
     const text = item.line.text.trim();
     if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     const moneyMatches = exactFinancialAmountMatches(text).map((match) => match[0]);
@@ -838,7 +955,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
       unitPriceCents,
       totalCents,
       confidence,
-      trust: arithmeticConflict ? "doubtful" : trustFor(confidence, true),
+      trust: arithmeticConflict || !tableOpen || moneyMatches.length > 2 ? "doubtful" : trustFor(confidence, true),
       evidence: [evidenceOf(item)],
     });
   }

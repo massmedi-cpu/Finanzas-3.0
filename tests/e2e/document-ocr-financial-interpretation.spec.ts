@@ -3,6 +3,69 @@ import { interpretDocumentOcrFinancially, OCR_FIELD_TRUST_LABELS } from "../../s
 import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 import type { DocumentOcrResult, OcrLine } from "../../src/domain/document-ocr";
 
+test("REC-OCR-137 · year-first dates preserve issue ownership and Spanish presentation semantics", () => {
+  for (const date of ["2028-02-29", "2028.02.29", "2028/02/29"]) {
+    const raw = result([line("number", `Número de factura: DEMO-82 Fecha de Factura: ${date}`, 0.99)]);
+    const interpreted = interpretDocumentOcrFinancially(raw);
+    expect(interpreted.date.value).toBe("2028-02-29");
+    expect(interpreted.date.trust).toBe("reliable");
+    expect(raw.plainText).toContain(date);
+  }
+});
+
+test("REC-OCR-138 · an unlabelled ISO date remains reviewable rather than disappearing", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("number-date", "AB-9032 - 2025-12-19"),
+    line("service-date", "2025-12-18. Servicio urbano"),
+  ]));
+  expect(interpreted.date.value).toBe("2025-12-19");
+  expect(interpreted.date.trust).toBe("doubtful");
+});
+
+test("REC-OCR-139 · invalid and payment-only ISO dates cannot become the invoice issue date", () => {
+  for (const text of ["Fecha de factura: 2027.02.29", "Fecha de vencimiento: 2028-02-29", "Periodo: 2028/02/01 - 2028/02/29"]) {
+    expect(interpretDocumentOcrFinancially(result([line("unrelated", text)])).date.value).toBeNull();
+  }
+});
+
+test("REC-OCR-140 · an order date earlier on a merged row cannot replace the labelled issue date", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("dates", "Fecha de pedido: 2028.02.12 Fecha de factura: 2028.02.29", 0.99),
+  ]));
+  expect(interpreted.date.value).toBe("2028-02-29");
+  expect(interpreted.date.trust).toBe("reliable");
+});
+
+test("REC-OCR-141 · pagination, account metadata, addresses and consumption periods are not merchants", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("page", "Pag. 1", 0.99, 0.01),
+    line("account", "Nº de cuenta: 123456", 0.99, 0.03),
+    line("address", "C/ Río, 42, 28002. España.", 0.99, 0.05),
+    line("period", "Periodo de consumo: 04 de julio de 2028 a 04 de agosto de 2028", 0.99, 0.07),
+  ]));
+  expect(interpreted.issuer.value).toBeNull();
+  expect(interpreted.issuer.trust).toBe("not_detected");
+});
+
+test("REC-OCR-142 · legal business header beats metadata without claiming verified seller ownership", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("page", "Pag. 1", 0.99, 0.01),
+    line("account", "Nº de cuenta: 123456", 0.99, 0.03),
+    line("issuer", "SUMINISTROS AURORA S.L. CIF B12345674", 0.99, 0.12),
+    line("recipient", "Cliente: COMPRAS DEL SUR SL", 0.99, 0.2),
+  ]));
+  expect(interpreted.issuer.value).toBe("SUMINISTROS AURORA S.L.");
+  expect(interpreted.issuer.trust).toBe("doubtful");
+});
+
+test("REC-OCR-143 · a repeated recipient's legal name cannot masquerade as the seller", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("recipient-bare", "COMPRAS DEL SUR SL CIF B12345674", 0.99, 0.05),
+    line("recipient", "Cliente: COMPRAS DEL SUR SL", 0.99, 0.2),
+  ]));
+  expect(interpreted.issuer.value).toBeNull();
+});
+
 function line(id: string, text: string, confidence = 0.95, y = 0.1): OcrLine {
   return {
     id,
@@ -29,6 +92,63 @@ function result(lines: OcrLine[]): DocumentOcrResult {
     principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
   };
 }
+
+function columnLine(id: string, cells: Array<[string, number, number?]>, y: number): OcrLine {
+  const words = cells.map(([text, x, width = 0.04]) => ({ text, confidence: 0.98, box: { x, y, width, height: 0.02 } }));
+  return { ...line(id, cells.map(([text]) => text).join(" "), 0.98, y), words };
+}
+
+test("REC-OCR-144 · named invoice holder and address continuation never become a seller", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("metadata", "Ref. domiciliación: 123456", 0.99, 0.02),
+    line("holder", "Titular: PERSONA DE EJEMPLO", 0.99, 0.04),
+    line("address", "BLOQUE G PISO 6 PUERTA 9", 0.99, 0.06),
+  ]));
+  expect(parsed.issuer.value).toBeNull();
+});
+
+test("REC-OCR-145 · geometry selects the payable total before base and tax columns", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    columnLine("header", [["EAN",0.05],["DESCRIPCIÓN",0.2,0.12],["CANTIDAD",0.45],["PVP",0.55],["DESCUENTO",0.65],["TOTAL PVP",0.75],["BASE",0.85],["% IVA",0.93]],0.1),
+    columnLine("product", [["1234567890123",0.03,0.1],["PRODUCTO A",0.2,0.12],["3,000",0.45],["15,00",0.55],["-4,00",0.65],["11,00",0.75],["10,00",0.85],["10,00",0.93]],0.15),
+    line("tax-header", "TIPO % IMPUESTO BASE CUOTA TOTAL",0.99,0.2),
+    line("tax-row", "IVA 10,00 10,00 1,00 11,00",0.99,0.25),
+  ]));
+  expect(parsed.lines).toHaveLength(1);
+  expect(parsed.lines[0]).toMatchObject({description:"PRODUCTO A",quantity:3,unitPriceCents:null,totalCents:1100,trust:"reliable"});
+});
+
+test("REC-OCR-146 · quantity printed inside a receipt description remains separate from its name", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    columnLine("header", [["Descripción",0.1,0.15],["P. Unit",0.65],["Importe",0.85]],0.1),
+    columnLine("product", [["3 PRODUCTO A",0.1,0.25],["7,00",0.65],["21,00",0.85]],0.2),
+  ]));
+  expect(parsed.lines[0]).toMatchObject({description:"PRODUCTO A",quantity:3,unitPriceCents:700,totalCents:2100,trust:"reliable"});
+});
+
+test("REC-OCR-147 · unpriced table rows stay unknown and tax summaries are not purchases", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    columnLine("header", [["Modelo",0.1,0.15],["Unidades",0.65],["Importe Total",0.85]],0.1),
+    columnLine("unpriced", [["ACCESORIO A",0.1,0.25],["1",0.65]],0.2),
+    line("summary", "Importe Bruto: EUR 100,00",0.99,0.3),
+    line("fee", "Aportación reciclaje: 0,08",0.99,0.35),
+  ]));
+  expect(parsed.lines).toHaveLength(1);
+  expect(parsed.lines[0]).toMatchObject({description:"ACCESORIO A",quantity:1,totalCents:null,trust:"doubtful"});
+});
+
+test("REC-OCR-148 · a monetary fragment without a product table is not a certified purchase", () => {
+  const parsed = interpretDocumentOcrFinancially(result([line("note","Referencia aproximada de consumo 100,00",0.99)]));
+  expect(parsed.lines[0].trust).toBe("doubtful");
+});
+
+test("REC-OCR-149 · a company name is isolated from another field merged onto its OCR row", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("issuer","SUMINISTROS AURORA S.L.U. Fecha de cargo: 20 de agosto de 2028",0.99),
+  ]));
+  expect(parsed.issuer.value).toBe("SUMINISTROS AURORA S.L.U.");
+  expect(parsed.issuer.trust).toBe("doubtful");
+});
 
 test("extracts the Axioma financial fields without mutating raw OCR", async () => {
   const raw = result([
