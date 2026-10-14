@@ -11,6 +11,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CONFIDENCES = new Set(["high", "medium", "low"]);
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+const SNAPSHOT_QUERY_PARAMETERS = new Set(["dateFrom", "dateTo", "accountId"]);
+const CANDIDATE_QUERY_PARAMETERS = new Set(["itemId", "days", "limit"]);
 
 function objectBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -56,6 +58,14 @@ function integerValue(value: unknown, code: string, min?: number, max?: number) 
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(code);
   if ((min !== undefined && value < min) || (max !== undefined && value > max)) throw new Error(code);
   return value;
+}
+
+function queryInteger(raw: string | null, fallback: number, code: string, min: number, max: number) {
+  if (raw === null) return fallback;
+  // Number("") and Number(" ") both become zero, and 1e1 becomes 10.
+  // Reject ambiguous query text rather than silently changing a candidate search.
+  if (!/^\\d+$/.test(raw)) throw new Error(code);
+  return integerValue(Number(raw), code, min, max);
 }
 
 function nonZeroIntegerValue(value: unknown, code: string) {
@@ -118,17 +128,22 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    for (const name of ["itemId", "days", "limit", "dateFrom", "dateTo", "accountId"]) {
-      if (searchParams.getAll(name).length > 1) throw new Error("invalid_forecast_duplicate_parameters");
+    if ([...searchParams.keys()].some((name) => searchParams.getAll(name).length > 1)) {
+      throw new Error("invalid_forecast_duplicate_parameters");
+    }
+    const candidateRequest = searchParams.has("itemId");
+    const allowedParameters = candidateRequest ? CANDIDATE_QUERY_PARAMETERS : SNAPSHOT_QUERY_PARAMETERS;
+    if ([...searchParams.keys()].some((name) => !allowedParameters.has(name))) {
+      throw new Error("invalid_forecast_query_parameters");
     }
     const itemId = searchParams.get("itemId");
 
-    if (itemId) {
+    if (candidateRequest) {
       const id = requiredUuid(itemId, "invalid_forecast_item_id");
       const daysRaw = searchParams.get("days");
       const limitRaw = searchParams.get("limit");
-      const days = daysRaw === null ? 7 : integerValue(Number(daysRaw), "invalid_forecast_candidate_days", 0, 31);
-      const limit = limitRaw === null ? 8 : integerValue(Number(limitRaw), "invalid_forecast_candidate_limit", 1, 20);
+      const days = queryInteger(daysRaw, 7, "invalid_forecast_candidate_days", 0, 31);
+      const limit = queryInteger(limitRaw, 8, "invalid_forecast_candidate_limit", 1, 20);
       const result = await callPersistenceGateway("forecast.candidates", { id, days, limit });
       if (!isForecastCandidateSnapshotForRequest(result, { itemId: id, days, limit })) throw new Error("invalid_forecast_candidates_contract");
       return Response.json(result, { headers: HEADERS });

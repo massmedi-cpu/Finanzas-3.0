@@ -12,6 +12,21 @@ const KINDS = new Set(["income", "expense", "transfer", "refund", "adjustment"])
 const REVIEW_STATES = new Set(["confirmed", "pending", "needs_review"]);
 const DUPLICATE_STATES = new Set(["none", "suspected", "confirmed"]);
 const DUPLICATE_DECISIONS = new Set(["confirmed", "dismissed"]);
+const STANDARD_QUERY_PARAMETERS = new Set([
+  "q", "accountId", "categoryId", "merchantId", "kind", "reviewState", "duplicateState",
+  "dateFrom", "dateTo", "amountFromCents", "amountToCents", "channel", "counterparty",
+  "reconciliation", "recurring", "internalTransfer", "hasDocument", "documentQuery",
+  "splitLabel", "tag", "ocrQuery", "cursorBankDate", "cursorId", "limit",
+  "uncategorized", "signMismatch", "year", "month",
+]);
+
+const MODE_QUERY_PARAMETERS: Record<string, ReadonlySet<string>> = {
+  facets: new Set(["mode"]),
+  split: new Set(["mode", "transactionId"]),
+  "duplicate-group": new Set(["mode", "transactionId"]),
+  "transfer-candidates": new Set(["mode", "transactionId", "dayWindow"]),
+};
+
 const PATCH_FIELDS = new Set([
   "concept",
   "merchantMode",
@@ -49,6 +64,12 @@ function optionalDate(params: URLSearchParams, key: string) {
   const value = optionalText(params, key, 10);
   if (value === null) return null;
   if (!DATE.test(value)) throw new Error(`invalid_${key}`);
+  // Date() normalizes dates such as 30 February: never let a fictitious bank
+  // period, pagination cursor or filter reach the persistence gateway.
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new Error(`invalid_${key}`);
+  }
   return value;
 }
 
@@ -222,6 +243,10 @@ export async function GET(request: Request) {
       throw new Error("invalid_transaction_query_duplicate");
     }
     const mode = searchParams.get("mode");
+    const allowedParameters = mode === null ? STANDARD_QUERY_PARAMETERS : MODE_QUERY_PARAMETERS[mode];
+    if (!allowedParameters || [...searchParams.keys()].some((key) => !allowedParameters.has(key))) {
+      throw new Error("invalid_transaction_query_parameters");
+    }
     if (mode === "facets") {
       const result = await callPersistenceGateway("transaction.facets");
       return Response.json(result, {

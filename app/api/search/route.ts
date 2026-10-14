@@ -194,6 +194,14 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // A global search must not claim completeness for an ambiguous query.
+    // Validate even when q is blank, before any private gateway request.
+    if ([...searchParams.keys()].some((key) => key !== "q" || searchParams.getAll(key).length !== 1)) {
+      return Response.json(
+        { error: "invalid_request", code: "invalid_search_query_parameters" },
+        { status: 400, headers: HEADERS },
+      );
+    }
     const rawQuery = searchParams.get("q") ?? "";
     const query = prepareGlobalSearchQuery(rawQuery);
     if (!query) {
