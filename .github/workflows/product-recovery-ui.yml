@@ -98,6 +98,7 @@ jobs:
           tests/e2e/private-document-replay.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
+          tests/e2e/gateway-request-body-limit.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
