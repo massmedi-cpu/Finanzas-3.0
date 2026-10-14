@@ -64,7 +64,7 @@ function queryInteger(raw: string | null, fallback: number, code: string, min: n
   if (raw === null) return fallback;
   // Number("") and Number(" ") both become zero, and 1e1 becomes 10.
   // Reject ambiguous query text rather than silently changing a candidate search.
-  if (!/^\\d+$/.test(raw)) throw new Error(code);
+  if (!/^\d+$/.test(raw)) throw new Error(code);
   return integerValue(Number(raw), code, min, max);
 }
 
