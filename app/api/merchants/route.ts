@@ -1,9 +1,12 @@
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 128 * 1024;
 
 type MerchantAction =
   | "merchant.save"
@@ -37,6 +40,13 @@ function requiredText(value: unknown, code: string) {
 }
 
 export function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "merchant_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+    );
+  }
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
@@ -79,7 +89,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = asObject(await request.json().catch(() => null));
+    const body = asObject(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const operation = requiredText(body.operation, "invalid_operation") as MerchantAction;
     if (!ALLOWED_ACTIONS.has(operation)) throw new Error("unsupported_operation");
 
