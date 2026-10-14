@@ -1,3 +1,4 @@
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import { MAX_TRANSACTION_PATCH_SIZE } from "../../../src/core/transaction-limits";
 import {
   callPersistenceGateway,
@@ -5,6 +6,8 @@ import {
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 512 * 1024;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -116,6 +119,13 @@ function transferDayWindow(params: URLSearchParams) {
 }
 
 export function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "transaction_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+    );
+  }
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
@@ -359,7 +369,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const raw = await request.json().catch(() => null);
+    const raw = await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES);
     const { transactionIds, patch } = validatePatchBody(raw);
     const result = await callPersistenceGateway("transaction.patch", { transactionIds, patch });
     return Response.json(result, {
@@ -372,7 +382,7 @@ export async function PATCH(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const command = splitBody(await request.json().catch(() => null));
+    const command = splitBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const result = await callPersistenceGateway("transaction.split_save", command);
     return Response.json(result, {
       headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
@@ -384,7 +394,7 @@ export async function PUT(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const command = reviewBody(await request.json().catch(() => null));
+    const command = reviewBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const result = command.action === "duplicate-review"
       ? await callPersistenceGateway("transaction.duplicate_review", command)
       : command.action === "transfer-pair"
