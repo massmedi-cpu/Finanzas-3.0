@@ -147,7 +147,7 @@ export function areForecastItemsWithinSelection(items: unknown, period: unknown)
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const row = value as Record<string, unknown>;
     if (typeof row.id !== "string" || seen.has(row.id) || typeof row.date !== "string"
-      || !/^\\d{4}-\\d{2}-\\d{2}$/.test(row.date) || row.date < from || row.date > to
+      || !/^\d{4}-\d{2}-\d{2}$/.test(row.date) || row.date < from || row.date > to
       || (accountId !== null && row.accountId !== accountId)) return false;
     const date = new Date(row.date + "T00:00:00Z");
     if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== row.date) return false;
