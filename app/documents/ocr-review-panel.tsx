@@ -163,7 +163,16 @@ function parseOcrResult(value: unknown): OcrResult {
       throw new Error("ocr_response_invalid");
     }
     for (const line of page.lines) {
-      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Number.isFinite(line.confidence) || line.confidence < 0 || line.confidence > 1) {
+      if (!line || typeof line !== "object" || typeof line.id !== "string" || !line.id.trim()
+        || typeof line.text !== "string" || typeof line.confidence !== "number"
+        || !Number.isFinite(line.confidence) || line.confidence < 0 || line.confidence > 1
+        || !line.box || typeof line.box !== "object"
+        || !([line.box.x, line.box.y, line.box.width, line.box.height].every(
+          (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1
+        ))
+        || line.box.x + line.box.width > 1.001 || line.box.y + line.box.height > 1.001) {
+        // The financial interpreter and the evidence viewer rely on bounded,
+        // source-backed geometry. A partial HTTP 200 is not a valid OCR result.
         throw new Error("ocr_response_invalid");
       }
     }
