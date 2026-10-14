@@ -169,6 +169,15 @@ function latestBankDate(data: Record<DashboardSource, unknown | null>) {
 export async function GET(request: Request) {
   const startedAt = performance.now();
   const { searchParams } = new URL(request.url);
+  // A URL with duplicate or extra selectors must not silently change
+  // which financial datasets Inicio receives or accepts.
+  if (searchParams.getAll("scope").length > 1
+    || [...searchParams.keys()].some((key) => key !== "scope")) {
+    return Response.json(
+      { error: "invalid_request", code: "invalid_dashboard_parameters" },
+      { status: 400, headers: HEADERS },
+    );
+  }
   const rawScope = searchParams.get("scope") ?? "all";
 
   if (!SCOPES.has(rawScope as DashboardScope)) {
