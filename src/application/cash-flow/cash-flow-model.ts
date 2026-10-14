@@ -92,12 +92,20 @@ export function shiftCashFlowMonth(month: string, offset: number) {
   return new Date(Date.UTC(year, number - 1 + offset, 1)).toISOString().slice(0, 7);
 }
 
+function validBankDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const parsed = Date.parse(value + "T00:00:00Z");
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
 function isTransaction(value: unknown): value is CashFlowTransaction {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Partial<CashFlowTransaction>;
-  return typeof row.id === "string" && typeof row.bankDate === "string"
+  return typeof row.id === "string" && row.id.trim().length > 0
+    && validBankDate(row.bankDate)
     && Number.isSafeInteger(row.amountCents)
     && typeof row.concept?.effective === "string"
+    && typeof row.account?.id === "string" && row.account.id.trim().length > 0
     && typeof row.account?.name === "string"
     && ["income", "expense", "transfer", "refund", "adjustment"].includes(row.kind?.effective ?? "")
     && ["none", "suspected", "confirmed"].includes(row.duplicateState ?? "")
@@ -105,14 +113,22 @@ function isTransaction(value: unknown): value is CashFlowTransaction {
 }
 
 export function isTransactionPage(value: unknown): value is TransactionPage {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const page = value as Partial<TransactionPage>;
-  return Array.isArray(page.rows) && page.rows.every(isTransaction)
-    && Number.isSafeInteger(page.totalCount) && (page.totalCount ?? -1) >= 0
-    && typeof page.hasMore === "boolean"
-    && (page.nextCursor === null || (
-      typeof page.nextCursor?.bankDate === "string" && typeof page.nextCursor.id === "string"
-    ));
+  if (!Array.isArray(page.rows) || !page.rows.every(isTransaction)
+    || !Number.isSafeInteger(page.totalCount) || (page.totalCount ?? -1) < 0
+    || page.rows.length > page.totalCount!
+    || new Set(page.rows.map((row) => row.id)).size !== page.rows.length
+    || typeof page.hasMore !== "boolean") return false;
+  const validCursor = page.nextCursor === null || (page.nextCursor != null
+    && validBankDate(page.nextCursor.bankDate)
+    && typeof page.nextCursor.id === "string" && page.nextCursor.id.trim().length > 0);
+  // Cash Flow loads every page before showing confirmed real money.
+  // A broken cursor or an empty continuation must never masquerade as a
+  // completed bank extract, even when the gateway responds with HTTP 200.
+  return validCursor
+    && (!page.hasMore || (page.rows.length > 0 && page.nextCursor != null
+      && page.rows.length < page.totalCount!));
 }
 
 function isFinancialPeriod(value: unknown, dateFrom: string, dateTo: string): value is FinancialPeriod {
@@ -121,7 +137,9 @@ function isFinancialPeriod(value: unknown, dateFrom: string, dateTo: string): va
   return period.dateFrom === dateFrom && period.dateTo === dateTo && period.accountId === null
     && Number.isSafeInteger(period.operatingNetCents)
     && Number.isSafeInteger(period.quality?.includedRows)
-    && Number.isSafeInteger(period.quality?.scopedRows);
+    && Number.isSafeInteger(period.quality?.scopedRows)
+    && period.quality!.includedRows >= 0
+    && period.quality!.scopedRows >= period.quality!.includedRows;
 }
 
 function isCashFlowForecast(value: unknown, dateFrom: string, dateTo: string): value is ForecastSnapshot {
@@ -196,17 +214,21 @@ export function assembleCashFlow(input: {
   const derivedRealIncome = cashFlowRows.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
   const derivedRealExpense = cashFlowRows.reduce((sum, row) => sum - Math.min(0, row.amountCents), 0);
   const derivedRealNet = derivedRealIncome - derivedRealExpense;
+  const realArithmeticSafe = [derivedRealIncome, derivedRealExpense, derivedRealNet]
+    .every(Number.isSafeInteger);
   const actualState = transactionState === "unavailable" || !periodValid ? "unavailable"
     : transactionState === "incomplete" || transactions === null ? "incomplete"
-      : derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
+      : realArithmeticSafe && derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
         && eligible.length === (input.period as FinancialPeriod).quality.includedRows
         && actualRows.length === (input.period as FinancialPeriod).quality.scopedRows ? "ready" : "mismatch";
   const actualObserved = actualState === "ready" && periodHasObservedData(actualCoverage);
   const derivedPlannedNet = forecast?.items.reduce((sum, item) => sum + item.projectionEffectCents, 0);
   const derivedPlannedIncome = forecast?.items.reduce((sum, item) => sum + Math.max(0, item.projectionEffectCents), 0);
   const derivedPlannedExpense = forecast?.items.reduce((sum, item) => sum - Math.min(0, item.projectionEffectCents), 0);
+  const plannedArithmeticSafe = [derivedPlannedNet, derivedPlannedIncome, derivedPlannedExpense]
+    .every((amount) => amount !== undefined && Number.isSafeInteger(amount));
   const forecastState = !forecast ? "unavailable"
-    : derivedPlannedNet === forecast.summary.projectedNetCents
+    : plannedArithmeticSafe && derivedPlannedNet === forecast.summary.projectedNetCents
       && derivedPlannedIncome === forecast.summary.projectedIncomeCents
       && derivedPlannedExpense === forecast.summary.projectedExpenseCents
       && forecast.summary.plannedItems === forecast.items.filter((item) => item.status === "planned").length
