@@ -1,11 +1,13 @@
 .section {
+  container-type: inline-size;
+  container-name: forecast-horizons;
   margin: 0 auto 24px;
   width: min(100%, 1440px);
   padding: 24px;
-  border: 1px solid color-mix(in srgb, var(--border, #d9dde5) 82%, transparent);
-  border-radius: 24px;
-  background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
-  box-shadow: 0 18px 60px rgb(15 23 42 / 7%);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--surface-card) 94%, transparent);
+  box-shadow: var(--shadow-panel);
 }
 
 .heading {
@@ -25,7 +27,7 @@
 .heading > div:first-child > p:last-child {
   max-width: 760px;
   margin: 0;
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   line-height: 1.55;
 }
 
@@ -34,7 +36,7 @@
   font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: .12em;
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
 }
 
 .openingBalance {
@@ -46,7 +48,7 @@
 
 .openingBalance span,
 .openingBalance small {
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
 }
 
@@ -64,15 +66,14 @@
 .card {
   min-width: 0;
   padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--border, #d9dde5) 82%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-border) 82%, transparent);
   border-radius: 18px;
-  background: color-mix(in srgb, var(--surface, #fff) 97%, var(--text-primary, #101828) 3%);
+  background: color-mix(in srgb, var(--surface-card) 97%, var(--color-text) 3%);
 }
 
 .cardHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -83,19 +84,20 @@
 
 .horizonDate {
   margin: 3px 0 0;
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
 }
 
 .confidence {
-  flex: 0 0 auto;
+  justify-self: start;
+  max-width: 100%;
   padding: 5px 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--surface, #fff) 80%, var(--text-primary, #101828) 8%);
-  color: var(--text-secondary, #596273);
+  background: color-mix(in srgb, var(--surface-card) 80%, var(--color-text) 8%);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
   font-weight: 750;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .balanceBlock {
@@ -105,7 +107,7 @@
 }
 
 .balanceBlock > span {
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
 }
 
@@ -121,8 +123,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.positive { color: var(--success, #147a4b); }
-.negative { color: var(--danger, #b42318); }
+.positive { color: var(--color-success); }
+.negative { color: var(--color-danger); }
 
 .metrics {
   display: grid;
@@ -135,11 +137,11 @@
   min-width: 0;
   padding: 9px 10px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--surface, #fff) 84%, var(--text-primary, #101828) 5%);
+  background: color-mix(in srgb, var(--surface-card) 84%, var(--color-text) 5%);
 }
 
 .metrics dt {
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
 }
 
@@ -154,7 +156,7 @@
 .explain {
   min-height: 34px;
   margin: 14px 0 0;
-  color: var(--text-secondary, #596273);
+  color: var(--color-text-secondary);
   font-size: var(--font-helper);
   line-height: 1.4;
 }
@@ -162,19 +164,41 @@
 .status {
   padding: 18px;
   border-radius: 16px;
-  background: color-mix(in srgb, var(--surface, #fff) 86%, var(--text-primary, #101828) 4%);
-  color: var(--text-secondary, #596273);
+  background: color-mix(in srgb, var(--surface-card) 86%, var(--color-text) 4%);
+  color: var(--color-text-secondary);
 }
 
-@media (max-width: 1080px) {
+.status p { margin: 0 0 12px; }
+
+.retryButton {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--surface-card);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.retryButton:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 3px;
+}
+
+@container forecast-horizons (max-width: 65rem) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@container forecast-horizons (max-width: 35rem) {
+  .grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 680px) {
   .section { padding: 18px 14px; border-radius: 20px; }
   .heading { display: grid; gap: 12px; }
   .openingBalance { text-align: left; }
-  .grid { grid-template-columns: 1fr; }
   .card { padding: 16px; }
   .cardHeader { align-items: center; }
 }

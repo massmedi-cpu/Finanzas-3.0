@@ -105,6 +105,41 @@ export type ForecastCandidateSnapshot = {
   candidates: ForecastCandidate[];
 };
 
+function isForecastDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + "T00:00:00Z");
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+/** Validate the fields read by the calendar, category identity and item editor. */
+function isForecastItem(value: unknown): value is ForecastItem {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  const optionalTexts = [
+    "accountId", "accountName", "categoryId", "categoryName", "merchantId", "merchantName",
+    "recurrenceId", "budgetId", "confirmedTransactionId", "excludedReason", "reconciliationNote", "projectionKey",
+  ];
+  if (typeof row.id !== "string" || !row.id.trim() || !isForecastDate(row.date)
+    || typeof row.concept !== "string" || !row.concept.trim()
+    || !["known", "recurring", "budget", "manual", "inferred"].includes(row.origin as string)
+    || !["high", "medium", "low"].includes(row.confidence as string)
+    || !["planned", "excluded", "confirmed"].includes(row.status as string)
+    || typeof row.excluded !== "boolean" || typeof row.affectsProjection !== "boolean"
+    || optionalTexts.some((key) => row[key] != null && typeof row[key] !== "string")
+    || !Number.isSafeInteger(row.amountCents)
+    || !Number.isSafeInteger(row.projectionEffectCents)
+    || !Number.isSafeInteger(row.projectedBalanceAfterCents)
+    || typeof row.updatedAt !== "string" || !Number.isFinite(Date.parse(row.updatedAt))) return false;
+  if (row.actual == null) return true;
+  if (typeof row.actual !== "object" || Array.isArray(row.actual)) return false;
+  const actual = row.actual as Record<string, unknown>;
+  return isForecastDate(actual.date)
+    && Number.isSafeInteger(actual.amountCents)
+    && typeof actual.accountId === "string"
+    && ["categoryId", "merchantId"].every((key) => actual[key] == null || typeof actual[key] === "string")
+    && typeof actual.analyticsEligible === "boolean";
+}
+
 /**
  * Reconciles the public forecast envelope to the PostgreSQL
  * financial_app.forecast_snapshot calculation (reviewed read-only).
@@ -162,10 +197,9 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
   // No unsafe cents or wrong-period money may reach server rendering.
   const summary = snapshot.summary;
   const period = snapshot.period;
-  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   return snapshot.contractVersion === 1
-    && typeof period?.dateFrom === "string" && datePattern.test(period.dateFrom)
-    && typeof period?.dateTo === "string" && datePattern.test(period.dateTo)
+    && isForecastDate(period?.dateFrom)
+    && isForecastDate(period?.dateTo)
     && period.dateFrom <= period.dateTo
     && (period.accountId === null || typeof period.accountId === "string")
     && Boolean(summary)
@@ -177,11 +211,7 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
     && isForecastSummaryArithmeticConsistent(summary)
     && Array.isArray(snapshot.items)
     && areForecastItemsWithinSelection(snapshot.items, period)
-    && snapshot.items.every((item) => item && typeof item.id === "string"
-      && typeof item.date === "string" && datePattern.test(item.date)
-      && Number.isSafeInteger(item.amountCents)
-      && Number.isSafeInteger(item.projectionEffectCents)
-      && Number.isSafeInteger(item.projectedBalanceAfterCents))
+    && snapshot.items.every(isForecastItem)
     && Array.isArray(snapshot.budgetContext)
     && snapshot.budgetContext.every((month) => month
       && typeof month.month === "string"
@@ -199,7 +229,7 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
       && typeof account.id === "string"
       && typeof account.name === "string"
       && Number.isSafeInteger(account.balanceCents)
-      && (account.explicitBalanceDate === null || typeof account.explicitBalanceDate === "string"))
+      && (account.explicitBalanceDate === null || isForecastDate(account.explicitBalanceDate)))
     && Number.isSafeInteger(snapshot.summary?.plannedItems)
     && Number.isSafeInteger(snapshot.summary?.excludedItems)
     && Number.isSafeInteger(snapshot.summary?.confirmedItems)

@@ -134,6 +134,12 @@ async function mockForecastApi(
         projectionEffectCents: -4250,
         projectedBalanceAfterCents: 18873099,
       };
+      const selectionItems = current.items.filter((item) =>
+        item.recurrenceId !== flowRecurrenceId
+        && (!body.accountId || item.accountId === body.accountId)
+        && item.date >= (body.dateFrom as string)
+        && item.date <= (body.dateTo as string),
+      );
       current = {
         ...current,
         period: {
@@ -142,7 +148,7 @@ async function mockForecastApi(
           accountId: body.accountId as string | null,
         },
         items: [
-          ...current.items.filter((item) => item.recurrenceId !== flowRecurrenceId),
+          ...selectionItems,
           recurringItem,
         ],
       };
@@ -324,11 +330,16 @@ test("una previsión vacía guía a recurrentes o al formulario manual", async (
     },
     items: [],
   };
-  await page.route("**/api/forecast*", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(emptySnapshot),
-  }));
+  await page.route("**/api/forecast*", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...emptySnapshot, period: {
+        dateFrom: query.get("dateFrom"), dateTo: query.get("dateTo"), accountId: query.get("accountId"),
+      } }),
+    });
+  });
   await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const empty = page.getByRole("status", { name: "Evaluación de liquidez pendiente" });

@@ -32,7 +32,7 @@ for (const route of routes) {
       const response = await request.fetch(`/api/${route.path}`, {
         method,
         headers: { "content-type": "application/json" },
-        data: oversized,
+        data: Buffer.from(oversized, "utf8"),
       });
       expect(response.status(), method + " " + route.path).toBe(413);
       await expect(response.json()).resolves.toEqual({ error: "invalid_request", code: route.code });
@@ -45,7 +45,8 @@ test("REC-FIN-JSON-003 · invalid JSON in financial write routes remains HTTP 40
     const response = await request.fetch(`/api/${route.path}`, {
       method: route.methods[0],
       headers: { "content-type": "application/json" },
-      data: '{"malformed":',
+      // Send invalid bytes, not a JSON-serialized string value.
+      data: Buffer.from('{"malformed":', "utf8"),
     });
     expect(response.status(), route.path).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ error: "invalid_request", code: "invalid_json" });

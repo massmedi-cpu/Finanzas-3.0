@@ -112,7 +112,7 @@ test("REC-API-ERR-002 · Comercios rechaza JSON inválido con 400 y oculta mensa
     method: "POST", headers: { "content-type": "application/json" }, body: "{not-json}",
   }));
   expect(malformed.status).toBe(400);
-  expect(await malformed.json()).toMatchObject({ code: "invalid_request" });
+  expect(await malformed.json()).toMatchObject({ error: "invalid_request", code: "invalid_json" });
   const unsupported = await merchantsPOST(new Request("https://test.local/api/merchants", {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ operation: "merchant.drop" }),
   }));
@@ -227,7 +227,7 @@ test("REC-RULES-032 · JSON inválido da 400 y errores internos permanecen priva
     method: "POST", headers: { "content-type": "application/json" }, body: "{not-json}",
   }));
   expect(invalid.status).toBe(400);
-  expect(await invalid.json()).toMatchObject({ error: "invalid_request", code: "invalid_request" });
+  expect(await invalid.json()).toMatchObject({ error: "invalid_request", code: "invalid_json" });
   const raw = "Unexpected SQL error with user account ABC-SENSITIVE";
   const unexpected = ruleApiError(new Error(raw));
   expect(unexpected.status).toBe(500);

@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { ForecastSnapshot } from "../../src/application/forecast/forecast-contract";
+import {
+  isForecastSnapshotForSelection,
+  type ForecastSnapshot,
+} from "../../src/application/forecast/forecast-contract";
 import {
   buildForecastHorizonSummary,
   forecastHorizonEndDate,
   type ForecastHorizon,
 } from "../../src/application/forecast/forecast-horizon-engine";
 import { formatMoneyCents } from "../../src/core/money";
+import { formatNumber, formatPercentage } from "../../src/core/formatters";
 import styles from "./forecast-horizon-panel.module.css";
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -18,11 +22,11 @@ const dateFormatter = new Intl.DateTimeFormat("es-ES", {
 });
 
 const ORIGIN_LABELS = {
-  known: "conocidos",
-  recurring: "recurrentes",
-  budget: "presupuesto",
-  manual: "manuales",
-  inferred: "inferidos",
+  known: ["conocido", "conocidos"],
+  recurring: ["recurrente", "recurrentes"],
+  budget: ["de presupuesto", "de presupuesto"],
+  manual: ["manual", "manuales"],
+  inferred: ["inferido", "inferidos"],
 } as const;
 
 function formatDate(date: string) {
@@ -32,7 +36,7 @@ function formatDate(date: string) {
 function originSummary(horizon: ForecastHorizon) {
   return Object.entries(horizon.originCounts)
     .filter(([, count]) => count > 0)
-    .map(([origin, count]) => `${count} ${ORIGIN_LABELS[origin as keyof typeof ORIGIN_LABELS]}`)
+    .map(([origin, count]) => `${formatNumber(count)} ${ORIGIN_LABELS[origin as keyof typeof ORIGIN_LABELS][count === 1 ? 0 : 1]}`)
     .join(" · ");
 }
 
@@ -47,7 +51,7 @@ function HorizonCard({ horizon }: { horizon: ForecastHorizon }) {
           <p className={styles.horizonDate}>Hasta {formatDate(horizon.date)}</p>
         </div>
         <span className={styles.confidence} data-level={horizon.confidenceLabel.toLowerCase()}>
-          Confianza {horizon.confidenceLabel}{horizon.projectedItems > 0 ? ` · ${horizon.confidenceScore}%` : ""}
+          Confianza {horizon.confidenceLabel}{horizon.projectedItems > 0 ? ` · ${formatPercentage(horizon.confidenceScore / 100, 0)}` : ""}
         </span>
       </div>
 
@@ -66,7 +70,7 @@ function HorizonCard({ horizon }: { horizon: ForecastHorizon }) {
 
       <p className={styles.explain}>
         {horizon.projectedItems > 0
-          ? `${horizon.projectedItems} previsiones que afectan al flujo${origins ? `: ${origins}` : ""}.`
+          ? `${formatNumber(horizon.projectedItems)} ${horizon.projectedItems === 1 ? "previsión que afecta" : "previsiones que afectan"} al flujo${origins ? `: ${origins}` : ""}.`
           : "Sin movimientos previstos que afecten al flujo en este horizonte."}
       </p>
     </article>
@@ -74,22 +78,27 @@ function HorizonCard({ horizon }: { horizon: ForecastHorizon }) {
 }
 
 export function ForecastHorizonPanel({
-  dateFrom,
-  accountId,
+  sourceSnapshot,
 }: {
-  dateFrom: string;
-  accountId: string | null;
+  sourceSnapshot: ForecastSnapshot;
 }) {
-  const [snapshot, setSnapshot] = useState<ForecastSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const { dateFrom, accountId } = sourceSnapshot.period;
+  const [result, setResult] = useState<{
+    source: ForecastSnapshot;
+    snapshot: ForecastSnapshot | null;
+    failed: boolean;
+  } | null>(null);
+  const [retry, setRetry] = useState(0);
   const dateTo = useMemo(() => forecastHorizonEndDate(dateFrom), [dateFrom]);
+  // A verified long-range snapshot already contains all four horizons.
+  // Reuse it instead of repeating the same expensive gateway query.
+  const coveredBySource = sourceSnapshot.period.dateTo >= dateTo;
 
   useEffect(() => {
+    if (coveredBySource) return;
     const controller = new AbortController();
     const load = async () => {
-      setLoading(true);
-      setError(false);
+      setResult(null);
       try {
         const params = new URLSearchParams({ dateFrom, dateTo });
         if (accountId) params.set("accountId", accountId);
@@ -98,20 +107,27 @@ export function ForecastHorizonPanel({
           signal: controller.signal,
         });
         if (!response.ok) throw new Error("forecast_horizon_unavailable");
-        const data = await response.json() as ForecastSnapshot;
-        if (!controller.signal.aborted) setSnapshot(data);
+        const data: unknown = await response.json();
+        if (!isForecastSnapshotForSelection(data, { dateFrom, dateTo, accountId })) {
+          throw new Error("forecast_horizon_invalid_contract");
+        }
+        if (!controller.signal.aborted) setResult({ source: sourceSnapshot, snapshot: data, failed: false });
       } catch {
         if (!controller.signal.aborted) {
-          setSnapshot(null);
-          setError(true);
+          setResult({ source: sourceSnapshot, snapshot: null, failed: true });
         }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
       }
     };
     void load();
     return () => controller.abort();
-  }, [accountId, dateFrom, dateTo]);
+  }, [sourceSnapshot, coveredBySource, accountId, dateFrom, dateTo, retry]);
+
+  // Key results to the exact verified detail snapshot. No old balance is
+  // visible between a period change/save and the effect starting its reload.
+  const currentResult = result?.source === sourceSnapshot ? result : null;
+  const snapshot = coveredBySource ? sourceSnapshot : currentResult?.snapshot ?? null;
+  const loading = !coveredBySource && currentResult === null;
+  const error = !coveredBySource && currentResult?.failed === true;
 
   const summary = useMemo(
     () => snapshot ? buildForecastHorizonSummary(snapshot) : null,
@@ -123,7 +139,7 @@ export function ForecastHorizonPanel({
   if (!loading && summary && summary.horizons.every((item) => item.projectedItems === 0)) return null;
 
   return (
-    <section className={styles.section} aria-labelledby="forecast-horizons-title">
+    <section className={styles.section} aria-labelledby="forecast-horizons-title" data-testid="forecast-horizons" aria-busy={loading || undefined}>
       <div className={styles.heading}>
         <div>
           <p className={styles.eyebrow}>CASH FLOW · HORIZONTES</p>
@@ -144,7 +160,10 @@ export function ForecastHorizonPanel({
       {loading ? <div className={styles.status}>Calculando horizontes financieros…</div> : null}
       {!loading && error ? (
         <div className={styles.status} role="status">
-          No se han podido calcular ahora los horizontes. La previsión detallada sigue disponible debajo.
+          <p>No se han podido verificar los horizontes del periodo y la cuenta elegidos. Puedes consultar la previsión detallada y volver a intentar la lectura.</p>
+          <button className={styles.retryButton} onClick={() => { setResult(null); setRetry((value) => value + 1); }}>
+            Reintentar horizontes
+          </button>
         </div>
       ) : null}
       {!loading && summary ? (

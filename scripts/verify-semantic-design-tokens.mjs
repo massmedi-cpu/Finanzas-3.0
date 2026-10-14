@@ -13,7 +13,7 @@ const tokens = read(tokensPath);
 const layout = read("app/layout.tsx");
 const guarded = new Map([
   ["app/app-shell.module.css", read("app/app-shell.module.css")],
-  ["app/net-worth/net-worth.module.css", read("app/net-worth/net-worth.module.css")],
+  ["app/forecast/forecast-horizon-panel.module.css", read("app/forecast/forecast-horizon-panel.module.css")],
   ["app/configuration/source/source-overview.module.css", read("app/configuration/source/source-overview.module.css")],
   ["app/configuration/source/source.module.css", read("app/configuration/source/source.module.css")],
 ]);
@@ -96,10 +96,10 @@ for (const [token, label] of [
   assert(appShell.includes(`var(${token})`), `El shell debe consumir ${token} para ${label}.`);
 }
 
-const netWorth = guarded.get("app/net-worth/net-worth.module.css") ?? "";
-assert(netWorth.includes("var(--surface-card)"), "Patrimonio debe consumir --surface-card.");
-assert(netWorth.includes("var(--border-card)"), "Patrimonio debe consumir --border-card.");
-assert(netWorth.includes("var(--radius-card)"), "Patrimonio debe consumir --radius-card.");
+const forecast = guarded.get("app/forecast/forecast-horizon-panel.module.css") ?? "";
+assert(forecast.includes("var(--surface-card)"), "Horizontes debe consumir --surface-card.");
+assert(forecast.includes("var(--border-card)"), "Horizontes debe consumir --border-card.");
+assert(forecast.includes("var(--radius-card)"), "Horizontes debe consumir --radius-card.");
 
 const sourceOverview = guarded.get("app/configuration/source/source-overview.module.css") ?? "";
 assert(sourceOverview.includes("var(--surface-info-soft)"), "Fuente simple debe consumir --surface-info-soft.");
@@ -118,4 +118,4 @@ if (failures.length) {
 console.log("Semantic design token guard: OK");
 console.log(`- tokens semánticos obligatorios: ${requiredTokens.length}`);
 console.log(`- superficies protegidas contra colores literales: ${guarded.size}`);
-console.log("- Shell/navegación + Patrimonio + Fuente simple + Diagnóstico consumen el contrato ART-001");
+console.log("- Shell/navegación + Previsión + Fuente simple + Diagnóstico consumen el contrato ART-001");

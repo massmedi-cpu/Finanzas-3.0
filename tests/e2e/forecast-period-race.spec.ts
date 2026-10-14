@@ -52,6 +52,7 @@ function snapshot(concept: string, dateFrom: string, dateTo: string) {
       excludedReason: "",
       reconciliationNote: "",
       projectionKey: null,
+      updatedAt: "2026-09-09T10:00:00.000Z",
       status: "planned",
       affectsProjection: true,
       projectionEffectCents: -1000,

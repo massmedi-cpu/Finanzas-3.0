@@ -36,6 +36,7 @@ const snapshot = {
       excludedReason: "",
       reconciliationNote: "",
       projectionKey: null,
+      updatedAt: "2026-09-09T10:00:00.000Z",
       status: "planned",
       affectsProjection: true,
       projectionEffectCents: -7250,
@@ -126,7 +127,7 @@ test("Previsión mantiene metadata y etiquetas funcionales en al menos 14 px", a
 
   const targets = [
     page.getByText("Manual · confianza Alta", { exact: true }),
-    page.getByText("1 previstos", { exact: true }),
+    page.getByText("1 previsto", { exact: true }),
     page.getByText("Concepto", { exact: true }),
     page.getByText("Saldo después:", { exact: false }),
   ];

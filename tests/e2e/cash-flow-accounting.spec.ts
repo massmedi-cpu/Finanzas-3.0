@@ -141,7 +141,10 @@ test("Cash Flow no publica importes reales si la paginación está incompleta o 
 
 test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del motor", () => {
   const mismatch = view({ forecast: {
-    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedNetCents: 801 },
+    // The shared envelope reconciles; its 1.199 expenses still disagree
+    // with the independent 1.200 item total checked by Cash Flow.
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary,
+      projectedExpenseCents: 1199, projectedNetCents: 801, projectedClosingBalanceCents: 801 },
   } });
   expect(mismatch.forecastState).toBe("mismatch");
   expect(mismatch.forecastCounts).toBeNull();
@@ -150,10 +153,23 @@ test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del mot
   expect(mismatch.plannedNetCents).toBeNull();
   expect(mismatch.actualNetCents).toBe(4_400);
   const incomeMismatch = view({ forecast: {
-    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedIncomeCents: 2_001 },
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary,
+      projectedIncomeCents: 2_001, projectedNetCents: 801, projectedClosingBalanceCents: 801 },
   } });
   expect(incomeMismatch.forecastState).toBe("mismatch");
   expect(incomeMismatch.plannedNetCents).toBeNull();
+});
+
+test("REC-CFLOW-024 · a self-contradictory forecast envelope is unavailable and cannot show planned money", () => {
+  const invalid = view({ forecast: {
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedNetCents: 801 },
+  } });
+  expect(invalid.forecastState).toBe("unavailable");
+  expect(invalid.plannedIncomeCents).toBeNull();
+  expect(invalid.plannedExpenseCents).toBeNull();
+  expect(invalid.plannedNetCents).toBeNull();
+  expect(invalid.forecastCounts).toBeNull();
+  expect(invalid.actualNetCents).toBe(4400);
 });
 
 test("Cash Flow valida meses y febrero bisiesto sin adelantar la fecha bancaria", () => {

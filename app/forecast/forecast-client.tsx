@@ -24,10 +24,14 @@ import {
   type ResolvedForecastSelection,
 } from "../../src/application/forecast/forecast-selection";
 import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
+import { formatNumber } from "../../src/core/formatters";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
+import { ForecastHorizonPanel } from "./forecast-horizon-panel";
+import ModuleContextNavigation from "../module-context-navigation";
+import { forecastModuleLinks } from "../../src/application/navigation/module-context";
 import { ForecastScenarios } from "./forecast-scenarios";
 import styles from "./forecast.module.css";
 
@@ -158,6 +162,7 @@ export function ForecastClient({
   const dateFromRef = useRef(initialFrom);
   const dateToRef = useRef(initialTo);
   const accountIdRef = useRef(initialAccountId);
+  const datesEditedRef = useRef(false);
   const loadSequence = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const skipInitialReloadRef = useRef(Boolean(initialSnapshot));
@@ -197,6 +202,23 @@ export function ForecastClient({
   const handoffDateTo = recurrenceHandoff?.dateTo ?? null;
   const handoffAccountId = recurrenceHandoff?.accountId ?? null;
   const handoffRefresh = recurrenceHandoff?.refresh ?? false;
+  const moduleSelection = useMemo(() => {
+    try {
+      return resolveForecastSelection({ dateFrom, dateTo, accountId: initialAccountId });
+    } catch {
+      return null;
+    }
+  }, [dateFrom, dateTo, initialAccountId]);
+
+  useEffect(() => {
+    if (!datesEditedRef.current || !moduleSelection) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("dateFrom", moduleSelection.dateFrom);
+    url.searchParams.set("dateTo", moduleSelection.dateTo);
+    if (moduleSelection.accountId) url.searchParams.set("accountId", moduleSelection.accountId);
+    else url.searchParams.delete("accountId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [moduleSelection]);
   const maxPeriodDate = useMemo(() => {
     try {
       return forecastEndDateLimit(dateFrom);
@@ -660,7 +682,7 @@ export function ForecastClient({
     dateTo,
     accountId: handoffAccountId,
   };
-  const recurrencesHref = recurrencesHrefForForecast(recurrenceContextSelection);
+  const recurrencesHref = recurrencesHrefForForecast(moduleSelection ?? recurrenceContextSelection);
   const visiblePeriodIsStale = Boolean(snapshot && (
     snapshot.period.dateFrom !== dateFrom || snapshot.period.dateTo !== dateTo
   ));
@@ -757,6 +779,7 @@ export function ForecastClient({
             required
             disabled={busy !== null}
             onChange={(event) => {
+              datesEditedRef.current = true;
               const nextFrom = event.target.value;
               setDateFrom(nextFrom);
               if (dateToRef.current < nextFrom) setDateTo(nextFrom);
@@ -765,7 +788,7 @@ export function ForecastClient({
         </label>
         <label>
           Hasta
-          <input type="date" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => setDateTo(event.target.value)} />
+          <input type="date" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => { datesEditedRef.current = true; setDateTo(event.target.value); }} />
         </label>
       </section>
 
@@ -776,7 +799,14 @@ export function ForecastClient({
         </p>
       ) : null}
 
-      {error ? <div className={styles.error} role="alert">{error}</div> : null}
+      {error ? (
+        <div className={styles.error} role="alert">
+          <p>{error}</p>
+          <button className={styles.secondaryButton} disabled={loading || busy !== null} onClick={() => void loadSnapshot()}>
+            Reintentar lectura
+          </button>
+        </div>
+      ) : null}
       {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/forecast" /> : null}
       {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
@@ -796,6 +826,7 @@ export function ForecastClient({
           </section>
           ) : null}
 
+          <ForecastHorizonPanel sourceSnapshot={snapshot} />
           {hasProjectedEvents ? <ForecastScenarios snapshot={snapshot} /> : null}
           {hasProjectedEvents ? <ForecastBalanceChart snapshot={snapshot} /> : null}
           {!hasProjectedEvents ? (
@@ -820,9 +851,9 @@ export function ForecastClient({
                   <h2>Movimientos previstos</h2>
                 </div>
                 <div className={styles.counts}>
-                  <span>{snapshot.summary.plannedItems} previstos</span>
-                  <span>{snapshot.summary.confirmedItems} confirmados</span>
-                  <span>{snapshot.summary.excludedItems} excluidos</span>
+                  <span>{formatNumber(snapshot.summary.plannedItems)} {snapshot.summary.plannedItems === 1 ? "previsto" : "previstos"}</span>
+                  <span>{formatNumber(snapshot.summary.confirmedItems)} {snapshot.summary.confirmedItems === 1 ? "confirmado" : "confirmados"}</span>
+                  <span>{formatNumber(snapshot.summary.excludedItems)} {snapshot.summary.excludedItems === 1 ? "excluido" : "excluidos"}</span>
                 </div>
               </div>
 
@@ -1065,13 +1096,16 @@ export function ForecastClient({
                 </ul>
                 {snapshot.balanceContext.quality.integrityDeltaAccounts > 0 ? (
                   <div className={styles.qualityWarning}>
-                    Hay {snapshot.balanceContext.quality.integrityDeltaAccounts} cuenta con diferencia de reconstrucción conocida. La previsión mantiene el saldo bancario explícito como referencia.
+                    Hay {formatNumber(snapshot.balanceContext.quality.integrityDeltaAccounts)} {snapshot.balanceContext.quality.integrityDeltaAccounts === 1 ? "cuenta con diferencia de reconstrucción conocida" : "cuentas con diferencias de reconstrucción conocidas"}. La previsión mantiene el saldo bancario explícito como referencia.
                   </div>
                 ) : null}
               </section>
             </aside>
           </section>
         </>
+      ) : null}
+      {moduleSelection ? (
+        <ModuleContextNavigation links={forecastModuleLinks(moduleSelection)} ariaLabel="Continuar desde Previsión" />
       ) : null}
     </main>
   );
