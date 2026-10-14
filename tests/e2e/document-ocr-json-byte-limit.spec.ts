@@ -55,7 +55,7 @@ test("REC-OCR-MEM-004 · oversized declared body fails before reading private da
   let pulled = false;
   const stream = new ReadableStream<Uint8Array>({
     pull() { pulled = true; },
-  });
+  }, { highWaterMark: 0 });
   await expect(readLimitedJsonRequest(streamedRequest(stream, { "content-length": "4097" }), 4096))
     .rejects.toMatchObject({ reason: "too_large" });
   expect(pulled).toBe(false);
