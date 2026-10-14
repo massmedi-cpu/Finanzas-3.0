@@ -38,9 +38,10 @@ export function sameConfirmedOcrValues(observed: unknown, expected: OcrConfirmed
     "totalCents", "paymentMethod", "notes",
   ] as const;
   if (keys.some((key) => actual[key] !== expected[key])) return false;
-  if (!Array.isArray(actual.lineItems) || actual.lineItems.length !== expected.lineItems.length) return false;
+  const observedLines = actual.lineItems;
+  if (!Array.isArray(observedLines) || observedLines.length !== expected.lineItems.length) return false;
   return expected.lineItems.every((expectedRow, index) => {
-    const row: unknown = actual.lineItems[index];
+    const row: unknown = observedLines[index];
     if (!row || typeof row !== "object" || Array.isArray(row)) return false;
     const item = row as Record<string, unknown>;
     return item.description === expectedRow.description
