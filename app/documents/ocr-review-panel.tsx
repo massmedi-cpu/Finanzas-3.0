@@ -455,14 +455,14 @@ export function OcrReviewPanel({
         type: draft.type,
         documentDate: draft.documentDate || null,
         documentTime: draft.documentTime || null,
-        issuerName: draft.issuerName || null,
-        issuerTaxId: draft.issuerTaxId || null,
-        documentNumber: draft.documentNumber || null,
-        billingPeriod: draft.billingPeriod || null,
+        issuerName: draft.issuerName.trim() || null,
+        issuerTaxId: draft.issuerTaxId.trim() || null,
+        documentNumber: draft.documentNumber.trim() || null,
+        billingPeriod: draft.billingPeriod.trim() || null,
         taxBaseCents: moneyCents(draft.taxBase, "document_tax_base"),
         taxesCents: moneyCents(draft.taxes, "document_taxes"),
         totalCents: moneyCents(draft.total, "document_total"),
-        paymentMethod: draft.paymentMethod || null,
+        paymentMethod: draft.paymentMethod.trim() || null,
         lineItems: draft.lineItems
           .filter((line) => line.description.trim())
           .map((line, index) => ({
