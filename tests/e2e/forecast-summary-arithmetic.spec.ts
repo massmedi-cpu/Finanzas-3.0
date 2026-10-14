@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isForecastSummaryArithmeticConsistent } from "../../src/application/forecast/forecast-contract";
+import { areForecastItemsWithinSelection, isForecastSummaryArithmeticConsistent } from "../../src/application/forecast/forecast-contract";
 
 const valid = {
   openingBalanceCents: 105000,
@@ -44,4 +44,29 @@ test("REC-FCAST-056 · the API and browser share one arithmetic trust boundary",
   expect(contract).toContain("&& isForecastSummaryArithmeticConsistent(summary)");
   expect(api).toContain("isForecastSnapshotForSelection");
   expect(client).toContain("isForecastSnapshot(data)");
+});
+
+
+test("REC-FCAST-058 · scoped forecasts reject cross-account, duplicate or out-of-range items", () => {
+  const accountId = "10000000-0000-4000-8000-000000000001";
+  const otherId = "10000000-0000-4000-8000-000000000002";
+  const period = { dateFrom: "2026-10-01", dateTo: "2026-10-31", accountId };
+  const valid = [
+    { id: "81000000-0000-4000-8000-000000000001", date: "2026-10-01", accountId },
+    { id: "81000000-0000-4000-8000-000000000002", date: "2026-10-31", accountId },
+  ];
+  expect(areForecastItemsWithinSelection(valid, period)).toBe(true);
+  expect(areForecastItemsWithinSelection(valid, { ...period, accountId: null })).toBe(true);
+  expect(areForecastItemsWithinSelection([], period)).toBe(true);
+  expect(areForecastItemsWithinSelection([...valid, valid[0]], period)).toBe(false);
+  expect(areForecastItemsWithinSelection([{ ...valid[0], accountId: otherId }], period)).toBe(false);
+  for (const date of ["2026-09-30", "2026-11-01", "2026-02-30", "not-a-date"]) {
+    expect(areForecastItemsWithinSelection([{ ...valid[0], date }], period), date).toBe(false);
+  }
+  expect(areForecastItemsWithinSelection(null, period)).toBe(false);
+});
+
+test("REC-FCAST-059 · the forecast renderer uses the same scoped item invariant", () => {
+  const contract = readFileSync(join(process.cwd(), "src/application/forecast/forecast-contract.ts"), "utf8");
+  expect(contract).toContain("&& areForecastItemsWithinSelection(snapshot.items, period)");
 });
