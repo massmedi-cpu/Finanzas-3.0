@@ -3818,9 +3818,15 @@ test("REC-UI-DOC-012 · document editor follows its real panel width in light/da
           documentOverflow: document.documentElement.scrollWidth > window.innerWidth + 2,
         };
       });
-      if (layout.panelWidth <= 432) expect(layout.columns, `${width}px ${colorScheme}`).toBe(1);
-      else if (layout.panelWidth <= 704) expect(layout.columns, `${width}px ${colorScheme}`).toBe(2);
-      else expect(layout.columns, `${width}px ${colorScheme}`).toBeGreaterThanOrEqual(3);
+      // The outer app-content container already collapses at 1050px/700px.
+      // The inner detail container must additionally collapse on split desktops.
+      if (width <= 700 || layout.panelWidth <= 432) {
+        expect(layout.columns, `${width}px ${colorScheme}`).toBe(1);
+      } else if (width <= 1050 || layout.panelWidth <= 704) {
+        expect(layout.columns, `${width}px ${colorScheme}`).toBe(2);
+      } else {
+        expect(layout.columns, `${width}px ${colorScheme}`).toBeGreaterThanOrEqual(3);
+      }
       expect(layout.documentOverflow, `${width}px ${colorScheme}`).toBe(false);
     }
   }
