@@ -71,8 +71,8 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
       && record(transaction.account) && typeof transaction.account.name === "string"
       && record(transaction.concept) && typeof transaction.concept.effective === "string"
       && record(transaction.category)
-      && (transaction.category.effectiveId === null || typeof transaction.category.effectiveId === "string")
-      && (transaction.category.effectiveName === null || typeof transaction.category.effectiveName === "string")
+      && (transaction.category.effectiveId == null || typeof transaction.category.effectiveId === "string")
+      && (transaction.category.effectiveName == null || typeof transaction.category.effectiveName === "string")
       && record(transaction.kind)
       && ["income", "expense", "transfer", "refund", "adjustment"].includes(String(transaction.kind.effective))
       && (transaction.merchant == null || (
