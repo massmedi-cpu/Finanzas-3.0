@@ -5,6 +5,7 @@ import {
   assembleCashFlow,
   cashFlowEventState,
   cashFlowMonth,
+  isTransactionPage,
   type CashFlowTransaction,
 } from "../../src/application/cash-flow/cash-flow-model";
 import type { ForecastItem, ForecastSnapshot } from "../../src/application/forecast/forecast-contract";
@@ -89,6 +90,60 @@ function view(options: { net?: number; rows?: CashFlowTransaction[] | null;
     bankFreshness: options.freshness === undefined ? completedFreshness : options.freshness,
   });
 }
+
+test("REC-CFLOW-025 · malformed or overlapping bank pages cannot certify real spending", () => {
+  const row = transaction("bank-id-a", "2026-09-10", -1500, "expense");
+  const valid = { rows: [row], totalCount: 1, hasMore: false, nextCursor: null };
+  expect(isTransactionPage(valid)).toBe(true);
+  expect(isTransactionPage({ rows: [row], totalCount: 2, hasMore: true,
+    nextCursor: { bankDate: row.bankDate, id: row.id } })).toBe(true);
+
+  const invalidRows = [
+    { ...row, id: "" },
+    { ...row, bankDate: "2026-02-30" },
+    { ...row, bankDate: "2026-09-10T00:00Z" },
+    { ...row, account: { id: "", name: "Cuenta" } },
+    { ...row, amountCents: 123.45 },
+  ];
+  for (const invalid of invalidRows) {
+    expect(isTransactionPage({ ...valid, rows: [invalid] })).toBe(false);
+  }
+  expect(isTransactionPage({ ...valid, rows: [row, row], totalCount: 2 })).toBe(false);
+  expect(isTransactionPage({ ...valid, totalCount: 0 })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 1,
+    nextCursor: { bankDate: row.bankDate, id: row.id } })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 2,
+    nextCursor: { bankDate: "not-a-date", id: row.id } })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 2,
+    nextCursor: { bankDate: row.bankDate, id: "" } })).toBe(false);
+});
+
+test("REC-CFLOW-026 · sums beyond exact integer cents and impossible gateway counts remain unverified", () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  // Income and expenses nearly cancel to the same observed net (4400 cents),
+  // but a gross total exceeds the safe-integer boundary. Net-only checks
+  // would wrongly accept the envelope.
+  const income = max - 100;
+  const spending = income - 7000;
+  const adversarial = actualRows.map((row) => row.id === "salary"
+    ? { ...row, amountCents: income }
+    : row.id === "rent" ? { ...row, amountCents: -spending } : row);
+  const invalid = view({ rows: adversarial });
+  expect(invalid.actualNetCents).toBeNull();
+  expect(invalid.actualState).toBe("mismatch");
+  expect(invalid.days.every((day) => day.realIncomeCents === 0 && day.realExpenseCents === 0)).toBe(true);
+  // A period cannot contain more included movements than movements in scope.
+  const impossible = assembleCashFlow({
+    month: "2026-09", dateFrom: "2026-09-01", dateTo: "2026-09-30",
+    period: { dateFrom: "2026-09-01", dateTo: "2026-09-30", accountId: null,
+      operatingNetCents: 4400, quality: { scopedRows: 7, includedRows: 8 } },
+    transactions: actualRows, transactionState: "complete", forecast: forecastSnapshot,
+    latestMovementDate: "2026-09-12", bankFreshness: completedFreshness,
+  });
+  expect(impossible.actualState).toBe("unavailable");
+  expect(impossible.actualNetCents).toBeNull();
+});
 
 test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya realizado", () => {
   const result = view();
