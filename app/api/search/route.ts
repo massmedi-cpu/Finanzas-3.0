@@ -207,15 +207,15 @@ export function globalSearchNeedsSession(results: readonly PromiseSettledResult<
   );
 }
 
-function apiError(error: unknown) {
+export function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "search_unavailable", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  console.error("global-search", error instanceof Error ? error.message : String(error));
-  return Response.json({ error: "invalid_search", code: null }, { status: 400, headers: HEADERS });
+  console.error("global-search-internal", error instanceof Error ? error.name : typeof error);
+  return Response.json({ error: "search_unavailable", code: null }, { status: 500, headers: HEADERS });
 }
 
 export async function GET(request: Request) {

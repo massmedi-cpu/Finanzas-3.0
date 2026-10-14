@@ -2,7 +2,10 @@ import { expect, test } from "@playwright/test";
 import { GET as movementsGET, apiError as movementsApiError } from "../../app/api/transactions/route";
 import { apiError as merchantsApiError, POST as merchantsPOST } from "../../app/api/merchants/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
-import { GET as searchGET, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
+import { GET as searchGET, apiError as searchApiError, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
+import { apiError as analysisApiError } from "../../app/api/analysis/route";
+import { apiError as comparisonApiError } from "../../app/api/compare/route";
+import { apiError as configurationApiError, POST as configurationPOST } from "../../app/api/configuration/route";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 const ID = "60000000-0000-4000-8000-000000000111";
@@ -111,4 +114,39 @@ test("REC-API-ERR-002 · Comercios rechaza JSON inválido con 400 y oculta mensa
   const payload = await failure.json();
   expect(payload).toEqual({ error: "internal_error", code: null });
   expect(JSON.stringify(payload)).not.toContain(sensitive);
+});
+
+test("REC-API-ERR-003 · Análisis y Comparador no publican mensajes financieros internos", async () => {
+  const secret = "unexpected SQL interpolation of bank account 987654321";
+  const error = new Error(secret);
+  for (const handler of [analysisApiError, comparisonApiError]) {
+    const response = handler(error, performance.now());
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    const body = await response.json();
+    expect(body.code).toBeNull();
+    expect(JSON.stringify(body)).not.toContain(secret);
+  }
+  const analysisValidation = analysisApiError(new Error("invalid_analysis_parameter"), performance.now());
+  expect(analysisValidation.status).toBe(400);
+  const comparisonValidation = comparisonApiError(new Error("invalid_comparison_parameter"), performance.now());
+  expect(comparisonValidation.status).toBe(400);
+});
+
+test("REC-API-ERR-004 · Configuración y Búsqueda separan JSON incorrecto de fallos privados", async () => {
+  const secret = "private account id and gateway host should not leak";
+  const configuration = configurationApiError(new Error(secret));
+  const search = searchApiError(new Error(secret));
+  for (const response of [configuration, search]) {
+    expect(response.status).toBe(500);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    const body = await response.json();
+    expect(body.code).toBeNull();
+    expect(JSON.stringify(body)).not.toContain(secret);
+  }
+  const malformed = await configurationPOST(new Request("https://test.local/api/configuration", {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{not-json}",
+  }));
+  expect(malformed.status).toBe(400);
+  expect(await malformed.json()).toMatchObject({ error: "invalid_request", code: "invalid_json" });
 });

@@ -11,6 +11,7 @@ import {
 import { createEdgeConfigurationService } from "../../../src/infrastructure/persistence/edge-configuration-runtime";
 
 export const dynamic = "force-dynamic";
+const ERROR_HEADERS = { "cache-control": "private, no-store", "x-robots-tag": "noindex" };
 
 type CategoryImpact = {
   transactionCount: number;
@@ -24,24 +25,28 @@ type CategoryImpact = {
   activeChildCount: number;
 };
 
-function apiError(error: unknown) {
+export function apiError(error: unknown) {
   if (error instanceof ConfigurationRequestError) {
-    return Response.json({ error: "invalid_request", code: error.code, message: error.message }, { status: 400 });
+    return Response.json({ error: "invalid_request", code: error.code, message: error.message }, { status: 400, headers: ERROR_HEADERS });
   }
   if (error instanceof ConfigurationValidationError) {
-    return Response.json({ error: "validation_failed", issues: error.issues }, { status: 422 });
+    return Response.json({ error: "validation_failed", issues: error.issues }, { status: 422, headers: ERROR_HEADERS });
   }
   if (error instanceof ConfigurationNotFoundError) {
-    return Response.json({ error: "not_found", message: error.message }, { status: 404 });
+    return Response.json({ error: "not_found", message: error.message }, { status: 404, headers: ERROR_HEADERS });
   }
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
-      { status: error.status >= 400 && error.status < 600 ? error.status : 503 },
+      { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: ERROR_HEADERS },
     );
   }
-  console.error("configuration-api", error instanceof Error ? error.message : String(error));
-  return Response.json({ error: "invalid_request" }, { status: 400 });
+  // Malformed JSON is the caller's error, not a backend incident.
+  if (error instanceof SyntaxError) {
+    return Response.json({ error: "invalid_request", code: "invalid_json" }, { status: 400, headers: ERROR_HEADERS });
+  }
+  console.error("configuration-api-internal", error instanceof Error ? error.name : typeof error);
+  return Response.json({ error: "internal_error", code: null }, { status: 500, headers: ERROR_HEADERS });
 }
 
 export async function GET() {

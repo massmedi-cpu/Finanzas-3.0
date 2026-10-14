@@ -22,7 +22,7 @@ const HEADERS = {
   "x-comparison-contract": "1",
 };
 
-function apiError(error: unknown, started: number) {
+export function apiError(error: unknown, started: number) {
   const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
   const responseHeaders = { ...HEADERS, "server-timing": "comparison;dur=" + durationMs };
   if (error instanceof PersistenceGatewayError) {
@@ -39,13 +39,13 @@ function apiError(error: unknown, started: number) {
     );
   }
 
-  const code = error instanceof Error ? error.message : "comparison_invalid_request";
-  const invalid = code.startsWith("invalid_comparison_") || code === "comparison_period_too_large";
+  const code = error instanceof Error ? error.message : "";
+  const invalid = /^invalid_comparison_[a-z0-9_]+$/.test(code) || code === "comparison_period_too_large";
   const unavailable = code === "comparison_reconciliation_failed" || code === "comparison_gateway_period_mismatch";
   const status = invalid ? 400 : unavailable ? 503 : 500;
-  console.error("comparison-api", code);
+  console.error("comparison-api", status === 500 ? error instanceof Error ? error.name : typeof error : code);
   return Response.json(
-    { error: status === 400 ? "invalid_request" : "comparison_unavailable", code },
+    { error: status === 400 ? "invalid_request" : "comparison_unavailable", code: status === 500 ? null : code },
     { status, headers: responseHeaders },
   );
 }
