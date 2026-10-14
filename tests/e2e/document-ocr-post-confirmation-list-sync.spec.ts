@@ -53,6 +53,7 @@ async ({ page }) => {
       await route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify({
+          documentId: id,
           runs: [{ id: ocrRunId, extractor: ocr.extractor, extractedAt }],
           reviews: [],
         }),
