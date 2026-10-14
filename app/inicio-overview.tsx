@@ -6,6 +6,7 @@ import { checkHomeConsistency } from "../src/application/dashboard/home-consiste
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import { isHomeExpenseAverageVerified } from "../src/application/dashboard/home-expense-average-evidence";
 import { isDashboardEnvelopeForScope } from "../src/application/dashboard/dashboard-envelope-integrity";
+import { isHomeDashboardSourceSafe } from "../src/application/dashboard/dashboard-source-safety";
 import {
   periodComparisonIsReliable,
   periodHasObservedData,
@@ -418,6 +419,9 @@ export default function InicioOverview() {
     try {
       const value = await legacySource(source, madridToday());
       if (!isFresh(generation)) return;
+      if (!isHomeDashboardSourceSafe(source, value)) {
+        throw new Error("dashboard_independent_source_invalid");
+      }
       setIndependentSources((current) =>
         !isFresh(generation) || current.includes(source) ? current : [...current, source]);
       commit(generation, source, value as DashboardData[DashboardSource], false);
@@ -439,7 +443,8 @@ export default function InicioOverview() {
       }
       await Promise.all(sources.map(async (source) => {
         if (!isFresh(generation)) return;
-        if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
+        if (envelope.data[source] !== null && !envelope.failedSources.includes(source)
+          && isHomeDashboardSourceSafe(source, envelope.data[source])) {
           commit(generation, source, envelope.data[source], false);
         } else {
           await loadSource(source, generation);
