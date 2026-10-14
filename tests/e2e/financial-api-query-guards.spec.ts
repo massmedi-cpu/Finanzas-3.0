@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { GET as movementsGET, apiError as movementsApiError } from "../../app/api/transactions/route";
 import { GET as financialGET } from "../../app/api/financial/route";
 import { GET as budgetsGET } from "../../app/api/budgets/route";
+import { GET as recurrenceGET, POST as recurrencePOST } from "../../app/api/recurrences/route";
+import { GET as rulesGET, POST as rulesPOST, apiError as ruleApiError } from "../../app/api/rules/route";
 import { apiError as merchantsApiError, POST as merchantsPOST } from "../../app/api/merchants/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
 import { GET as searchGET, apiError as searchApiError, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
@@ -169,4 +171,61 @@ test("REC-BUD-008 · Presupuestos no presenta un total global como si hubiera fi
     ["month=2026-10&month=2026-10", "invalid_budget_month"],
     ["month=2026-13", "invalid_budget_month"],
   ]);
+});
+
+test("REC-REC-057 · Recurrentes rechaza selectores ambiguos y rangos invertidos antes del motor", async () => {
+  await invalidBeforeGateway(recurrenceGET, "recurrences", [
+    ["unexpected=1", "invalid_recurrence_query_parameters"],
+    ["dateTo=2026-10-31&accountId=OTHER", "invalid_recurrence_query_parameters"],
+    ["minOccurrences=3&minOccurrences=4", "invalid_recurrence_query_parameters"],
+    ["minOccurrences=3e0", "invalid_recurrence_min_occurrences"],
+    ["minOccurrences=0x3", "invalid_recurrence_min_occurrences"],
+    ["minOccurrences=%203", "invalid_recurrence_min_occurrences"],
+    ["dateFrom=2026-11-01&dateTo=2026-10-01", "invalid_recurrence_date_range"],
+  ]);
+});
+
+test("REC-REC-058 · guardar recurrencias nunca admite un intervalo temporal invertido", async () => {
+  const response = await recurrencePOST(new Request("https://test.local/api/recurrences", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      candidateKey: "a".repeat(32), status: "active",
+      dateFrom: "2026-11-01", dateTo: "2026-10-01", minOccurrences: 3,
+    }),
+  }));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ code: "invalid_recurrence_date_range" });
+});
+
+test("REC-RULES-031 · operaciones de reglas nunca ignoran selectores de movimiento", async () => {
+  const query = await rulesGET(new Request("https://test.local/api/rules?accountId=OTHER"));
+  expect(query.status).toBe(400);
+  expect(await query.json()).toMatchObject({ code: "invalid_rule_query_parameters" });
+
+  for (const body of [
+    { operation: "rule.apply_all", limit: 10000, transactionId: ID },
+    { operation: "rule.evaluate", transactionId: ID, limit: 12 },
+    { operation: "rule.apply", transactionId: ID, targetCategoryId: ID },
+  ]) {
+    const response = await rulesPOST(new Request("https://test.local/api/rules", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ code: "invalid_rule_operation_fields" });
+  }
+});
+
+test("REC-RULES-032 · JSON inválido da 400 y errores internos permanecen privados", async () => {
+  const invalid = await rulesPOST(new Request("https://test.local/api/rules", {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{not-json}",
+  }));
+  expect(invalid.status).toBe(400);
+  expect(await invalid.json()).toMatchObject({ error: "invalid_request", code: "invalid_request" });
+  const raw = "Unexpected SQL error with user account ABC-SENSITIVE";
+  const unexpected = ruleApiError(new Error(raw));
+  expect(unexpected.status).toBe(500);
+  const body = await unexpected.json();
+  expect(body).toEqual({ error: "internal_error", code: null });
+  expect(JSON.stringify(body)).not.toContain(raw);
 });

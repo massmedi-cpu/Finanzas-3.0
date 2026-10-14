@@ -7,6 +7,22 @@ export const dynamic = "force-dynamic";
 
 type RuleAction = "rule.save" | "rule.evaluate" | "rule.apply" | "rule.apply_all";
 const ALLOWED_ACTIONS = new Set<RuleAction>(["rule.save", "rule.evaluate", "rule.apply", "rule.apply_all"]);
+const RULE_SAVE_KEYS = new Set([
+  "operation", "id", "name", "status", "priority", "conceptContains",
+  "merchantId", "accountId", "categoryId", "minimumAmountCents",
+  "maximumAmountCents", "targetCategoryId", "targetMerchantId",
+]);
+const RULE_APPLY_ALL_KEYS = new Set(["operation", "limit"]);
+const RULE_TRANSACTION_KEYS = new Set(["operation", "transactionId"]);
+const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+const REQUEST_CODES = new Set([
+  "invalid_request", "invalid_json", "invalid_id", "invalid_operation", "unsupported_operation",
+  "invalid_rule_status", "invalid_rule_priority", "invalid_rule_apply_limit",
+  "invalid_rule_amount_range", "invalid_rule_query_parameters", "invalid_rule_operation_fields",
+  "invalid_minimum_amount_cents", "invalid_maximum_amount_cents", "invalid_text",
+  "rule_name_required", "rule_condition_required", "rule_target_required",
+  "transaction_id_required",
+]);
 
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_request");
@@ -37,7 +53,7 @@ function optionalSafeInteger(value: unknown, code: string) {
   return value;
 }
 
-function apiError(error: unknown) {
+export function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
@@ -47,15 +63,18 @@ function apiError(error: unknown) {
       },
     );
   }
-  console.error("rules-api", error instanceof Error ? error.message : String(error));
+  const code = error instanceof Error ? error.message : "";
+  const invalid = REQUEST_CODES.has(code);
+  if (!invalid) console.error("rules-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json(
-    { error: "invalid_request", code: error instanceof Error ? error.message : null },
-    { status: 400, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+    invalid ? { error: "invalid_request", code } : { error: "internal_error", code: null },
+    { status: invalid ? 400 : 500, headers: HEADERS },
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    if (new URL(request.url).search) throw new Error("invalid_rule_query_parameters");
     const [rules, accounts, categories, merchants] = await Promise.all([
       callPersistenceGateway<{ rows: unknown[] }>("rule.list"),
       callPersistenceGateway<{ rows: unknown[] }>("account.list"),
@@ -73,9 +92,14 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = asObject(await request.json());
+    const body = asObject(await request.json().catch(() => null));
     const operation = requiredText(body.operation, "invalid_operation") as RuleAction;
     if (!ALLOWED_ACTIONS.has(operation)) throw new Error("unsupported_operation");
+    const allowedKeys = operation === "rule.save" ? RULE_SAVE_KEYS
+      : operation === "rule.apply_all" ? RULE_APPLY_ALL_KEYS : RULE_TRANSACTION_KEYS;
+    if (Object.keys(body).some((key) => !allowedKeys.has(key))) {
+      throw new Error("invalid_rule_operation_fields");
+    }
 
     if (operation === "rule.save") {
       const status = body.status;
