@@ -12,15 +12,27 @@ const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
 
-function errorResponse(error: unknown) {
+export function errorResponse(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: error.status === 404 ? "not_found" : "persistence_failed", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  const code = error instanceof Error ? error.message : "invalid_request";
-  return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
+  // Only local OCR validation codes may cross the HTTP boundary. Never
+  // return raw backend exception messages, original OCR text or credentials.
+  if (error instanceof SyntaxError) {
+    return Response.json(
+      { error: "invalid_request", code: "invalid_json" },
+      { status: 400, headers: HEADERS },
+    );
+  }
+  const code = error instanceof Error ? error.message : "";
+  if (/^invalid_document_[a-z0-9_]+$/.test(code)) {
+    return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
+  }
+  console.error("document-ocr-review-internal", error instanceof Error ? error.name : typeof error);
+  return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
 }
 
 function uuid(value: unknown, field: string) {

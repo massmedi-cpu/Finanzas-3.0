@@ -58,6 +58,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify Drive metadata batch atomicity and rollback
         run: node --experimental-strip-types scripts/test-drive-atomic-batch.mjs
+      - name: Certify bounded Drive batch concurrency and atomic preflight
+        run: node --experimental-strip-types scripts/test-drive-batch-verification.mjs
       - name: Certify Drive folder pagination and no fabricated empty result
         run: node --experimental-strip-types scripts/test-drive-discovery-integrity.mjs
       - name: Certify OCR labelled amounts against synthetic independent expected values
@@ -109,6 +111,7 @@ jobs:
           tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/dashboard-envelope-integrity.spec.ts
           tests/e2e/financial-api-query-guards.spec.ts
+          tests/e2e/document-api-query-guards.spec.ts
           tests/e2e/global-search.spec.ts
           tests/e2e/dashboard-source-safety.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts

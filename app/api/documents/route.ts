@@ -13,6 +13,7 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/application/document-query-integer";
+import { verifyDriveDocumentBatchMetadata } from "../../../src/application/document-drive-batch-verification";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -25,6 +26,10 @@ const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]
 const METHODS = new Set(["manual", "suggested"]);
 const SCOPES = new Set(["ordinary", "tests", "all"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+const DOCUMENT_LIST_KEYS = new Set(["status", "q", "limit", "offset", "scope", "unassociated"]);
+const DOCUMENT_DETAIL_KEYS = new Set(["id"]);
+const DOCUMENT_OPEN_KEYS = new Set(["id", "mode"]);
+const DOCUMENT_CANDIDATE_KEYS = new Set(["id", "mode", "days", "limit"]);
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
 function objectBody(value: unknown) {
@@ -146,11 +151,18 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     // Never let URLSearchParams.get() silently pick the first of two
     // contradictory filters or document IDs.
-    for (const key of ["id", "mode", "days", "limit", "offset", "status", "q", "scope", "unassociated"]) {
+    for (const key of searchParams.keys()) {
       if (searchParams.getAll(key).length > 1) throw new Error("invalid_document_query_duplicate");
     }
     const idRaw = searchParams.get("id");
     const mode = searchParams.get("mode");
+    const allowedKeys = idRaw !== null
+      ? mode === "candidates" ? DOCUMENT_CANDIDATE_KEYS
+        : mode === "open" ? DOCUMENT_OPEN_KEYS : DOCUMENT_DETAIL_KEYS
+      : DOCUMENT_LIST_KEYS;
+    if ([...searchParams.keys()].some((key) => !allowedKeys.has(key))) {
+      throw new Error("invalid_document_query_parameters");
+    }
 
     if (idRaw !== null) {
       const id = uuid(idRaw, "invalid_document_id");
@@ -247,18 +259,25 @@ export async function POST(request: Request) {
         };
       });
 
-      const verifiedFiles = [];
+      // Reject duplicate IDs before contacting Google: duplicate inventory
+      // rows cannot be independent financial documents.
+      if (new Set(files.map((file) => file.fileId)).size !== files.length) {
+        throw new Error("invalid_document_drive_batch");
+      }
       const downloader = driveDownloader();
-      for (const file of files) {
+      // Bounded concurrency reduces latency for large imports, while
+      // preserving original ordering and verifying *every* Drive revision.
+      // A failed verification prevents the single downstream batch write.
+      const verifiedFiles = await verifyDriveDocumentBatchMetadata(files, async (file) => {
         const downloaded = await downloader.download({ fileId: file.fileId, expectedMimeType: file.mimeType });
-        verifiedFiles.push({
+        return {
           ...file,
           name: downloaded.fileName ?? file.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
           modifiedTime: downloaded.modifiedTime, // Authoritative Google metadata only.
-        });
-      }
+        };
+      });
 
       const result = await callPersistenceGateway("document.drive_batch", { files: verifiedFiles });
       return Response.json(result, { headers: HEADERS });
