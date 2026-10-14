@@ -2,6 +2,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../src/infrastructure/http/limited-json-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,8 +12,15 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
+// Allows 200 valid OCR lines of up to 500 characters while forbidding oversized requests.
+const MAX_REVIEW_JSON_BYTES = 256 * 1024;
 
 export function errorResponse(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const status = error.reason === "too_large" ? 413 : 400;
+    const code = error.reason === "too_large" ? "document_review_too_large" : "invalid_json";
+    return Response.json({ error: "invalid_request", code }, { status, headers: HEADERS });
+  }
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: error.status === 404 ? "not_found" : "persistence_failed", code: error.code ?? null },
@@ -116,7 +124,7 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const body = await request.json();
+    const body = await readLimitedJsonRequest(request, MAX_REVIEW_JSON_BYTES);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid_document_review");
     const input = body as Record<string, unknown>;
     const documentId = uuid(input.documentId, "document_id");
