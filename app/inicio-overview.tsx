@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import { isHomeExpenseAverageVerified } from "../src/application/dashboard/home-expense-average-evidence";
+import { isDashboardEnvelopeForScope } from "../src/application/dashboard/dashboard-envelope-integrity";
 import {
   periodComparisonIsReliable,
   periodHasObservedData,
@@ -430,6 +431,9 @@ export default function InicioOverview() {
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
       if (!isFresh(generation)) return;
+      // A wrong scope or malformed source map is not trusted bank evidence.
+      // Continue through the established independent-source recovery path.
+      if (!isDashboardEnvelopeForScope(envelope, scope)) throw new Error("dashboard_scope_contract_mismatch");
       if (scope === "activity" || scope === "primary") {
         setDataThroughDate((current) => isFresh(generation) ? envelope.dataThroughDate ?? null : current);
       }
