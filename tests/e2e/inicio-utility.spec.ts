@@ -349,3 +349,45 @@ test("REC-HOME-BAL-002 · retry clears a stale balance error before any new bank
   await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
   expect(reads).toBe(2);
 });
+
+
+test("REC-HOME-AVG-005 · Inicio hides an unverified historical average instead of displaying a plausible number", async ({ page }) => {
+  await mockInicio(page);
+  // Analysis may legitimately return an average while banking data before
+  // August is missing. It is not evidence that June and July were zero.
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-08-01",
+      latestMovementDate: "2026-09-11",
+      sync: {
+        status: "success",
+        startedAt: "2026-09-11T08:00:00Z",
+        finishedAt: "2026-09-11T08:05:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+        duplicatesDetected: 0, warningsCount: 0,
+      },
+    });
+  });
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  const card = summary.locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card.getByText("Media no verificable con la cobertura bancaria disponible")).toBeVisible();
+  await expect(card.getByText("666,67 €")).toHaveCount(0);
+  await expect(card.locator("strong")).toHaveText("—");
+});
+
+test("REC-HOME-AVG-006 · unavailable bank source must not advertise a verified historic expense average", async ({ page }) => {
+  await mockInicio(page);
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: false, earliestMovementDate: null,
+      latestMovementDate: null, sync: null,
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Resumen financiero principal" })
+    .locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card.locator("strong")).toHaveText("—");
+  await expect(card).toContainText("Media no verificable con la cobertura bancaria disponible");
+});
