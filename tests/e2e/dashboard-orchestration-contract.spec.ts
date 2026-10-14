@@ -318,3 +318,23 @@ test("REC-HOME-SCOPE-006 · HTTP 200 from another scope never replaces the real 
   await expect(summary.getByText("999,99 €", { exact: true })).toHaveCount(0);
   expect(independentReads).toBe(1);
 });
+
+
+test("REC-HOME-DATA-005 · an HTTP 200 with malformed balances is independently recovered", async ({ page }) => {
+  await installDashboardMocks(page);
+  let recovered = 0;
+  await page.route("**/api/dashboard?scope=critical", async (route) => {
+    const broken = { ...financial, balances: { ...financial.balances, accounts: null } };
+    await fulfillJson(route, envelope("critical", { financial: broken }, ["financial"]));
+  });
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "snapshot") return route.fallback();
+    recovered += 1;
+    await fulfillJson(route, financial);
+  });
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
+  expect(recovered).toBe(1);
+  await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
+});
