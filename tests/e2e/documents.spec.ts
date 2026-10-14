@@ -3795,3 +3795,33 @@ test("REC-OCR-136 · uncertain PATCH cannot be recovered using another document'
   expect(saveCalls).toBe(1);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-UI-DOC-012 · document editor follows its real panel width in light/dark desktop and mobile", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    for (const width of [1440, 1024, 390]) {
+      await page.setViewportSize({ width, height: 840 });
+      await page.goto("/documents");
+      await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+      const detail = page.locator('[class*="detailPanel"]').first();
+      const fields = detail.locator('[class*="formGrid"]').first();
+      await expect(fields).toBeVisible();
+      const layout = await fields.evaluate((element) => {
+        const panel = element.closest('[class*="detailPanel"]')!;
+        const grid = getComputedStyle(element).gridTemplateColumns;
+        const columns = grid.split(/\s+/).filter(Boolean).length;
+        return {
+          panelWidth: panel.getBoundingClientRect().width,
+          columns,
+          documentOverflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+        };
+      });
+      if (layout.panelWidth <= 432) expect(layout.columns, `${width}px ${colorScheme}`).toBe(1);
+      else if (layout.panelWidth <= 704) expect(layout.columns, `${width}px ${colorScheme}`).toBe(2);
+      else expect(layout.columns, `${width}px ${colorScheme}`).toBeGreaterThanOrEqual(3);
+      expect(layout.documentOverflow, `${width}px ${colorScheme}`).toBe(false);
+    }
+  }
+});
