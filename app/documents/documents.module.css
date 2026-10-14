@@ -236,3 +236,25 @@
 :global(html[data-theme="light"]) .documentRow:focus-visible {
   outline-color: var(--color-primary);
 }
+
+
+/* REC-UI-DOC-012 · The desktop Documentos workspace has two columns.
+ * A 4-column metadata editor must size to its DETAIL panel rather than
+ * the outer viewport; 1366px desktop can still leave a narrow editor.
+ * Container queries preserve the premium grid where it actually fits. */
+.detailPanel {
+  min-width: 0;
+  container-name: document-detail;
+  container-type: inline-size;
+}
+@container document-detail (max-width: 44rem) {
+  .formGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .subsectionHeading, .detailHeader { flex-wrap: wrap; }
+  .subsectionHeading > :first-child { min-width: 0; }
+  .subsectionHeading > button { max-width: 100%; }
+}
+@container document-detail (max-width: 27rem) {
+  .formGrid { grid-template-columns: minmax(0, 1fr); }
+  .detailActions { justify-content: flex-start; }
+  .subsectionHeading > button { width: 100%; }
+}
