@@ -22,7 +22,7 @@ function envelope(scope: HomeDashboardScope = "critical") {
     dataThroughDate: "2026-10-13",
     generatedAt: "2026-10-14T07:20:00.000Z",
     requestedSources: [...HOME_SCOPE_SOURCES[scope]],
-    failedSources: [],
+    failedSources: [] as string[],
     data,
   };
 }
