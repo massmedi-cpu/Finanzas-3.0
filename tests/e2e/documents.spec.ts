@@ -3666,3 +3666,34 @@ test("REC-UI-DOC-010 · archive does not announce an old verified count during a
   expect(failedReads).toBeGreaterThan(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-OCR-MEM-015 · HTTP 413 rejects the OCR review without locking editable invoice fields", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let rejects = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    rejects += 1;
+    await route.fulfill({
+      status: 413,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "invalid_request", code: "document_review_too_large" }),
+    });
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const form = page.getByTestId("ocr-confirmation-form");
+  const confirm = form.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+
+  await expect(form.getByRole("alert")).toContainText("límite de 256 KB");
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toHaveCount(0);
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await expect(form.getByLabel("Emisor")).toBeEnabled();
+  expect(rejects).toBe(1);
+  expect(writes).toEqual([]);
+});
