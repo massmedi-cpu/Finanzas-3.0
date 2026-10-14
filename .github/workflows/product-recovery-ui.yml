@@ -27,6 +27,7 @@ on:
       - 'tests/e2e/**'
       - 'playwright*.ts'
       - 'package*.json'
+      - 'vercel.json'
       - '.github/workflows/product-recovery-ui.yml'
 
 permissions:
@@ -103,6 +104,7 @@ jobs:
           tests/e2e/document-drive-authoritative-metadata.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/gateway-request-body-limit.spec.ts
+          tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/document-ocr-pdf-failures.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
