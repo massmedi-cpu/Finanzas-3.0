@@ -180,6 +180,33 @@ function facetResults(payload: unknown, normalizedQuery: string): SearchItem[] {
   return results;
 }
 
+/**
+ * A result page containing only hardcoded section links is not proof that
+ * banking transactions or private documents had zero matches. If every data
+ * source fails, return an error so the UI offers recovery instead of "no
+ * results". Partial failures remain useful with an explicit partial marker.
+ */
+export function allGlobalSearchSourcesFailed(results: readonly PromiseSettledResult<unknown>[]) {
+  return results.length > 0 && results.every((result) => result.status === "rejected");
+}
+
+const SESSION_ERRORS = new Set([
+  "workspace_context_required",
+  "workspace_user_invalid",
+  "workspace_access_denied",
+  "workspace_membership_ambiguous",
+  "workspace_membership_invalid",
+]);
+
+export function globalSearchNeedsSession(results: readonly PromiseSettledResult<unknown>[]) {
+  return allGlobalSearchSourcesFailed(results) && results.every((result) =>
+    result.status === "rejected"
+    && result.reason instanceof PersistenceGatewayError
+    && (result.reason.status === 401 || result.reason.status === 403)
+    && SESSION_ERRORS.has(result.reason.code ?? ""),
+  );
+}
+
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
@@ -214,6 +241,21 @@ export async function GET(request: Request) {
       { action: "document.list", payload: { status: null, query, limit: 6, offset: 0 } },
       { action: "transaction.facets" },
     ]);
+
+    const sourceResults = [transactions, documents, facets];
+    if (allGlobalSearchSourcesFailed(sourceResults)) {
+      const sessionRequired = globalSearchNeedsSession(sourceResults);
+      return Response.json(
+        {
+          error: sessionRequired ? "workspace_session_required" : "search_unavailable",
+          code: sessionRequired ? "workspace_session_required" : "all_search_sources_failed",
+          query,
+          items: [],
+          partial: true,
+        },
+        { status: sessionRequired ? 403 : 503, headers: HEADERS },
+      );
+    }
 
     const items = [
       ...sectionResults(normalizedQuery),

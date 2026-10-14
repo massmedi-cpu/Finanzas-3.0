@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { GET as movementsGET } from "../../app/api/transactions/route";
 import { GET as forecastGET } from "../../app/api/forecast/route";
-import { GET as searchGET } from "../../app/api/search/route";
+import { GET as searchGET, allGlobalSearchSourcesFailed, globalSearchNeedsSession } from "../../app/api/search/route";
+import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 const ID = "60000000-0000-4000-8000-000000000111";
 
@@ -63,4 +64,18 @@ test("REC-SEARCH-008 · la búsqueda global no ignora selectores o términos dup
     ["q=&limit=100", "invalid_search_query_parameters"],
     ["source=unknown", "invalid_search_query_parameters"],
   ]);
+});
+
+test("REC-SEARCH-009 · all failed sources never turn into a fictitious empty search", () => {
+  const rejected = (status: number, code: string) => ({
+    status: "rejected" as const,
+    reason: new PersistenceGatewayError("Private gateway not available", status, code),
+  });
+  const ok = { status: "fulfilled" as const, value: { rows: [] } };
+  expect(allGlobalSearchSourcesFailed([rejected(503, "gateway_failed"), rejected(503, "gateway_failed"), rejected(503, "gateway_failed")])).toBe(true);
+  expect(globalSearchNeedsSession([rejected(503, "gateway_failed"), rejected(503, "gateway_failed")])).toBe(false);
+  expect(globalSearchNeedsSession([rejected(403, "workspace_access_denied"), rejected(401, "workspace_context_required")])).toBe(true);
+  expect(globalSearchNeedsSession([rejected(403, "workspace_access_denied"), rejected(503, "gateway_failed")])).toBe(false);
+  expect(allGlobalSearchSourcesFailed([ok, rejected(503, "gateway_failed"), rejected(503, "gateway_failed")])).toBe(false);
+  expect(allGlobalSearchSourcesFailed([])).toBe(false);
 });
