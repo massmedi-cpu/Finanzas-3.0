@@ -105,6 +105,30 @@ export type ForecastCandidateSnapshot = {
   candidates: ForecastCandidate[];
 };
 
+/**
+ * Reconciles the public forecast envelope to the PostgreSQL
+ * financial_app.forecast_snapshot calculation (reviewed read-only).
+ * All values are integer cents: income - expenses = net, opening + net =
+ * closing. Never show mutually contradictory balances from HTTP 200.
+ */
+export function isForecastSummaryArithmeticConsistent(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  const fields = [
+    "openingBalanceCents", "projectedIncomeCents", "projectedExpenseCents",
+    "projectedNetCents", "projectedClosingBalanceCents",
+  ];
+  if (fields.some((key) => !Number.isSafeInteger(v[key]))) return false;
+  const opening = v.openingBalanceCents as number;
+  const income = v.projectedIncomeCents as number;
+  const expenses = v.projectedExpenseCents as number;
+  const net = v.projectedNetCents as number;
+  const closing = v.projectedClosingBalanceCents as number;
+  if (income < 0 || expenses < 0) return false;
+  if (!Number.isSafeInteger(income - expenses) || !Number.isSafeInteger(opening + net)) return false;
+  return income - expenses === net && opening + net === closing;
+}
+
 export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<ForecastSnapshot>;
@@ -123,6 +147,7 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
     && Number.isSafeInteger(summary?.projectedExpenseCents)
     && Number.isSafeInteger(summary?.projectedNetCents)
     && Number.isSafeInteger(summary?.projectedClosingBalanceCents)
+    && isForecastSummaryArithmeticConsistent(summary)
     && Array.isArray(snapshot.items)
     && snapshot.items.every((item) => item && typeof item.id === "string"
       && typeof item.date === "string" && datePattern.test(item.date)
