@@ -129,6 +129,33 @@ export function isForecastSummaryArithmeticConsistent(value: unknown): boolean {
   return income - expenses === net && opening + net === closing;
 }
 
+/**
+ * PostgreSQL selects forecast_items by date and, when present, by account.
+ * Do not render duplicate or out-of-scope items even when the envelope
+ * claims to match the requested financial period.
+ */
+export function areForecastItemsWithinSelection(items: unknown, period: unknown): boolean {
+  if (!Array.isArray(items) || !period || typeof period !== "object" || Array.isArray(period)) return false;
+  const selection = period as Record<string, unknown>;
+  const from = selection.dateFrom;
+  const to = selection.dateTo;
+  const accountId = selection.accountId;
+  if (typeof from !== "string" || typeof to !== "string"
+    || (accountId !== null && typeof accountId !== "string")) return false;
+  const seen = new Set<string>();
+  return items.every((value) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+    const row = value as Record<string, unknown>;
+    if (typeof row.id !== "string" || seen.has(row.id) || typeof row.date !== "string"
+      || !/^\\d{4}-\\d{2}-\\d{2}$/.test(row.date) || row.date < from || row.date > to
+      || (accountId !== null && row.accountId !== accountId)) return false;
+    const date = new Date(row.date + "T00:00:00Z");
+    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== row.date) return false;
+    seen.add(row.id);
+    return true;
+  });
+}
+
 export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<ForecastSnapshot>;
@@ -149,6 +176,7 @@ export function isForecastSnapshot(value: unknown): value is ForecastSnapshot {
     && Number.isSafeInteger(summary?.projectedClosingBalanceCents)
     && isForecastSummaryArithmeticConsistent(summary)
     && Array.isArray(snapshot.items)
+    && areForecastItemsWithinSelection(snapshot.items, period)
     && snapshot.items.every((item) => item && typeof item.id === "string"
       && typeof item.date === "string" && datePattern.test(item.date)
       && Number.isSafeInteger(item.amountCents)
