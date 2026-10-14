@@ -54,7 +54,7 @@ test("REC-HOME-DATA-006 · movements with malformed category, type or merchant c
   const row = samples.transactions.rows[0];
   for (const altered of [
     { ...row, category: null },
-    { ...row, category: { effectiveName: "Hogar" } },
+    { ...row, category: { effectiveId: 1234, effectiveName: "Hogar" } },
     { ...row, kind: null },
     { ...row, kind: { effective: "unexpected_bank_type" } },
     { ...row, merchant: { effectiveName: 1234 } },
@@ -66,6 +66,9 @@ test("REC-HOME-DATA-006 · movements with malformed category, type or merchant c
   }
   expect(isHomeDashboardSourceSafe("transactions", {
     ...samples.transactions, rows: [{ ...row, merchant: null }],
+  })).toBe(true);
+  expect(isHomeDashboardSourceSafe("transactions", {
+    ...samples.transactions, rows: [{ ...row, category: { effectiveName: "Compras" } }],
   })).toBe(true);
 });
 
