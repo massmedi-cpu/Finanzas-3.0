@@ -391,3 +391,28 @@ test("REC-HOME-AVG-006 · unavailable bank source must not advertise a verified 
   await expect(card.locator("strong")).toHaveText("—");
   await expect(card).toContainText("Media no verificable con la cobertura bancaria disponible");
 });
+
+
+test("REC-HOME-AVG-007 · el gasto medio calculado pero no acreditado no se presenta como indisponibilidad", async ({ page }) => {
+  await mockInicio(page);
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-01-01",
+      latestMovementDate: "2026-09-11",
+      sync: {
+        status: "partial",
+        startedAt: "2026-09-11T08:00:00Z",
+        finishedAt: "2026-09-11T08:05:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 3,
+        duplicatesDetected: 0, warningsCount: 1,
+      },
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Resumen financiero principal" })
+    .locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card).toContainText("Media no verificable con la cobertura bancaria disponible");
+  await expect(card).not.toContainText("Análisis no disponible");
+  await expect(card).not.toContainText("666,67 €");
+});
