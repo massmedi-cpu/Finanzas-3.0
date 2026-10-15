@@ -354,7 +354,10 @@ export default function AlertsClient() {
     // StrictMode, navigation and refresh must never publish an older result.
     if (sequence !== loadSequence.current) return;
     const degradedReads: string[] = [];
-    const dashboard = dashboardResult.status === "fulfilled" ? dashboardResult.value : null;
+    // A correctly shaped HTTP 200 may be yesterday's cached composite.
+    // The local page is answering for today, never an earlier banking day.
+    const dashboard = dashboardResult.status === "fulfilled"
+      && dashboardResult.value.asOfDate === today ? dashboardResult.value : null;
     const sync = syncResult.status === "fulfilled" ? syncResult.value : null;
     const uncategorized = uncategorizedResult.status === "fulfilled" ? uncategorizedResult.value : null;
     const documents = documentsResult.status === "fulfilled" ? documentsResult.value : null;
