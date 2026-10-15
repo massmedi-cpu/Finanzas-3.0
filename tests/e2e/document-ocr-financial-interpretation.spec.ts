@@ -1103,3 +1103,43 @@ test("REC-OCR-169 · dangling IMPORTE TOTAL after VAT footer cannot borrow a pre
   expect(parsed.totalCents.value).toBeNull();
   expect(parsed.totalCents.trust).toBe("not_detected");
 });
+
+test("REC-OCR-170 · euro-labelled accounting parentheses preserve a negative credit-note total", () => {
+  for (const printed of ["TOTAL A PAGAR (1.234,56 €)", "IMPORTE TOTAL (EUR 1 234,56)", "TOTAL (1,234.56) EUR"]) {
+    const input = result([line("credit-note", printed, 0.99)]);
+    const parsed = interpretDocumentOcrFinancially(input);
+    expect(parsed.totalCents.value, printed).toBe(-123456);
+    expect(parsed.totalCents.rawValue, printed).toContain("(");
+    expect(parsed.totalCents.trust, printed).toBe("reliable");
+    expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
+    expect(input.plainText).toBe(printed);
+  }
+});
+
+test("REC-OCR-171 · accounting notation supports whole euros without corrupting decimal money", () => {
+  for (const printed of ["TOTAL (50 €)", "TOTAL (€ 50)", "TOTAL (EUR 1 234)"]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("accounting", printed, 0.99)]));
+    expect(parsed.totalCents.value, printed).toBe(printed.includes("234") ? -123400 : -5000);
+  }
+  const normal = interpretDocumentOcrFinancially(result([line("normal", "TOTAL 1.234,56 €", 0.99)]));
+  expect(normal.totalCents.value).toBe(123456);
+});
+
+test("REC-OCR-172 · bare accounting parentheses cannot silently become a positive total", () => {
+  for (const printed of ["TOTAL (12,34)", "TOTAL ( 12,34 )", "TOTAL (1 234,56)", "TOTAL (21,00%)"]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("ambiguous", printed, 0.99)]));
+    expect(parsed.totalCents.value, printed).toBeNull();
+    expect(parsed.totalCents.trust, printed).toBe("not_detected");
+  }
+  const invalid = interpretDocumentOcrFinancially(result([line("invalid", "TOTAL (1,234 €)", 0.99)]));
+  expect(invalid.totalCents.value).toBeNull();
+});
+
+test("REC-OCR-173 · a refund before a payment amount keeps separate signed evidence", () => {
+  const printed = "TOTAL A PAGAR (10,00 €) TARJETA 10,00 €";
+  const parsed = interpretDocumentOcrFinancially(result([line("merged", printed, 0.99)]));
+  expect(parsed.totalCents.value).toBe(-1000);
+  expect(parsed.totalCents.rawValue).toBe("(10,00 €)");
+  expect(parsed.totalCents.trust).toBe("doubtful");
+  expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
+});
