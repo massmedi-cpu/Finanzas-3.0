@@ -31,8 +31,31 @@ function dashboardFixture(
   };
 }
 
+function healthyFreshness() {
+  const today = madridDatePlus(0);
+  return {
+    available: true,
+    earliestMovementDate: `${today.slice(0, 7)}-01`,
+    latestMovementDate: today,
+    sync: {
+      status: "success",
+      startedAt: null,
+      finishedAt: new Date().toISOString(),
+      rowsSeen: 150,
+      rowsFailed: 0,
+      rowsMissing: 0,
+      duplicatesDetected: 0,
+      warningsCount: 0,
+    },
+  };
+}
+
 async function mockAlerts(page: Page) {
   const upcomingPaymentDate = madridDatePlus(2);
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(healthyFreshness()),
+  }));
 
   await page.route("**/api/dashboard?scope=all", async (route) => {
     await route.fulfill({
@@ -140,6 +163,9 @@ test("AUD-E2E-REG-001 · Alertas traduce prioridad a importancia y reserva índi
 });
 
 test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en Alertas", async ({ page }) => {
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(healthyFreshness()),
+  }));
   const reads: Array<{ pathname: string; status: string | null; unassociated: string | null; limit: string | null; method: string }> = [];
   await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
     status: 200,
@@ -298,4 +324,34 @@ test("REC-ALT-008 · errores de importación confirmados aparecen en la alerta d
   await expect(page.getByText("La última sincronización tiene avisos")).toBeVisible();
   await expect(page.getByText("No se pudieron importar 3 movimientos en la última sincronización.")).toBeVisible();
   await expect(page.getByText("Lectura parcial: no se pudo consultar sincronización")).toHaveCount(0);
+});
+
+test("REC-ALT-011 · sin cobertura bancaria, Alertas no muestra una falsa desviación mensual", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      ...healthyFreshness(),
+      available: false,
+      earliestMovementDate: null,
+      latestMovementDate: null,
+      sync: null,
+    }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByText("1 presupuesto cerca del límite")).toHaveCount(0);
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-012 · fuente no disponible, sin falsas cifras pero con avisos financieros no dependientes de cobertura", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 503, contentType: "application/json", body: JSON.stringify({ error: "source_unavailable" }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar cobertura bancaria");
+  await expect(page.getByText("2 posibles movimientos duplicados")).toBeVisible();
+  await expect(page.getByText("1 presupuesto cerca del límite")).toHaveCount(0);
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
 });
