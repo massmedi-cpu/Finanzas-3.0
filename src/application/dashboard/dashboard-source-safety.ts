@@ -13,6 +13,19 @@ function cents(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);
 }
 
+// A numeric HTTP 200 can still contradict elementary account arithmetic.
+// Reject the source instead of rendering a plausible-looking false net.
+function validPeriodArithmetic(value: Record<string, unknown>): boolean {
+  const income = value.incomeCents;
+  const expense = value.expenseCents;
+  const net = value.operatingNetCents;
+  return cents(income) && income >= 0
+    && cents(expense) && expense >= 0
+    && cents(net)
+    && Number.isSafeInteger(income - expense)
+    && income - expense === net;
+}
+
 function date(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const time = Date.parse(value + "T00:00:00Z");
@@ -25,8 +38,7 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
   if (source === "financial") {
     if (!record(value.period) || !record(value.balances)) return false;
     const period = value.period, balances = value.balances;
-    return cents(period.incomeCents) && cents(period.expenseCents)
-      && cents(period.operatingNetCents)
+    return validPeriodArithmetic(period)
       && record(period.quality) && cents(period.quality.signMismatchRows)
       && cents(balances.activeBalanceCents)
       && Array.isArray(balances.accounts) && balances.accounts.every((account: unknown) =>
@@ -38,8 +50,7 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
   if (source === "monthly") {
     return Array.isArray(value.rows) && value.rows.every((row: unknown) =>
       record(row) && date(row.monthStart) && row.monthStart.endsWith("-01")
-      && cents(row.incomeCents) && cents(row.expenseCents)
-      && cents(row.operatingNetCents));
+      && validPeriodArithmetic(row));
   }
 
   if (source === "budgets") {
@@ -68,7 +79,8 @@ export function isHomeDashboardSourceSafe(source: HomeDashboardSource, value: un
   }
 
   return Array.isArray(value.rows)
-    && (value.totalCount === undefined || (cents(value.totalCount) && value.totalCount >= 0))
+    && (value.totalCount === undefined || (cents(value.totalCount) && value.totalCount >= value.rows.length))
+    && new Set(value.rows.map((row: unknown) => record(row) ? row.id : null)).size === value.rows.length
     && value.rows.every((transaction: unknown) =>
       record(transaction) && typeof transaction.id === "string" && transaction.id.trim().length > 0
       && date(transaction.bankDate) && cents(transaction.amountCents)
