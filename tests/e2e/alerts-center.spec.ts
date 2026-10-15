@@ -209,9 +209,9 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
 });
 
 
-test("REC-ALT-001 · cuatro lecturas inválidas no se representan como cero alertas comprobadas", async ({ page }) => {
+test("REC-ALT-001 · cinco fuentes inválidas no se representan como cero alertas comprobadas", async ({ page }) => {
   const methods: string[] = [];
-  await page.route(/\/api\/(?:dashboard\?scope=all|source\/google\/sync|transactions\?uncategorized=true&limit=1|documents\?scope=ordinary&.*)$/, async (route) => {
+  await page.route(/\/api\/(?:dashboard\?scope=all|source\/google\/sync|analysis\/source-freshness|transactions\?uncategorized=true&limit=1|documents\?scope=ordinary&.*)$/, async (route) => {
     methods.push(route.request().method());
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
@@ -220,7 +220,7 @@ test("REC-ALT-001 · cuatro lecturas inválidas no se representan como cero aler
   await expect(page.locator('section[aria-label="Resumen de alertas"] strong')).toHaveText(["—", "—", "—"]);
   await expect(page.locator('[class*="sectionHeading"] > strong')).toHaveText("—");
   await expect(page.getByText("No hay alertas activas con las señales disponibles.")).toHaveCount(0);
-  expect(methods.length).toBeGreaterThanOrEqual(5);
+  expect(methods.length).toBeGreaterThanOrEqual(6);
   expect(methods.every((method) => method === "GET")).toBe(true);
 });
 
