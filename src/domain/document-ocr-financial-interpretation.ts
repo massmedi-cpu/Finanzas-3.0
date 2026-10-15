@@ -209,17 +209,27 @@ function extractMoneyField(
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
-    if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
+    // A PDF/OCR extractor can merge "TOTAL IVA" and "TOTAL A PAGAR" into one
+    // line. Exclude only the misleading heading, not the entire row: blank
+    // its characters to preserve the offsets of the real payable label.
+    const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    const labelSearch = options.exclude
+      ? searchable.replace(
+        new RegExp(options.exclude.source, options.exclude.flags.includes("g")
+          ? options.exclude.flags : options.exclude.flags + "g"),
+        (excluded) => " ".repeat(excluded.length),
+      )
+      : searchable;
+    if (!labels.some((label) => label.test(labelSearch))) return [];
     if (options.skipTaxTableFooter && isTaxTableFooter(lines, index)) return [];
 
     // Do not treat the last number in a whole OCR row as its labelled amount.
     // Receipts can place TOTAL, cash received and CHANGE on the same row.
-    const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
     const labelsFound = labels.flatMap((label) => {
-      const match = label.exec(searchable);
+      const match = label.exec(labelSearch);
       return match ? [{ index: match.index, end: match.index + match[0].length }] : [];
     });
-    const preferred = options.prefer?.exec(searchable) ?? null;
+    const preferred = options.prefer?.exec(labelSearch) ?? null;
     const anchorEnd = preferred
       ? preferred.index + preferred[0].length
       : labelsFound.reduce((earliest, found) => Math.min(earliest, found.end), Number.POSITIVE_INFINITY);
