@@ -67,10 +67,12 @@ async function mockAlerts(page: Page) {
       body: JSON.stringify({
         run: {
           status: "success",
+          finishedAt: new Date().toISOString(),
+          rowsSeen: 25,
+          rowsFailed: 0,
           rowsMissing: 0,
           duplicatesDetected: 0,
           warningsCount: 0,
-          rowsFailed: 0,
         },
       }),
     });
@@ -147,7 +149,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
   await page.route("**/api/source/google/sync", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ run: { status: "success", rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 } }),
+    body: JSON.stringify({ run: { status: "success", finishedAt: new Date().toISOString(), rowsSeen: 50, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 } }),
   }));
   await page.route("**/api/transactions?uncategorized=true&limit=1", (route) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify({ totalCount: 0 }),
@@ -267,4 +269,33 @@ test("REC-ALT-006 · metadatos de cobertura incompletos no se confunden con ause
   await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar resumen financiero");
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
   await expect(page.getByText("No hay alertas activas con las señales disponibles.")).toHaveCount(0);
+});
+
+test("REC-ALT-007 · una sincronización 200 sin finalización comprobable nunca equivale a fuente correcta", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "success", finishedAt: null, rowsSeen: 120, rowsFailed: 0,
+      rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+    } }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar sincronización");
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-008 · errores de importación confirmados aparecen en la alerta de fuente", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "success", finishedAt: new Date().toISOString(), rowsSeen: 140, rowsFailed: 3,
+      rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+    } }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByText("La última sincronización tiene avisos")).toBeVisible();
+  await expect(page.getByText("No se pudieron importar 3 movimientos en la última sincronización.")).toBeVisible();
+  await expect(page.getByText("Lectura parcial: no se pudo consultar sincronización")).toHaveCount(0);
 });
