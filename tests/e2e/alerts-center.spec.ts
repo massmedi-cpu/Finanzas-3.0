@@ -557,3 +557,25 @@ test("REC-ALT-021 · respuesta documental de lectura no segura se excluye inclus
   await expect(page.getByText(/9\.000 documentos sin asociar/)).toHaveCount(0);
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
 });
+
+test("REC-ALT-022 · un recuento documental fallido no borra el otro que sí está confirmado", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/documents?scope=ordinary&*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("status") === "pending_review") {
+      return route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"unavailable"}' });
+    }
+    return route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 3, total: 7, limit: 1, offset: 0, items: [],
+        principles: documentPrinciples,
+      }),
+    });
+  });
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
+  await expect(page.getByText("7 documentos sin asociar")).toBeVisible();
+  await expect(page.getByText("1 documento pendiente de revisar")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
