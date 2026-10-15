@@ -128,10 +128,12 @@ test("REC-ALT-009 · sin cobertura bancaria no se certifican gasto, margen ni re
       { categoryName: "Compras", progressBps: 9200, status: "on_track" },
       { categoryName: "Ocio", progressBps: 12000, status: "over" },
     ],
+    forecast: { ...base.forecast, plannedItems: 1, projectedClosingBalanceCents: -400_00 },
     uncategorizedCount: 2,
   });
   const ids = alerts.map((alert) => alert.id);
   expect(ids).not.toContain("negative-month-result");
+  expect(ids).not.toContain("forecast-negative-balance");
   expect(ids).not.toContain("budget-near-limit");
   expect(ids).not.toContain("budget-over");
   expect(ids).toContain("uncategorized-transactions");
@@ -147,4 +149,12 @@ test("REC-ALT-010 · falta de certificado también bloquea dinero derivado en ll
   const ids = deriveGlobalAlerts(noCertificate).map((alert) => alert.id);
   expect(ids).not.toContain("negative-month-result");
   expect(ids).not.toContain("budget-over");
+});
+
+test("REC-ALT-016 · saldo futuro negativo se anuncia solo con origen bancario verificado", () => {
+  const forecast = { ...base.forecast, plannedItems: 1, projectedClosingBalanceCents: -500_00 };
+  expect(deriveGlobalAlerts({ ...base, forecast, bankCoverageVerified: true })
+    .some((item) => item.id === "forecast-negative-balance")).toBe(true);
+  expect(deriveGlobalAlerts({ ...base, forecast, bankCoverageVerified: false })
+    .some((item) => item.id === "forecast-negative-balance")).toBe(false);
 });
