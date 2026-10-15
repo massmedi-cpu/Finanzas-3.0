@@ -10,6 +10,7 @@ const cases = [
   ["tests/e2e/recovery-route-shell-responsive.spec.ts", ["REC-VIS-004"]],
   ["tests/e2e/cash-flow-theme-contrast.spec.ts", ["REC-VIS-005"]],
   // These backend-integrity regressions must run, not merely exist in Git.
+  ["tests/e2e/financial-api-query-guards.spec.ts", ["REC-OBS-001"]],
   ["tests/e2e/document-ocr-financial-interpretation.spec.ts", [
     "REC-OCR-150", "REC-OCR-151", "REC-OCR-152",
     "REC-OCR-153", "REC-OCR-154", "REC-OCR-155",

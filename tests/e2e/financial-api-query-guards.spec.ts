@@ -258,3 +258,38 @@ test("REC-SEARCH-011 · malformed successful bank or document responses are not 
   expect(globalSearchNeedsSession(malformed)).toBe(false);
   expect(allGlobalSearchSourcesFailed([valid[0], ...malformed])).toBe(false);
 });
+
+test("REC-OBS-001 · un 403 esperado de workspace mantiene el rechazo HTTP sin generar falsas alarmas", async () => {
+  const errors: unknown[][] = [];
+  const infos: unknown[][] = [];
+  const oldError = console.error;
+  const oldInfo = console.info;
+  console.error = (...arguments_) => { errors.push(arguments_); };
+  console.info = (...arguments_) => { infos.push(arguments_); };
+  try {
+    const handlers = [analysisApiError, comparisonApiError];
+    for (const handler of handlers) {
+      const denied = handler(new PersistenceGatewayError("private-workspace-id", 403, "workspace_context_required"), performance.now());
+      expect(denied.status).toBe(403);
+      expect(denied.headers.get("cache-control")).toBe("private, no-store");
+      expect(await denied.json()).toMatchObject({ code: "workspace_context_required" });
+    }
+    expect(errors).toHaveLength(0);
+    expect(infos).toHaveLength(2);
+    expect(infos.every((entry) => (entry[1] as { status: number; code: string }).status === 403
+      && (entry[1] as { status: number; code: string }).code === "workspace_context_required")).toBe(true);
+    for (const handler of handlers) {
+      const unavailable = handler(new PersistenceGatewayError("private-db-host", 503, "gateway_unavailable"), performance.now());
+      expect(unavailable.status).toBe(503);
+      expect(await unavailable.json()).toMatchObject({ code: "gateway_unavailable" });
+    }
+    expect(errors).toHaveLength(2);
+    expect(infos).toHaveLength(2);
+    const recorded = JSON.stringify([...errors, ...infos]);
+    expect(recorded).not.toContain("private-workspace-id");
+    expect(recorded).not.toContain("private-db-host");
+  } finally {
+    console.error = oldError;
+    console.info = oldInfo;
+  }
+});

@@ -5,6 +5,7 @@ import type { ComparisonSelectionInput } from "../../../src/application/comparis
 import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { logPersistenceGatewayFailure } from "../../../src/infrastructure/persistence/gateway-observability";
 
 export const dynamic = "force-dynamic";
 
@@ -26,10 +27,7 @@ export function apiError(error: unknown, started: number) {
   const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
   const responseHeaders = { ...HEADERS, "server-timing": "comparison;dur=" + durationMs };
   if (error instanceof PersistenceGatewayError) {
-    console.error("comparison-api-gateway", {
-      status: error.status,
-      code: error.code ?? null,
-    });
+    logPersistenceGatewayFailure("comparison-api-gateway", error);
     return Response.json(
       { error: "comparison_unavailable", code: error.code ?? null },
       {

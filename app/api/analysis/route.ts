@@ -6,6 +6,7 @@ import { prepareAnalysisPresentationSnapshot } from "../../../src/application/an
 import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { logPersistenceGatewayFailure } from "../../../src/infrastructure/persistence/gateway-observability";
 
 export const dynamic = "force-dynamic";
 
@@ -28,18 +29,11 @@ const ALLOWED_QUERY_KEYS = new Set([
   "compareDateTo",
 ]);
 
-function logGatewayError(scope: string, error: PersistenceGatewayError) {
-  console.error(scope, {
-    status: error.status,
-    code: error.code ?? null,
-  });
-}
-
 export function apiError(error: unknown, started: number) {
   const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
   const responseHeaders = { ...HEADERS, "server-timing": "analysis;dur=" + durationMs };
   if (error instanceof PersistenceGatewayError) {
-    logGatewayError("analysis-api-gateway", error);
+    logPersistenceGatewayFailure("analysis-api-gateway", error);
     return Response.json(
       { error: "analysis_unavailable", code: error.code ?? null },
       {
