@@ -31,6 +31,8 @@ on:
       - 'package*.json'
       - 'vercel.json'
       - '.github/workflows/product-recovery-ui.yml'
+      - '.github/workflows/production-backup-v2.yml'
+      - '.github/workflows/production-postflight.yml'
 
 permissions:
   contents: read

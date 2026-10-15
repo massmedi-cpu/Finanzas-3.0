@@ -64,4 +64,28 @@ assert.ok(workflow.includes("retention-days: 7"), "Synthetic browser evidence mu
 assert.ok(workflow.includes("path: recovery-evidence/"), "Browser artifact must contain both preserved phases");
 process.stdout.write("PASS: synthetic browser screenshots and traces survive the CI runner with bounded retention\n");
 
+const releaseWorkflows = [
+  ".github/workflows/production-backup-v2.yml",
+  ".github/workflows/production-postflight.yml",
+];
+for (const path of releaseWorkflows) {
+  const yaml = readFileSync(path, "utf8");
+  const actions = [...yaml.matchAll(/^\s+uses:\s+(actions\/(?:checkout|setup-node|upload-artifact|download-artifact))@([^\s]+)/gm)];
+  assert.ok(actions.length >= 4, `Expected protected release workflow actions in ${path}`);
+  for (const match of actions) {
+    assert.match(match[2], /^[a-f0-9]{40}$/, `Mutable release Action tag ${match[1]}@${match[2]} in ${path}`);
+  }
+  const checkouts = actions.filter((match) => match[1] === "actions/checkout").length;
+  const persistenceDisabled = (yaml.match(/persist-credentials:\s*false/g) ?? []).length;
+  assert.ok(persistenceDisabled >= checkouts, `Release checkout credentials must never persist in ${path}`);
+}
+const backupWorkflow = readFileSync(releaseWorkflows[0], "utf8");
+assert.ok(backupWorkflow.includes('git merge-base --is-ancestor "$FINANCIAL_APP_SOURCE_COMMIT" "$GITHUB_SHA"'),
+  "A secret-bearing production backup may only check out source commits on trusted main history");
+const visualWorkflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
+for (const path of releaseWorkflows) {
+  assert.ok(visualWorkflow.includes("'" + path + "'"), `Release workflow changes must retrigger the CI guard: ${path}`);
+}
+process.stdout.write("PASS: release workflows pin actions, guard ancestry and do not persist checkout credentials\n");
+
 process.stdout.write("PASS: recovery visual suites are executable by the mandatory browser gate\n");
