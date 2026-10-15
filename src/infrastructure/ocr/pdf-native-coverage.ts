@@ -16,7 +16,13 @@ function hasInvoiceTotalEvidence(words: OcrWord[]) {
   const text = words.map((word) => word.text).join(" ")
     .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
   for (const label of text.matchAll(/\b(?:total|importe total|a pagar)\b/g)) {
-    const tail = text.slice((label.index ?? 0) + label[0].length, (label.index ?? 0) + label[0].length + 56);
+    const afterLabel = text.slice((label.index ?? 0) + label[0].length);
+    // A selectable "TOTAL IMPUESTOS 2,10" / "TOTAL DESCUENTOS 4,20"
+    // is NOT evidence of an invoice grand total. Such tax-only overlays
+    // must not hide the scanned document body below them. Continue to
+    // later independent labels such as "TOTAL A PAGAR 22,10" on this line.
+    if (/^\s+(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)\b/.test(afterLabel)) continue;
+    const tail = afterLabel.slice(0, 56);
     // TOTAL without a value is not proved by an unrelated IVA, tax base,
     // reference number or unit price printed after the heading.
     const competingField = tail.search(/\b(?:i\.?v\.?a|i\.?g\.?i\.?c|base imponible|subtotal|cuota|precio unitario|referencia|numero de factura)\b/);
@@ -105,6 +111,13 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
     && !words.some(({ box }) => box.y < 0.8 && box.y + box.height > 0.2)) {
     return true;
   }
+
+  // A tax/discount TOTAL is a false positive even in a large selectable
+  // overlay. The actual invoice grand total may exist only in raster pixels.
+  // If a separate genuine total exists, preserve the native-text fast path.
+  if (/\btotal\s+(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)\b/.test(
+    text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(),
+  ) && !hasInvoiceTotalEvidence(words)) return true;
 
   if (chars >= 210 && words.length >= 5) return false;
   // A single enormous native text item can still be hidden PDF metadata,
