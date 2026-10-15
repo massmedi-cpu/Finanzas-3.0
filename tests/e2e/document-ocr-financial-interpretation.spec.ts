@@ -1060,3 +1060,35 @@ test("REC-OCR-161 · grouped base plus VAT reconciles against a grouped final am
   expect(parsed.warnings).not.toContain("base_plus_tax_mismatch");
   expect(parsed.totalCents.trust).toBe("reliable");
 });
+
+
+test("REC-OCR-166 · a real payable on the same row as VAT total survives adjacent tax-table detection", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("tax-head", "TIPO IVA BASE IMPONIBLE CUOTA", 0.99, 0.10),
+    line("tax-row", "21% 10,00 2,10", 0.99, 0.20),
+    line("payable", "TOTAL IVA 2,10 TOTAL A PAGAR 12,10", 0.99, 0.30),
+  ]));
+  expect(parsed.totalCents.value).toBe(1210);
+  expect(parsed.totalCents.rawValue).toBe("12,10");
+  expect(parsed.totalCents.evidence[0]?.lineId).toBe("payable");
+});
+
+test("REC-OCR-167 · a genuine two-column tax-table footer is not the grand total", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("tax-head", "TIPO IVA BASE IMPONIBLE CUOTA", 0.99, 0.10),
+    line("tax-row", "21% 10,00 2,10", 0.99, 0.20),
+    line("tax-footer", "TOTAL 10,00 2,10", 0.99, 0.30),
+  ]));
+  expect(parsed.totalCents.value).toBeNull();
+  expect(parsed.totalCents.trust).toBe("not_detected");
+});
+
+test("REC-OCR-168 · an invoice-labelled final total after TAX TOTAL is not a tax-table footer", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("tax-head", "TIPO IVA BASE IMPONIBLE CUOTA", 0.99, 0.10),
+    line("tax-row", "21% 20,00 4,20", 0.99, 0.20),
+    line("payable", "TOTAL IMPUESTOS 4,80 IMPORTE TOTAL FACTURA 28,00", 0.99, 0.30),
+  ]));
+  expect(parsed.totalCents.value).toBe(2800);
+  expect(parsed.totalCents.rawValue).toBe("28,00");
+});
