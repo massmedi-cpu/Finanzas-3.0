@@ -109,7 +109,8 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
   }
 
   const projectedClosingBalance = input.forecast?.projectedClosingBalanceCents ?? null;
-  if ((input.forecast?.plannedItems ?? 0) > 0 && projectedClosingBalance !== null && projectedClosingBalance < 0) {
+  if (input.bankCoverageVerified === true && (input.forecast?.plannedItems ?? 0) > 0
+    && projectedClosingBalance !== null && projectedClosingBalance < 0) {
     alerts.push({
       id: "forecast-negative-balance",
       category: "forecast",
