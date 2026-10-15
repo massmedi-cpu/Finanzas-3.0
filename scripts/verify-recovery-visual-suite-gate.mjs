@@ -15,6 +15,7 @@ const cases = [
     "REC-OCR-153", "REC-OCR-154", "REC-OCR-155",
     "REC-OCR-156", "REC-OCR-157", "REC-OCR-158",
     "REC-OCR-159", "REC-OCR-160", "REC-OCR-161",
+    "REC-OCR-166", "REC-OCR-167", "REC-OCR-168",
   ]],
   ["tests/e2e/document-ocr-pdf-native-coverage.spec.ts", [
     "REC-OCR-162", "REC-OCR-163", "REC-OCR-164", "REC-OCR-165",
