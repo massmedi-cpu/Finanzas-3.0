@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDashboardEnvelopeForScope } from "../../src/application/dashboard/dashboard-envelope-integrity";
 import { parseHomeBankFreshness, resolveHomeBankCoverage } from "../../src/application/dashboard/home-bank-coverage";
 import {
@@ -17,11 +17,14 @@ import {
 import styles from "./alerts.module.css";
 
 type DashboardEnvelope = {
+  asOfDate: string;
   dataThroughDate: string | null;
   failedSources: string[];
   data: {
     financial: null | {
       period: {
+        dateFrom: string;
+        dateTo: string;
         operatingNetCents: number;
         quality: {
           suspectedDuplicateRows: number;
@@ -30,6 +33,7 @@ type DashboardEnvelope = {
       };
     };
     budgets: null | {
+      month: string;
       categories: Array<{
         categoryName: string | null;
         progressBps: number | null;
@@ -37,6 +41,7 @@ type DashboardEnvelope = {
       }>;
     };
     forecast: null | {
+      period: { dateFrom: string; dateTo: string; accountId: null };
       summary: {
         projectedClosingBalanceCents: number;
         plannedItems: number;
@@ -68,7 +73,19 @@ type TransactionCount = {
   totalCount: number;
 };
 
-type DocumentCount = { total: number };
+type DocumentCount = {
+  contractVersion: 3;
+  total: number;
+  limit: number;
+  offset: number;
+  items: unknown[];
+  principles: {
+    bankSource: "read_only";
+    getHasSideEffects: false;
+    suggestionsPersisted: false;
+    associationsRequireConfirmation: true;
+  };
+};
 
 type DocumentSummary = {
   unassociated: number;
@@ -119,21 +136,32 @@ function moneyCents(value: unknown) {
   return typeof value === "number" && Number.isSafeInteger(value);
 }
 
+function addDays(date: string, days: number) {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
 function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
   // A 200 response can still contain another dashboard scope, forged money
   // from a failed source, or a partial list of sources. Reject it before
   // deriving financial alerts rather than treating unverified totals as true.
   if (!isDashboardEnvelopeForScope(value, "all") || !isObject(value.data)) return false;
   const data = value.data;
+  const day = value.asOfDate;
+  const month = day.slice(0, 7);
   if (data.financial !== null) {
     if (!isObject(data.financial) || !isObject(data.financial.period)
+      || data.financial.period.dateFrom !== `${month}-01`
+      || data.financial.period.dateTo !== day
       || !moneyCents(data.financial.period.operatingNetCents)
       || !isObject(data.financial.period.quality)
       || !nonnegativeCount(data.financial.period.quality.suspectedDuplicateRows)
       || !nonnegativeCount(data.financial.period.quality.signMismatchRows)) return false;
   }
   if (data.budgets !== null) {
-    if (!isObject(data.budgets) || !Array.isArray(data.budgets.categories)
+    if (!isObject(data.budgets) || data.budgets.month !== month
+      || !Array.isArray(data.budgets.categories)
       || !data.budgets.categories.every((item: unknown) =>
         isObject(item)
         && (item.categoryName === null || typeof item.categoryName === "string")
@@ -142,17 +170,27 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
   }
   if (data.forecast !== null) {
     if (!isObject(data.forecast) || !isObject(data.forecast.summary)
+      || !isObject(data.forecast.period)
+      || data.forecast.period.dateFrom !== day
+      || data.forecast.period.dateTo !== addDays(day, 30)
+      || data.forecast.period.accountId !== null
       || !moneyCents(data.forecast.summary.projectedClosingBalanceCents)
       || !nonnegativeCount(data.forecast.summary.plannedItems)
       || !Array.isArray(data.forecast.items)
       || !data.forecast.items.every((item: unknown) =>
         isObject(item)
         && typeof item.date === "string"
+        && item.date >= day && item.date <= addDays(day, 30)
         && typeof item.concept === "string"
         && moneyCents(item.amountCents)
         && ["planned", "excluded", "confirmed"].includes(String(item.status))
         && typeof item.affectsProjection === "boolean")) return false;
   }
+  if (data.forecast !== null && isObject(data.forecast)
+    && isObject(data.forecast.summary) && Array.isArray(data.forecast.items)
+    && data.forecast.summary.plannedItems !== data.forecast.items.filter(
+      (item: unknown) => isObject(item) && item.status === "planned",
+    ).length) return false;
   return true;
 }
 
@@ -215,9 +253,22 @@ function syncDetail(run: SyncStatus["run"]) {
   return parts.join(" ") || null;
 }
 
-function documentCount(page: DocumentCount): number {
-  if (!Number.isSafeInteger(page.total) || page.total < 0) throw new Error("invalid_document_summary_total");
-  return page.total;
+function documentCount(value: unknown): number {
+  // v1/v2 can silently ignore scope=ordinary or unassociated=true.
+  // Never count documents from a legacy or unverified response as personal
+  // pending tasks: they may include archived or designated test documents.
+  if (!isObject(value) || value.contractVersion !== 3
+    || !nonnegativeCount(value.total)
+    || value.limit !== 1 || value.offset !== 0
+    || !Array.isArray(value.items) || value.items.length > 1
+    || !isObject(value.principles)
+    || value.principles.bankSource !== "read_only"
+    || value.principles.getHasSideEffects !== false
+    || value.principles.suggestionsPersisted !== false
+    || value.principles.associationsRequireConfirmation !== true) {
+    throw new Error("invalid_document_summary_contract");
+  }
+  return value.total as number;
 }
 
 async function loadDocumentSummary(): Promise<DocumentSummary> {
@@ -238,8 +289,10 @@ export default function AlertsClient() {
   const [snapshot, setSnapshot] = useState<AlertSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     setLoading(true);
     setError(null);
     const today = madridToday();
@@ -251,6 +304,8 @@ export default function AlertsClient() {
       readJson<unknown>("/api/analysis/source-freshness", 8_000),
     ]);
 
+    // StrictMode, navigation and refresh must never publish an older result.
+    if (sequence !== loadSequence.current) return;
     const degradedReads: string[] = [];
     const dashboard = dashboardResult.status === "fulfilled" ? dashboardResult.value : null;
     const sync = syncResult.status === "fulfilled" ? syncResult.value : null;
@@ -319,6 +374,7 @@ export default function AlertsClient() {
 
   useEffect(() => {
     void load();
+    return () => { loadSequence.current += 1; };
   }, [load]);
 
   const alerts = useMemo(() => snapshot ? deriveGlobalAlerts(snapshot.input) : [], [snapshot]);
