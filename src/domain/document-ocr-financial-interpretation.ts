@@ -161,7 +161,7 @@ function exactFinancialAmountMatches(text: string) {
     ...text.matchAll(INTEGER_EURO_TOKEN),
     ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN),
   ].sort((left, right) => (left.index ?? 0) - (right.index ?? 0));
-  const accepted: RegExpMatchArray[] = [];
+  const accepted: RegExpExecArray[] = [];
   for (const match of candidates) {
     // The accounting matcher also sees "(12,34)" without a sign. Reject it;
     // later decimal matching must not steal its inner positive number.
