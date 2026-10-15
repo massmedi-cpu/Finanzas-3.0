@@ -142,6 +142,7 @@ jobs:
           tests/e2e/recurrences.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
+          tests/e2e/analysis-error-layout-recovery.spec.ts
           tests/e2e/aud-e2e-analysis-light-contrast.spec.ts
           tests/e2e/analysis.spec.ts
           --project=chromium-desktop --project=chromium-mobile
