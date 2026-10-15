@@ -9,6 +9,7 @@ import {
   type GlobalAlertInput,
 } from "../../src/application/global-alerts";
 import {
+  hasCompletedSourceSyncEvidence,
   hasSourceSyncIncidents,
   normalizeSourceSyncIncidents,
 } from "../../src/application/source-sync-incidents";
@@ -52,6 +53,9 @@ type DashboardEnvelope = {
 type SyncStatus = {
   run: null | {
     status: string;
+    finishedAt: string | null;
+    rowsSeen: number;
+    rowsFailed: number;
     rowsMissing: number;
     duplicatesDetected: number;
     warningsCount: number;
@@ -155,6 +159,10 @@ function isSyncStatus(value: unknown): value is SyncStatus {
   if (value.run === null) return true;
   return isObject(value.run)
     && ["success", "failed", "started", "partial"].includes(String(value.run.status))
+    && (value.run.finishedAt === null || typeof value.run.finishedAt === "string")
+    && nonnegativeCount(value.run.rowsSeen)
+    && nonnegativeCount(value.run.rowsFailed)
+    && (value.run.status !== "success" || hasCompletedSourceSyncEvidence(value.run))
     && nonnegativeCount(value.run.rowsMissing)
     && nonnegativeCount(value.run.duplicatesDetected)
     && nonnegativeCount(value.run.warningsCount);
@@ -182,6 +190,11 @@ function syncDetail(run: SyncStatus["run"]) {
   if (!run || run.status !== "success") return null;
   const incidents = normalizeSourceSyncIncidents(run);
   const parts: string[] = [];
+  if (incidents.failedRows > 0) {
+    parts.push(incidents.failedRows === 1
+      ? "No se pudo importar 1 movimiento en la última sincronización."
+      : `No se pudieron importar ${incidents.failedRows} movimientos en la última sincronización.`);
+  }
   if (incidents.missingRows > 0) {
     parts.push(incidents.missingRows === 1
       ? "1 movimiento importado anteriormente ya no aparece en la fuente."
