@@ -579,3 +579,23 @@ test("REC-ALT-022 · un recuento documental fallido no borra el otro que sí est
   await expect(page.getByText("1 documento pendiente de revisar")).toHaveCount(0);
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
 });
+
+test("REC-ALT-023 · resumen de ayer HTTP 200 no puede presentarse como el mes actualizado", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      financial: {
+        period: {
+          operatingNetCents: -800_00,
+          quality: { suspectedDuplicateRows: 9, signMismatchRows: 0 },
+        },
+      },
+    }, { asOfDate: madridDatePlus(-1) })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("9 posibles movimientos duplicados")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
