@@ -4,7 +4,7 @@
  * another scope, hide failed sources, or silently accept extra data.
  */
 export type HomeDashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
-export type HomeDashboardScope = "critical" | "activity" | "primary" | "secondary";
+export type HomeDashboardScope = "critical" | "activity" | "primary" | "secondary" | "all";
 
 export const HOME_DASHBOARD_SOURCES: readonly HomeDashboardSource[] = [
   "financial", "monthly", "budgets", "forecast", "transactions",
@@ -15,6 +15,7 @@ export const HOME_SCOPE_SOURCES: Record<HomeDashboardScope, readonly HomeDashboa
   activity: ["transactions"],
   primary: ["financial", "transactions"],
   secondary: ["monthly", "budgets", "forecast"],
+  all: ["financial", "transactions", "monthly", "budgets", "forecast"],
 };
 
 export type VerifiedDashboardEnvelope = {
