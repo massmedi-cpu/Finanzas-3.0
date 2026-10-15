@@ -253,7 +253,10 @@ function extractMoneyField(
       // distinct OCR lines. Recover only a *bare* label with a single
       // standalone money token on the next line of the same page. This is
       // evidence for review, not automatic certification.
-      const bareTotal = /^(?:total(?: a pagar| importe factura| factura| final)?|importe(?: de la)? factura|importe total|a pagar)\s*[:=-]?\s*$/.test(normalized);
+      // Printed bills often split "TOTAL (€)" from its amount across
+      // adjacent lines. Accept an explicit currency marker on the label,
+      // but retain the single-standalone-money / same-page safeguards below.
+      const bareTotal = /^(?:total(?: a pagar| importe factura| factura| final)?|importe(?: de la)? factura|importe total|a pagar)\s*(?:\(\s*(?:€|eur)\s*\)|€|eur)?\s*[:=-]?\s*$/.test(normalized);
       const next = lines[index + 1];
       if (bareTotal && next?.pageNumber === item.pageNumber) {
         const amountMatches = exactFinancialAmountMatches(next.line.text);
