@@ -99,3 +99,46 @@ test("REC-HOME-DATA-008 · invalid category labels cannot crash budget or foreca
     ...samples.budgets, categories: [{ categoryName: null, actualExpenseCents: 0 }],
   })).toBe(true);
 });
+
+test("REC-HOME-DATA-010 · HTTP 200 with impossible financial net or negative income stays untrusted", () => {
+  const period = samples.financial.period;
+  for (const broken of [
+    { ...period, operatingNetCents: 70001 },
+    { ...period, incomeCents: -1 },
+    { ...period, expenseCents: -1 },
+    { ...period, incomeCents: Number.MAX_SAFE_INTEGER, expenseCents: 1, operatingNetCents: Number.MAX_SAFE_INTEGER },
+  ]) {
+    expect(isHomeDashboardSourceSafe("financial", {
+      ...samples.financial, period: broken,
+    })).toBe(false);
+  }
+  expect(isHomeDashboardSourceSafe("financial", samples.financial)).toBe(true);
+});
+
+test("REC-HOME-DATA-011 · monthly chart never accepts contradictory or unsafe cents", () => {
+  const row = samples.monthly.rows[0];
+  for (const broken of [
+    { ...row, operatingNetCents: row.operatingNetCents + 1 },
+    { ...row, incomeCents: -1 },
+    { ...row, expenseCents: -1 },
+    { ...row, incomeCents: Number.MAX_SAFE_INTEGER, expenseCents: 1 },
+  ]) {
+    expect(isHomeDashboardSourceSafe("monthly", {
+      rows: [broken],
+    })).toBe(false);
+  }
+  expect(isHomeDashboardSourceSafe("monthly", samples.monthly)).toBe(true);
+});
+
+test("REC-HOME-DATA-012 · activity does not silently accept duplicate IDs or impossible totals", () => {
+  const row = samples.transactions.rows[0];
+  expect(isHomeDashboardSourceSafe("transactions", {
+    rows: [row, { ...row, amountCents: -9999 }], totalCount: 2,
+  })).toBe(false);
+  expect(isHomeDashboardSourceSafe("transactions", {
+    rows: [row, { ...row, id: "t2" }], totalCount: 1,
+  })).toBe(false);
+  expect(isHomeDashboardSourceSafe("transactions", {
+    rows: [row, { ...row, id: "t2" }], totalCount: 2,
+  })).toBe(true);
+});
