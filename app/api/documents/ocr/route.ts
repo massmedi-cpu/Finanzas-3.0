@@ -31,6 +31,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
+const OCR_SOURCE_FETCH_TIMEOUT_MS = 45_000;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
 function normalizeDiagnosticToken(text: string) {
@@ -370,7 +371,7 @@ async function downloadPrivateDocument(rawUrl: string) {
     throw new OcrApiError("ocr_source_url_rejected", 503);
   }
 
-  const response = await fetch(url, { cache: "no-store", redirect: "error" }).catch(() => null);
+  const response = await fetch(url, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(OCR_SOURCE_FETCH_TIMEOUT_MS) }).catch(() => null);
   if (!response?.ok) throw new OcrApiError("ocr_source_download_failed", 503);
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BYTES) throw new OcrApiError("ocr_source_too_large", 413);

@@ -326,3 +326,28 @@ test("REC-DRIVE-136 · empty and oversized batches never enter the database", as
     .rejects.toThrow("invalid_document_drive_batch");
   expect(begins).toBe(0);
 });
+
+test("REC-DRIVE-137 · each metadata/media read has an independent abort deadline", async () => {
+  const signals: AbortSignal[] = [];
+  const fetcher: typeof fetch = async (input, init) => {
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    const signal = init?.signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    signals.push(signal);
+    if (String(input).includes("?fields=")) {
+      return Response.json({
+        id: fileId, name: "factura-plazo.pdf", mimeType: "application/pdf",
+        size: String(Buffer.byteLength(pdf)), modifiedTime: authoritativeDate,
+        version: "42", trashed: false,
+      });
+    }
+    return new Response(pdf, { status: 200 });
+  };
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly-token" }, fetcher,
+  );
+  const original = await downloader.download({ fileId, expectedMimeType: "application/pdf" });
+  expect(original.sizeBytes).toBe(Buffer.byteLength(pdf));
+  expect(signals).toHaveLength(3);
+  expect(new Set(signals).size).toBe(3);
+});

@@ -21,6 +21,7 @@ export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const DOCUMENT_SOURCE_FETCH_TIMEOUT_MS = 45_000;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
 const BASE_HEADERS = {
@@ -124,7 +125,7 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
     throw new Error("document_download_source_rejected");
   }
 
-  const response = await fetch(url, { cache: "no-store", redirect: "error" }).catch(() => null);
+  const response = await fetch(url, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(DOCUMENT_SOURCE_FETCH_TIMEOUT_MS) }).catch(() => null);
   if (!response?.ok) throw new Error("document_download_failed");
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_FILE_BYTES) throw new Error("document_download_too_large");

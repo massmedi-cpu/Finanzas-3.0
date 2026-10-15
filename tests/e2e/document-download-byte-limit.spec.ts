@@ -110,3 +110,14 @@ test("REC-DOC-DOWNLOAD-008 · duplicate private document IDs are rejected before
     });
   }
 });
+
+test("REC-DOC-NET-009 · signed original and OCR fetches have cancellation deadlines", () => {
+  const original = readFileSync(join(process.cwd(),
+    "app/api/documents/download/route.ts"), "utf8");
+  const ocr = readFileSync(join(process.cwd(),
+    "app/api/documents/ocr/route.ts"), "utf8");
+  expect(original).toContain("signal: AbortSignal.timeout(DOCUMENT_SOURCE_FETCH_TIMEOUT_MS)");
+  expect(ocr).toContain("signal: AbortSignal.timeout(OCR_SOURCE_FETCH_TIMEOUT_MS)");
+  expect(original).toContain("readLimitedResponseBody(response, MAX_FILE_BYTES)");
+  expect(ocr).toContain("readLimitedResponseBody(response, MAX_BYTES)");
+});

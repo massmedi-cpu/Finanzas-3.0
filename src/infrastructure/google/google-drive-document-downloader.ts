@@ -4,6 +4,8 @@ import type { GoogleAccessTokenProvider } from "./official-bank-source-reader";
 
 export const GOOGLE_DRIVE_OCR_MAX_BYTES = 15 * 1024 * 1024;
 
+const DRIVE_FETCH_TIMEOUT_MS = 45_000;
+
 const FILE_ID = /^[A-Za-z0-9_-]{10,200}$/;
 const ALLOWED_MIMES = new Set([
   "application/pdf",
@@ -168,6 +170,7 @@ export class GoogleDriveDocumentDownloader {
       headers: googleHeaders(accessToken),
       cache: "no-store",
       redirect: "error",
+      signal: AbortSignal.timeout(DRIVE_FETCH_TIMEOUT_MS),
     }).catch(() => null);
     if (!metadataResponse) {
       throw new GoogleDriveDocumentError(
@@ -221,6 +224,7 @@ export class GoogleDriveDocumentDownloader {
       headers: { authorization: `Bearer ${accessToken}` },
       cache: "no-store",
       redirect: "error",
+      signal: AbortSignal.timeout(DRIVE_FETCH_TIMEOUT_MS),
     }).catch(() => null);
     if (!mediaResponse) {
       throw new GoogleDriveDocumentError(
@@ -265,6 +269,7 @@ export class GoogleDriveDocumentDownloader {
       headers: googleHeaders(accessToken),
       cache: "no-store",
       redirect: "error",
+      signal: AbortSignal.timeout(DRIVE_FETCH_TIMEOUT_MS),
     }).catch(() => null);
     if (!finalMetadataResponse) {
       throw new GoogleDriveDocumentError(
