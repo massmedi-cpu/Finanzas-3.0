@@ -162,7 +162,7 @@ function isSyncStatus(value: unknown): value is SyncStatus {
     && (value.run.finishedAt === null || typeof value.run.finishedAt === "string")
     && nonnegativeCount(value.run.rowsSeen)
     && nonnegativeCount(value.run.rowsFailed)
-    && (value.run.status !== "success" || hasCompletedSourceSyncEvidence(value.run))
+    && (value.run.status !== "success" || hasCompletedSourceSyncEvidence(value.run as NonNullable<SyncStatus["run"]>))
     && nonnegativeCount(value.run.rowsMissing)
     && nonnegativeCount(value.run.duplicatesDetected)
     && nonnegativeCount(value.run.warningsCount);
