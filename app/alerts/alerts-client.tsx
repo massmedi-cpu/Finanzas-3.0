@@ -109,8 +109,8 @@ type DocumentCount = {
 };
 
 type DocumentSummary = {
-  unassociated: number;
-  pendingReview: number;
+  unassociated: number | null;
+  pendingReview: number | null;
 };
 
 type AlertSnapshot = {
@@ -320,13 +320,15 @@ async function loadDocumentSummary(): Promise<DocumentSummary> {
   // El contrato document.list_filtered del gateway ya aplica scope=ordinary,
   // excluye archivados del filtro unassociated y calcula total ANTES de paginar.
   // No descargamos el listado entero para contar alertas.
-  const [unassociatedPage, pendingPage] = await Promise.all([
-    readJson<DocumentCount>("/api/documents?scope=ordinary&unassociated=true&limit=1&offset=0"),
-    readJson<DocumentCount>("/api/documents?scope=ordinary&status=pending_review&limit=1&offset=0"),
+  const [unassociatedPage, pendingPage] = await Promise.allSettled([
+    readJson<DocumentCount>("/api/documents?scope=ordinary&unassociated=true&limit=1&offset=0")
+      .then((value) => documentCount(value)),
+    readJson<DocumentCount>("/api/documents?scope=ordinary&status=pending_review&limit=1&offset=0")
+      .then((value) => documentCount(value)),
   ]);
   return {
-    unassociated: documentCount(unassociatedPage),
-    pendingReview: documentCount(pendingPage),
+    unassociated: unassociatedPage.status === "fulfilled" ? unassociatedPage.value : null,
+    pendingReview: pendingPage.status === "fulfilled" ? pendingPage.value : null,
   };
 }
 
@@ -362,10 +364,14 @@ export default function AlertsClient() {
     if (!dashboard) degradedReads.push("resumen financiero");
     if (!sync) degradedReads.push("sincronización");
     if (!uncategorized) degradedReads.push("movimientos sin categorizar");
-    if (!documents) degradedReads.push("documentos");
+    const hasDocumentEvidence = documents !== null
+      && (documents.unassociated !== null || documents.pendingReview !== null);
+    if (!documents || documents.unassociated === null || documents.pendingReview === null) {
+      degradedReads.push("documentos");
+    }
     if (!freshness) degradedReads.push("cobertura bancaria");
 
-    if (!dashboard && !sync && !uncategorized && !documents) {
+    if (!dashboard && !sync && !uncategorized && !hasDocumentEvidence) {
       setSnapshot(null);
       setError("No se han podido leer las señales de alertas. Tus datos no se han modificado.");
       setLoading(false);
