@@ -1110,7 +1110,7 @@ test("REC-OCR-170 · euro-labelled accounting parentheses preserve a negative cr
     const parsed = interpretDocumentOcrFinancially(input);
     expect(parsed.totalCents.value, printed).toBe(-123456);
     expect(parsed.totalCents.rawValue, printed).toContain("(");
-    expect(parsed.totalCents.trust, printed).toBe("reliable");
+    expect(parsed.totalCents.trust, printed).toBe("doubtful");
     expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
     expect(input.plainText).toBe(printed);
   }
@@ -1120,6 +1120,7 @@ test("REC-OCR-171 · accounting notation supports whole euros without corrupting
   for (const printed of ["TOTAL (50 €)", "TOTAL (€ 50)", "TOTAL (EUR 1 234)"]) {
     const parsed = interpretDocumentOcrFinancially(result([line("accounting", printed, 0.99)]));
     expect(parsed.totalCents.value, printed).toBe(printed.includes("234") ? -123400 : -5000);
+    expect(parsed.totalCents.trust, printed).toBe("doubtful");
   }
   const normal = interpretDocumentOcrFinancially(result([line("normal", "TOTAL 1.234,56 €", 0.99)]));
   expect(normal.totalCents.value).toBe(123456);
