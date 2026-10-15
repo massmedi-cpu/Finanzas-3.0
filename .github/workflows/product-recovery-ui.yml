@@ -112,6 +112,7 @@ jobs:
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
+          tests/e2e/google-service-account.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
           tests/e2e/document-ocr-json-byte-limit.spec.ts
