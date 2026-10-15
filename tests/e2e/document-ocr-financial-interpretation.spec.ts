@@ -973,3 +973,31 @@ test("REC-OCR-153 · a merged tax heading does not swallow the explicit IMPORTE 
   expect(parsed.totalCents.value).toBe(2800);
   expect(parsed.totalCents.rawValue).toBe("28,00");
 });
+
+
+test("REC-OCR-154 · split TOTAL (€) label and amount remain reviewable with both source lines", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("total-label", "TOTAL (€)", 0.99, 0.30),
+    line("total-money", "29,18 €", 0.94, 0.35),
+  ]));
+  expect(parsed.totalCents.value).toBe(2918);
+  expect(parsed.totalCents.trust).toBe("doubtful");
+  expect(parsed.totalCents.evidence.map((entry) => entry.lineId)).toEqual(["total-label", "total-money"]);
+  expect(parsed.totalCents.confidence).toBe(0.94);
+});
+
+test("REC-OCR-155 · split labelled totals accept EUR but never borrow an unrelated next line", () => {
+  for (const label of ["TOTAL EUR", "IMPORTE TOTAL (EUR)", "TOTAL A PAGAR (€)"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("label", label, 0.98, 0.4),
+      line("single-money", "26,20", 0.95, 0.45),
+    ]));
+    expect(parsed.totalCents.value, label).toBe(2620);
+    expect(parsed.totalCents.trust, label).toBe("doubtful");
+  }
+  const ambiguous = interpretDocumentOcrFinancially(result([
+    line("label", "TOTAL (€)", 0.99, 0.4),
+    line("amounts", "BASE 20,00 IVA 4,20", 0.98, 0.45),
+  ]));
+  expect(ambiguous.totalCents.value).toBeNull();
+});
