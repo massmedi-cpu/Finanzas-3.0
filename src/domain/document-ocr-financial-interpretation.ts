@@ -192,6 +192,11 @@ function isTaxTableFooter(lines: LocatedLine[], index: number) {
   const item = lines[index];
   const text = normalizeToken(item.line.text);
   if (!/^total\s+/.test(text) || exactFinancialAmountMatches(item.line.text).length !== 2) return false;
+  // PDF.js may collapse a tax-table subtotal and a separate PAYABLE TOTAL
+  // into one line. A mere two-money count must not suppress a clearly owned
+  // grand total just because the immediately preceding rows are VAT rates.
+  // Tax-only "TOTAL 25,37 3,81" remains excluded below.
+  if (/\b(?:total\s+a\s+pagar|importe\s+total(?:\s+factura)?|importe(?:\s+de\s+la)?\s+factura|total\s+(?:factura|final))\b/.test(text)) return false;
   for (let back = 1; back <= 6 && back <= index; back += 1) {
     const header = lines[index - back];
     if (header.pageNumber !== item.pageNumber) break;
