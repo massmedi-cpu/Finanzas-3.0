@@ -414,3 +414,31 @@ test("REC-OCR-106 · a genuine native total is retained even if the text lives i
   expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
   expect(pdfVisualOcrImprovesNative(native, words("FACTURA TOTAL 23,45 EUR"))).toBe(false);
 });
+
+
+test("REC-OCR-162 · selectable tax TOTAL alone cannot hide a scanned PDF grand total", () => {
+  for (const heading of ["TOTAL IVA 2,10", "TOTAL IMPUESTOS 2,10", "TOTAL DE IMPUESTOS 2,10", "TOTAL DESCUENTOS 4,20"]) {
+    const overlay = words(heading + ". " + boilerplate.slice(0, 116));
+    expect(pdfNativeTextNeedsVisualOcr(overlay), heading).toBe(true);
+  }
+});
+
+test("REC-OCR-163 · tax-only native total never beats visually recovered invoice payable", () => {
+  const visual = words("FACTURA FINAL. TOTAL A PAGAR 121,00 €");
+  for (const taxOnly of ["TOTAL IVA 21,00", "TOTAL IMPUESTOS 21,00", "TOTAL DESCUENTOS 4,20"]) {
+    const native = words(taxOnly + ". " + boilerplate.slice(0, 113));
+    expect(pdfVisualOcrImprovesNative(native, visual), taxOnly).toBe(true);
+  }
+});
+
+test("REC-OCR-164 · a genuine payable after a tax total remains selectable evidence", () => {
+  const native = words("TOTAL IVA 2,10 TOTAL A PAGAR 22,10 " + boilerplate.slice(0, 92));
+  expect(pdfNativeTextNeedsVisualOcr(native)).toBe(false);
+  expect(pdfVisualOcrImprovesNative(native, words("TOTAL 99,00"))).toBe(false);
+});
+
+test("REC-OCR-165 · long tax-only overlays also require raster inspection", () => {
+  const taxOverlay = words("TOTAL IMPUESTOS 21,00 " + boilerplate.repeat(3));
+  expect(taxOverlay.length).toBeGreaterThan(5);
+  expect(pdfNativeTextNeedsVisualOcr(taxOverlay)).toBe(true);
+});
