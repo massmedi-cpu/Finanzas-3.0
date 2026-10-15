@@ -939,3 +939,37 @@ test("REC-OCR-131 · la revisión visible nunca recomienda confirmar cuota contr
   expect(review.financialFields.find((field) => field.key === "taxBaseCents")?.trust).toBe("doubtful");
   expect(review.financialFields.find((field) => field.key === "taxesCents")?.trust).toBe("doubtful");
 });
+
+
+test("REC-OCR-150 · a merged TOTAL IVA row preserves the later TOTAL A PAGAR amount", () => {
+  const original = result([line("summary", "TOTAL IVA 2,10 TOTAL A PAGAR 22,10", 0.99)]);
+  const parsed = interpretDocumentOcrFinancially(original);
+  expect(parsed.totalCents.value).toBe(2210);
+  expect(parsed.totalCents.trust).toBe("reliable");
+  expect(parsed.totalCents.rawValue).toBe("22,10");
+  expect(original.plainText).toBe("TOTAL IVA 2,10 TOTAL A PAGAR 22,10");
+});
+
+test("REC-OCR-151 · an excluded discounts heading cannot hide a later ordinary TOTAL", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("summary", "TOTAL DESCUENTOS 3,50 TOTAL 21,50", 0.99),
+  ]));
+  expect(parsed.totalCents.value).toBe(2150);
+  expect(parsed.totalCents.rawValue).toBe("21,50");
+});
+
+test("REC-OCR-152 · only a tax/discount summary never becomes an invoice grand total", () => {
+  for (const text of ["TOTAL IVA 2,10", "TOTAL DESCUENTOS 3,50", "TOTAL IMPUESTOS 2,10"]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("tax-only", text, 0.99)]));
+    expect(parsed.totalCents.value, text).toBeNull();
+    expect(parsed.totalCents.trust, text).toBe("not_detected");
+  }
+});
+
+test("REC-OCR-153 · a merged tax heading does not swallow the explicit IMPORTE TOTAL FACTURA", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("summary", "TOTAL IMPUESTOS 4,80 IMPORTE TOTAL FACTURA 28,00", 0.99),
+  ]));
+  expect(parsed.totalCents.value).toBe(2800);
+  expect(parsed.totalCents.rawValue).toBe("28,00");
+});
