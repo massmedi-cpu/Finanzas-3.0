@@ -12,6 +12,25 @@ function madridDatePlus(days: number) {
   return shifted.toISOString().slice(0, 10);
 }
 
+// The real API always returns its version, exact scope, requested sources and
+// every data key. Keeping this fixture faithful catches scope/coverage regressions.
+function dashboardFixture(
+  sources: Record<string, unknown>,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    contractVersion: 1,
+    scope: "all",
+    asOfDate: madridDatePlus(0),
+    dataThroughDate: null,
+    generatedAt: new Date().toISOString(),
+    requestedSources: ["financial", "transactions", "monthly", "budgets", "forecast"],
+    failedSources: [],
+    data: { financial: null, transactions: null, monthly: null, budgets: null, forecast: null, ...sources },
+    ...overrides,
+  };
+}
+
 async function mockAlerts(page: Page) {
   const upcomingPaymentDate = madridDatePlus(2);
 
@@ -19,9 +38,7 @@ async function mockAlerts(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        failedSources: [],
-        data: {
+      body: JSON.stringify(dashboardFixture({
           financial: {
             period: {
               operatingNetCents: -20_00,
@@ -40,8 +57,7 @@ async function mockAlerts(page: Page) {
               { date: upcomingPaymentDate, concept: "Recibo", amountCents: -35_00, status: "planned", affectsProjection: true },
             ],
           },
-        },
-      }),
+      })),
     });
   });
   await page.route("**/api/source/google/sync", async (route) => {
@@ -126,7 +142,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
   await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ failedSources: [], data: { financial: null, budgets: null, forecast: null } }),
+    body: JSON.stringify(dashboardFixture({ financial: null, budgets: null, forecast: null })),
   }));
   await page.route("**/api/source/google/sync", (route) => route.fulfill({
     status: 200,
@@ -203,4 +219,52 @@ test("REC-ALT-003 · sync 200 corrupta no se clasifica como fuente correcta ni d
   await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("Lectura parcial: no se pudo consultar sincronización");
   await expect(page.getByText("3 movimientos sin categorizar", { exact: true })).toBeVisible();
   await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
+});
+
+test("REC-ALT-004 · Alertas nunca muestra cifras de otra selección aunque la API responda 200", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      financial: {
+        period: { operatingNetCents: -200_00, quality: { suspectedDuplicateRows: 9, signMismatchRows: 3 } },
+      },
+    }, { scope: "primary" })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar resumen financiero");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("9 posibles movimientos duplicados")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-005 · una fuente declarada fallida no puede aportar alertas monetarias", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      financial: {
+        period: { operatingNetCents: -100_00, quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 } },
+      },
+    }, { failedSources: ["financial"] })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar resumen financiero");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-006 · metadatos de cobertura incompletos no se confunden con ausencia de incidencias", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      failedSources: [],
+      data: { financial: null, transactions: null, monthly: null, budgets: null, forecast: null },
+    }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("Lectura parcial: no se pudo consultar resumen financiero");
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+  await expect(page.getByText("No hay alertas activas con las señales disponibles.")).toHaveCount(0);
 });
