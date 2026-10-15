@@ -26,6 +26,8 @@ type DashboardEnvelope = {
         dateFrom: string;
         dateTo: string;
         operatingNetCents: number;
+        incomeCents: number;
+        expenseCents: number;
         quality: {
           suspectedDuplicateRows: number;
           signMismatchRows: number;
@@ -34,8 +36,18 @@ type DashboardEnvelope = {
     };
     budgets: null | {
       month: string;
+      total: {
+        effectiveAmountCents: number;
+        actualExpenseCents: number;
+        remainingCents: number;
+        progressBps: number | null;
+        status: "empty" | "unfunded" | "on_track" | "over";
+      };
       categories: Array<{
         categoryName: string | null;
+        effectiveAmountCents: number;
+        actualExpenseCents: number;
+        remainingCents: number;
         progressBps: number | null;
         status: "empty" | "unfunded" | "on_track" | "over";
       }>;
@@ -43,6 +55,10 @@ type DashboardEnvelope = {
     forecast: null | {
       period: { dateFrom: string; dateTo: string; accountId: null };
       summary: {
+        openingBalanceCents: number;
+        projectedIncomeCents: number;
+        projectedExpenseCents: number;
+        projectedNetCents: number;
         projectedClosingBalanceCents: number;
         plannedItems: number;
       };
@@ -142,6 +158,21 @@ function addDays(date: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function isBudgetAmountRow(value: unknown): boolean {
+  if (!isObject(value) || !nonnegativeCount(value.effectiveAmountCents)
+    || !nonnegativeCount(value.actualExpenseCents)
+    || !moneyCents(value.remainingCents)
+    || (value.progressBps !== null && !nonnegativeCount(value.progressBps))
+    || !["empty", "unfunded", "on_track", "over"].includes(String(value.status))) return false;
+  const effective = value.effectiveAmountCents as number;
+  const actual = value.actualExpenseCents as number;
+  const remaining = value.remainingCents as number;
+  return Number.isSafeInteger(effective - actual)
+    && remaining === effective - actual
+    && (value.status !== "over" || remaining < 0)
+    && (value.status !== "on_track" || remaining >= 0);
+}
+
 function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
   // A 200 response can still contain another dashboard scope, forged money
   // from a failed source, or a partial list of sources. Reject it before
@@ -155,18 +186,25 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
       || data.financial.period.dateFrom !== `${month}-01`
       || data.financial.period.dateTo !== day
       || !moneyCents(data.financial.period.operatingNetCents)
+      || !nonnegativeCount(data.financial.period.incomeCents)
+      || !nonnegativeCount(data.financial.period.expenseCents)
+      || !Number.isSafeInteger(
+        (data.financial.period.incomeCents as number) - (data.financial.period.expenseCents as number),
+      )
+      || data.financial.period.operatingNetCents !==
+        (data.financial.period.incomeCents as number) - (data.financial.period.expenseCents as number)
       || !isObject(data.financial.period.quality)
       || !nonnegativeCount(data.financial.period.quality.suspectedDuplicateRows)
       || !nonnegativeCount(data.financial.period.quality.signMismatchRows)) return false;
   }
   if (data.budgets !== null) {
     if (!isObject(data.budgets) || data.budgets.month !== month
+      || !isBudgetAmountRow(data.budgets.total)
       || !Array.isArray(data.budgets.categories)
       || !data.budgets.categories.every((item: unknown) =>
         isObject(item)
         && (item.categoryName === null || typeof item.categoryName === "string")
-        && (item.progressBps === null || moneyCents(item.progressBps))
-        && ["empty", "unfunded", "on_track", "over"].includes(String(item.status)))) return false;
+        && isBudgetAmountRow(item))) return false;
   }
   if (data.forecast !== null) {
     if (!isObject(data.forecast) || !isObject(data.forecast.summary)
@@ -174,7 +212,25 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
       || data.forecast.period.dateFrom !== day
       || data.forecast.period.dateTo !== addDays(day, 30)
       || data.forecast.period.accountId !== null
+      || !moneyCents(data.forecast.summary.openingBalanceCents)
+      || !nonnegativeCount(data.forecast.summary.projectedIncomeCents)
+      || !nonnegativeCount(data.forecast.summary.projectedExpenseCents)
+      || !moneyCents(data.forecast.summary.projectedNetCents)
       || !moneyCents(data.forecast.summary.projectedClosingBalanceCents)
+      || !Number.isSafeInteger(
+        (data.forecast.summary.projectedIncomeCents as number)
+        - (data.forecast.summary.projectedExpenseCents as number),
+      )
+      || data.forecast.summary.projectedNetCents !==
+        (data.forecast.summary.projectedIncomeCents as number)
+        - (data.forecast.summary.projectedExpenseCents as number)
+      || !Number.isSafeInteger(
+        (data.forecast.summary.openingBalanceCents as number)
+        + (data.forecast.summary.projectedNetCents as number),
+      )
+      || data.forecast.summary.projectedClosingBalanceCents !==
+        (data.forecast.summary.openingBalanceCents as number)
+        + (data.forecast.summary.projectedNetCents as number)
       || !nonnegativeCount(data.forecast.summary.plannedItems)
       || !Array.isArray(data.forecast.items)
       || !data.forecast.items.every((item: unknown) =>
