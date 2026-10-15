@@ -14,19 +14,44 @@ function madridDatePlus(days: number) {
 
 // The real API always returns its version, exact scope, requested sources and
 // every data key. Keeping this fixture faithful catches scope/coverage regressions.
+const documentPrinciples = {
+  bankSource: "read_only", ocrEnabled: true,
+  getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true,
+};
+
 function dashboardFixture(
   sources: Record<string, unknown>,
   overrides: Record<string, unknown> = {},
 ) {
+  const day = madridDatePlus(0);
+  const data: Record<string, unknown> = {
+    financial: null, transactions: null, monthly: null, budgets: null, forecast: null, ...sources,
+  };
+  if (data.financial && typeof data.financial === "object") {
+    const financial = data.financial as Record<string, unknown>;
+    data.financial = {
+      ...financial,
+      period: { dateFrom: `${day.slice(0, 7)}-01`, dateTo: day, ...(financial.period as object) },
+    };
+  }
+  if (data.budgets && typeof data.budgets === "object") {
+    data.budgets = { month: day.slice(0, 7), ...(data.budgets as object) };
+  }
+  if (data.forecast && typeof data.forecast === "object") {
+    data.forecast = {
+      period: { dateFrom: day, dateTo: madridDatePlus(30), accountId: null },
+      ...(data.forecast as object),
+    };
+  }
   return {
     contractVersion: 1,
     scope: "all",
-    asOfDate: madridDatePlus(0),
+    asOfDate: day,
     dataThroughDate: null,
     generatedAt: new Date().toISOString(),
     requestedSources: ["financial", "transactions", "monthly", "budgets", "forecast"],
     failedSources: [],
-    data: { financial: null, transactions: null, monthly: null, budgets: null, forecast: null, ...sources },
+    data,
     ...overrides,
   };
 }
@@ -111,7 +136,7 @@ async function mockAlerts(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ total: 1, limit: 1, offset: 0, items: [] }),
+      body: JSON.stringify({ contractVersion: 3, total: 1, limit: 1, offset: 0, items: [], principles: documentPrinciples }),
     });
   });
 }
@@ -191,7 +216,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
     });
     return route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify({ total: url.searchParams.get("unassociated") === "true" ? 50_000 : 125, limit: 1, offset: 0, items: [] }),
+      body: JSON.stringify({ contractVersion: 3, total: url.searchParams.get("unassociated") === "true" ? 50_000 : 125, limit: 1, offset: 0, items: [], principles: documentPrinciples }),
     });
   });
   await page.goto("/alerts");
@@ -354,4 +379,50 @@ test("REC-ALT-012 · fuente no disponible, sin falsas cifras pero con avisos fin
   await expect(page.getByText("2 posibles movimientos duplicados")).toBeVisible();
   await expect(page.getByText("1 presupuesto cerca del límite")).toHaveCount(0);
   await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+});
+
+test("REC-ALT-013 · snapshot de otro mes no genera alertas con cifras actuales", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      financial: {
+        period: {
+          dateFrom: "2026-09-01", dateTo: "2026-09-30", operatingNetCents: -100000,
+          quality: { suspectedDuplicateRows: 8, signMismatchRows: 0 },
+        },
+      },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("8 posibles movimientos duplicados")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-014 · presupuesto de otro mes no puede declarar límites alcanzados", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      budgets: { month: "2026-09", categories: [{ categoryName: "Ocio", progressBps: 10500, status: "over" }] },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("1 presupuesto superado")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-015 · documentos legados 200 no acreditan los filtros Pruebas y sin asociar", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/documents?scope=ordinary&*", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ contractVersion: 2, total: 9999, limit: 1, offset: 0, items: [], principles: documentPrinciples }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
+  await expect(page.getByText(/9\.999 documentos sin asociar/)).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
 });
