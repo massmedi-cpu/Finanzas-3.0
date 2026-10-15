@@ -504,9 +504,9 @@
 .skeletonGrid span { min-height: 10rem; }
 @keyframes skeletonShift { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
-/* At desktop widths the global navigation reduces available content width.
-   Stack the analysis title and filters before controls become cramped. */
-@media (max-width: 96rem) {
+/* Global navigation reduces the content width at the canonical wide breakpoint.
+   Keep analysis title and filters stacked through the governed 1440px transition. */
+@media (max-width: 90rem) {
   .header { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 }
 
