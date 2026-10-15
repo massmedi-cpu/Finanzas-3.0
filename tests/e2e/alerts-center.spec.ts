@@ -29,18 +29,55 @@ function dashboardFixture(
   };
   if (data.financial && typeof data.financial === "object") {
     const financial = data.financial as Record<string, unknown>;
+    const period = financial.period as Record<string, unknown>;
+    const net = period.operatingNetCents as number;
     data.financial = {
       ...financial,
-      period: { dateFrom: `${day.slice(0, 7)}-01`, dateTo: day, ...(financial.period as object) },
+      period: {
+        dateFrom: `${day.slice(0, 7)}-01`, dateTo: day,
+        incomeCents: Math.max(0, net), expenseCents: Math.max(0, -net),
+        ...period,
+      },
     };
   }
   if (data.budgets && typeof data.budgets === "object") {
-    data.budgets = { month: day.slice(0, 7), ...(data.budgets as object) };
+    const budgets = data.budgets as Record<string, unknown>;
+    const categories = (budgets.categories as Record<string, unknown>[]).map((item) => {
+      const effective = 100_000;
+      const spent = Math.round((item.progressBps as number) * 10);
+      return {
+        effectiveAmountCents: effective,
+        actualExpenseCents: spent,
+        remainingCents: effective - spent,
+        ...item,
+      };
+    });
+    data.budgets = {
+      month: day.slice(0, 7),
+      total: {
+        effectiveAmountCents: 500_000, actualExpenseCents: 0,
+        remainingCents: 500_000, progressBps: 0, status: "on_track",
+      },
+      ...budgets, categories,
+    };
   }
   if (data.forecast && typeof data.forecast === "object") {
+    const forecast = data.forecast as Record<string, unknown>;
+    const summary = forecast.summary as Record<string, unknown>;
+    const items = forecast.items as Array<Record<string, unknown>>;
+    const planned = items.filter((item) => item.status === "planned" && item.affectsProjection);
+    const income = planned.reduce((sum, item) => sum + Math.max(0, item.amountCents as number), 0);
+    const expense = planned.reduce((sum, item) => sum - Math.min(0, item.amountCents as number), 0);
     data.forecast = {
+      ...forecast,
       period: { dateFrom: day, dateTo: madridDatePlus(30), accountId: null },
-      ...(data.forecast as object),
+      summary: {
+        openingBalanceCents: (summary.projectedClosingBalanceCents as number) - income + expense,
+        projectedIncomeCents: income,
+        projectedExpenseCents: expense,
+        projectedNetCents: income - expense,
+        ...summary,
+      },
     };
   }
   return {
