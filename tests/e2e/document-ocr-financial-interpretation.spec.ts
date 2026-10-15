@@ -1001,3 +1001,62 @@ test("REC-OCR-155 · split labelled totals accept EUR but never borrow an unrela
   ]));
   expect(ambiguous.totalCents.value).toBeNull();
 });
+
+
+test("REC-OCR-156 · grouped thousands separated by ordinary spaces preserve the whole invoice value", () => {
+  const raw = result([line("total", "TOTAL A PAGAR 1 234,56 €", 0.98)]);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.totalCents.value).toBe(123456);
+  expect(parsed.totalCents.rawValue).toBe("1 234,56");
+  expect(parsed.totalCents.trust).toBe("reliable");
+  expect(raw.plainText).toBe("TOTAL A PAGAR 1 234,56 €");
+});
+
+test("REC-OCR-157 · PDF nonbreaking and narrow no-break spaces retain multi-group amount evidence", () => {
+  for (const separator of ["\u00a0", "\u202f"]) {
+    const printed = ["1", "234", "567,89"].join(separator);
+    const parsed = interpretDocumentOcrFinancially(result([line("total", "IMPORTE TOTAL: " + printed, 0.99)]));
+    expect(parsed.totalCents.value, "group separator " + separator.codePointAt(0)?.toString(16)).toBe(123456789);
+    expect(parsed.totalCents.rawValue).toBe(printed);
+  }
+});
+
+test("REC-OCR-158 · a spaced minus sign must not turn a refund into an expense", () => {
+  for (const raw of ["- 1 234,56", "− 1\u202f234,56", "– 1\u00a0234,56"]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("refund", "TOTAL " + raw, 0.99)]));
+    expect(parsed.totalCents.value, raw).toBe(-123456);
+    expect(parsed.totalCents.rawValue, raw).toBe(raw);
+    expect(parsed.totalCents.trust, raw).toBe("reliable");
+  }
+});
+
+test("REC-OCR-159 · euro-prefixed whole amounts and spaced thousands stay exact", () => {
+  for (const printed of ["TOTAL EUR 1 234", "TOTAL € 1\u202f234", "TOTAL 1\u00a0234 €"]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("total", printed, 0.99)]));
+    expect(parsed.totalCents.value, printed).toBe(123400);
+    expect(parsed.totalCents.trust, printed).toBe("reliable");
+  }
+});
+
+test("REC-OCR-160 · alternate grouped decimal has two cents and incomplete numeric fractions stay rejected", () => {
+  const parsed = interpretDocumentOcrFinancially(result([line("total", "TOTAL 1,234.56", 0.99)]));
+  expect(parsed.totalCents.value).toBe(123456);
+  expect(parsed.totalCents.rawValue).toBe("1,234.56");
+  for (const printed of ["TOTAL 1,234 €", "TOTAL 1 234,567 €", "TOTAL 21,00%"]) {
+    const untrusted = interpretDocumentOcrFinancially(result([line("invalid", printed, 0.99)]));
+    expect(untrusted.totalCents.value, printed).toBeNull();
+  }
+});
+
+test("REC-OCR-161 · grouped base plus VAT reconciles against a grouped final amount", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("base", "Base imponible 1 000,00", 0.99, 0.10),
+    line("tax", "IVA 210,00", 0.99, 0.20),
+    line("total", "TOTAL A PAGAR 1\u202f210,00 €", 0.99, 0.30),
+  ]));
+  expect(parsed.taxBaseCents.value).toBe(100000);
+  expect(parsed.taxesCents.value).toBe(21000);
+  expect(parsed.totalCents.value).toBe(121000);
+  expect(parsed.warnings).not.toContain("base_plus_tax_mismatch");
+  expect(parsed.totalCents.trust).toBe("reliable");
+});
