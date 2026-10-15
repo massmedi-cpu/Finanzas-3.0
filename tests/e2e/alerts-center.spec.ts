@@ -173,7 +173,7 @@ async function mockAlerts(page: Page) {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ contractVersion: 3, total: 1, limit: 1, offset: 0, items: [], principles: documentPrinciples }),
+      body: JSON.stringify({ contractVersion: 3, total: 1, limit: 1, offset: 0, items: [{ id: "verified-document" }], principles: documentPrinciples }),
     });
   });
 }
@@ -253,7 +253,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
     });
     return route.fulfill({
       status: 200, contentType: "application/json",
-      body: JSON.stringify({ contractVersion: 3, total: url.searchParams.get("unassociated") === "true" ? 50_000 : 125, limit: 1, offset: 0, items: [], principles: documentPrinciples }),
+      body: JSON.stringify({ contractVersion: 3, total: url.searchParams.get("unassociated") === "true" ? 50_000 : 125, limit: 1, offset: 0, items: [{ id: "verified-document" }], principles: documentPrinciples }),
     });
   });
   await page.goto("/alerts");
@@ -568,7 +568,7 @@ test("REC-ALT-022 · un recuento documental fallido no borra el otro que sí est
     return route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify({
-        contractVersion: 3, total: 7, limit: 1, offset: 0, items: [],
+        contractVersion: 3, total: 7, limit: 1, offset: 0, items: [{ id: "verified-document" }],
         principles: documentPrinciples,
       }),
     });
@@ -597,5 +597,54 @@ test("REC-ALT-023 · resumen de ayer HTTP 200 no puede presentarse como el mes a
   await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
   await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
   await expect(page.getByText("9 posibles movimientos duplicados")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-024 · sincronización parcial se muestra como aviso y detalla los movimientos fallidos", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "partial", finishedAt: new Date().toISOString(),
+      rowsSeen: 75, rowsFailed: 5, rowsMissing: 0,
+      duplicatesDetected: 0, warningsCount: 1,
+    } }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByText("La última sincronización tiene avisos")).toBeVisible();
+  await expect(page.getByText(/La actualización quedó incompleta/)).toBeVisible();
+  await expect(page.getByText(/No se pudieron importar 5 movimientos/)).toBeVisible();
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toHaveCount(0);
+});
+
+test("REC-ALT-025 · cobertura bancaria válida pero incompleta se anuncia sin falso cero", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      ...healthyFreshness(), available: false,
+      earliestMovementDate: null, latestMovementDate: null, sync: null,
+    }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.getByRole("status")).toContainText("La cobertura bancaria del mes es insuficiente");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("1 presupuesto cerca del límite")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-026 · una lista 200 truncada no inventa documentos pendientes", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/documents?scope=ordinary&*", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      contractVersion: 3, total: 140, limit: 1, offset: 0,
+      items: [], principles: documentPrinciples,
+    }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
+  await expect(page.getByText("140 documentos sin asociar")).toHaveCount(0);
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
 });

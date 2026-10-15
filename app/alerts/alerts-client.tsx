@@ -116,6 +116,7 @@ type DocumentSummary = {
 type AlertSnapshot = {
   input: GlobalAlertInput;
   degradedReads: string[];
+  coverageNotice: string | null;
   generatedAt: string;
 };
 
@@ -257,9 +258,17 @@ function isTransactionCount(value: unknown): value is TransactionCount {
   return isObject(value) && nonnegativeCount(value.totalCount);
 }
 
-async function readJson<T>(url: string, timeoutMs = 8_000, verify?: (value: unknown) => value is T): Promise<T> {
+async function readJson<T>(
+  url: string,
+  timeoutMs = 8_000,
+  verify?: (value: unknown) => value is T,
+  signal?: AbortSignal,
+): Promise<T> {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  const cancel = () => controller.abort();
+  if (signal?.aborted) cancel();
+  else signal?.addEventListener("abort", cancel, { once: true });
+  const timer = window.setTimeout(cancel, timeoutMs);
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!response.ok) throw new Error(`request_failed_${response.status}`);
@@ -268,13 +277,17 @@ async function readJson<T>(url: string, timeoutMs = 8_000, verify?: (value: unkn
     return payload as T;
   } finally {
     window.clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
 }
 
 function syncDetail(run: SyncStatus["run"]) {
-  if (!run || run.status !== "success") return null;
+  if (!run || !["success", "partial"].includes(run.status)) return null;
   const incidents = normalizeSourceSyncIncidents(run);
   const parts: string[] = [];
+  if (run.status === "partial") {
+    parts.push("La actualización quedó incompleta.");
+  }
   if (incidents.failedRows > 0) {
     parts.push(incidents.failedRows === 1
       ? "No se pudo importar 1 movimiento en la última sincronización."
@@ -305,7 +318,8 @@ function documentCount(value: unknown): number {
   if (!isObject(value) || value.contractVersion !== 3
     || !nonnegativeCount(value.total)
     || value.limit !== 1 || value.offset !== 0
-    || !Array.isArray(value.items) || value.items.length > 1
+    || !Array.isArray(value.items)
+    || value.items.length !== (value.total === 0 ? 0 : 1)
     || !isObject(value.principles)
     || value.principles.bankSource !== "read_only"
     || value.principles.getHasSideEffects !== false
@@ -316,14 +330,14 @@ function documentCount(value: unknown): number {
   return value.total as number;
 }
 
-async function loadDocumentSummary(): Promise<DocumentSummary> {
+async function loadDocumentSummary(signal: AbortSignal): Promise<DocumentSummary> {
   // El contrato document.list_filtered del gateway ya aplica scope=ordinary,
   // excluye archivados del filtro unassociated y calcula total ANTES de paginar.
   // No descargamos el listado entero para contar alertas.
   const [unassociatedPage, pendingPage] = await Promise.allSettled([
-    readJson<DocumentCount>("/api/documents?scope=ordinary&unassociated=true&limit=1&offset=0")
+    readJson<DocumentCount>("/api/documents?scope=ordinary&unassociated=true&limit=1&offset=0", 8_000, undefined, signal)
       .then((value) => documentCount(value)),
-    readJson<DocumentCount>("/api/documents?scope=ordinary&status=pending_review&limit=1&offset=0")
+    readJson<DocumentCount>("/api/documents?scope=ordinary&status=pending_review&limit=1&offset=0", 8_000, undefined, signal)
       .then((value) => documentCount(value)),
   ]);
   return {
@@ -337,18 +351,24 @@ export default function AlertsClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const loadSequence = useRef(0);
+  const loadAbort = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    // Abort obsolete requests instead of keeping six competing reads alive
+    // after an explicit refresh or React StrictMode remount.
+    loadAbort.current?.abort();
+    const controller = new AbortController();
+    loadAbort.current = controller;
     const sequence = ++loadSequence.current;
     setLoading(true);
     setError(null);
     const today = madridToday();
     const [dashboardResult, syncResult, uncategorizedResult, documentsResult, freshnessResult] = await Promise.allSettled([
-      readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000, isDashboardEnvelope),
-      readJson<SyncStatus>("/api/source/google/sync", 6_000, isSyncStatus),
-      readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000, isTransactionCount),
-      loadDocumentSummary(),
-      readJson<unknown>("/api/analysis/source-freshness", 8_000),
+      readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000, isDashboardEnvelope, controller.signal),
+      readJson<SyncStatus>("/api/source/google/sync", 6_000, isSyncStatus, controller.signal),
+      readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000, isTransactionCount, controller.signal),
+      loadDocumentSummary(controller.signal),
+      readJson<unknown>("/api/analysis/source-freshness", 8_000, undefined, controller.signal),
     ]);
 
     // StrictMode, navigation and refresh must never publish an older result.
@@ -386,22 +406,25 @@ export default function AlertsClient() {
       ? "unknown"
       : syncRun.status === "failed"
         ? "failed"
-        : syncRun.status === "success" && hasSourceSyncIncidents(syncRun)
+        : syncRun.status === "partial"
+          ? "warning"
+          : syncRun.status === "success" && hasSourceSyncIncidents(syncRun)
           ? "warning"
           : syncRun.status === "success"
             ? "ok"
             : "unknown";
 
+    const bankCoverage = resolveHomeBankCoverage({
+      dateFrom: `${today.slice(0, 7)}-01`,
+      dateTo: today,
+      freshness,
+      activityLatestDate: dashboard?.dataThroughDate ?? null,
+    });
     setSnapshot({
       input: {
         today,
         syncState,
-        bankCoverageVerified: resolveHomeBankCoverage({
-          dateFrom: `${today.slice(0, 7)}-01`,
-          dateTo: today,
-          freshness,
-          activityLatestDate: dashboard?.dataThroughDate ?? null,
-        }).state === "covered",
+        bankCoverageVerified: bankCoverage.state === "covered",
         syncDetail: syncDetail(syncRun),
         failedSourceCount: dashboard?.failedSources.length ?? 0,
         quality: dashboard?.data.financial?.period.quality ?? null,
@@ -421,6 +444,9 @@ export default function AlertsClient() {
         pendingDocumentReviewCount: documents?.pendingReview ?? null,
       },
       degradedReads,
+      coverageNotice: freshness && bankCoverage.state !== "covered"
+        ? "La cobertura bancaria del mes es insuficiente para comprobar los presupuestos, el resultado mensual y el saldo final previsto. Las demás señales siguen disponibles."
+        : null,
       generatedAt: new Date().toISOString(),
     });
     setLoading(false);
@@ -428,7 +454,7 @@ export default function AlertsClient() {
 
   useEffect(() => {
     void load();
-    return () => { loadSequence.current += 1; };
+    return () => { loadSequence.current += 1; loadAbort.current?.abort(); };
   }, [load]);
 
   const alerts = useMemo(() => snapshot ? deriveGlobalAlerts(snapshot.input) : [], [snapshot]);
@@ -453,6 +479,9 @@ export default function AlertsClient() {
           Lectura parcial: no se pudo consultar {snapshot.degradedReads.join(", ")}. Se muestran únicamente señales verificadas con los datos disponibles.
         </div>
       ) : null}
+      {snapshot?.coverageNotice ? (
+        <div className={styles.partialNotice} role="status">{snapshot.coverageNotice}</div>
+      ) : null}
 
       <section className={styles.summaryGrid} aria-label="Resumen de alertas">
         <article className={`${styles.summaryCard} ${styles.dangerSummary}`}><span>Críticas</span><strong>{snapshot ? summary.danger : "—"}</strong><small>Requieren atención prioritaria</small></article>
@@ -469,7 +498,9 @@ export default function AlertsClient() {
         {loading && !snapshot ? <div className={styles.loading} role="status">Leyendo señales persistidas…</div> : null}
         {!loading && snapshot && alerts.length === 0 ? (
           <div className={styles.emptyState}>
-            <strong>No hay alertas activas con las señales disponibles.</strong>
+            <strong>{snapshot.input.bankCoverageVerified
+              ? "No hay alertas activas con las señales disponibles."
+              : "No hay alertas verificables con la cobertura actual."}</strong>
             <p>La pantalla volverá a evaluarlas cuando actualices los datos o cambien tus movimientos, presupuestos, previsiones o documentos.</p>
           </div>
         ) : null}
