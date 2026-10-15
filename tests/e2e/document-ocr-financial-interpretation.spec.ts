@@ -1164,3 +1164,38 @@ test("REC-OCR-175 · a later payable total wins over parenthesized VAT without l
   expect(parsed.taxesCents.value).toBe(210);
   expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
 });
+
+test("REC-OCR-176 · electricity duty with a long decimal rate is not a false VAT contradiction", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("duty", "Impuesto electricidad: ( 31,43 Eur X 5,1126963 %) 1,61 €", 0.99, 0.30),
+    line("vat", "IVA normal: 21 % s/ 33,89 7,12 €", 0.99, 0.40),
+    line("payable", "TOTAL A PAGAR 41,01 €", 0.99, 0.80),
+  ]));
+  expect(parsed.warnings).not.toContain("tax_rate_arithmetic_mismatch");
+  expect(parsed.taxLines.some((row) => row.ratePercent === 63)).toBe(false);
+  expect(parsed.taxLines.some((row) => row.ratePercent === 21 && row.baseCents === 3389 && row.taxCents === 712)).toBe(true);
+  expect(parsed.taxesCents.value).toBe(712);
+  expect(parsed.totalCents.value).toBe(4101);
+  expect(parsed.totalCents.trust).toBe("reliable");
+});
+
+test("REC-OCR-177 · a retail VAT table keeps its rate, base and quota columns separate", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("shipping", "BASE IMPONIBLE GASTOS DE ENVÍO 0,00 EUR", 0.99, 0.20),
+    line("table-head", "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL", 0.99, 0.35),
+    line("vat-low", "IVA 4,00 10,00 0,40 0,00 0,00 10,40", 0.99, 0.40),
+    line("vat-high", "IVA 21,00 20,00 4,20 0,00 0,00 24,20", 0.99, 0.45),
+    line("payable", "IMPORTE TOTAL 34,60 €", 0.99, 0.85),
+  ]));
+  expect(parsed.taxLines.filter((row) => row.ratePercent !== null)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ ratePercent: 4, baseCents: 1000, taxCents: 40, trust: "doubtful" }),
+    expect.objectContaining({ ratePercent: 21, baseCents: 2000, taxCents: 420, trust: "doubtful" }),
+  ]));
+  expect(parsed.taxBaseCents.value).toBe(3000);
+  expect(parsed.taxesCents.value).toBe(460);
+  expect(parsed.taxBaseCents.trust).toBe("doubtful");
+  expect(parsed.warnings).not.toContain("base_plus_tax_mismatch");
+  expect(parsed.warnings).not.toContain("tax_rate_arithmetic_mismatch");
+  expect(parsed.totalCents.value).toBe(3460);
+  expect(parsed.totalCents.trust).toBe("reliable");
+});

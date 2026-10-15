@@ -58,6 +58,8 @@ type LocatedLine = { pageNumber: number; line: OcrLine };
 const RELIABLE_CONFIDENCE = 0.82;
 // Spanish invoices use IVA, I.V.A., IGIC and I.G.I.C. interchangeably.
 const TAX_ACRONYM = /\b(?:i\.?v\.?a|i\.?g\.?i\.?c)\b\.?/;
+// A suffix of a longer excise-duty rate (5,1126963 %) is never a VAT rate.
+const COMPLETE_TAX_RATE = /(?<![\d,.])(\d{1,2}(?:[,.]\d{1,2})?)\s*%/;
 
 function normalizeToken(value: string) {
   return value
@@ -243,13 +245,47 @@ function isTaxTableFooter(lines: LocatedLine[], index: number) {
   return false;
 }
 
+function isRetailVatTableHeader(text: string) {
+  return /^tipo\s*%\s*impuesto\s+base\s+cuota\b/.test(normalizeToken(text));
+}
+
+function retailVatCells(text: string) {
+  const row = text.trim().match(/^i\.?v\.?a\.?\s+(.+)$/i);
+  if (!row) return null;
+  const cells = row[1].trim().split(/\s+/);
+  // Four cells: rate, base, quota, row total. Six add recargo rate and
+  // quota before the row total. Reject partial/misaligned OCR tokens.
+  if (cells.length !== 4 && cells.length !== 6) return null;
+  if (!cells.every((cell) => exactFinancialAmountMatches(cell).some((match) => match[0] === cell))) return null;
+  const values = cells.map(parseMoneyCents);
+  if (values.some((value) => value === null)) return null;
+  const ratePercent = Number(cells[0].replace(",", "."));
+  if (!Number.isFinite(ratePercent) || ratePercent < 0 || ratePercent > 100) return null;
+  return { ratePercent, baseCents: values[1]!, taxCents: values[2]! };
+}
+
+function retailVatHeaderForRow(lines: LocatedLine[], index: number): LocatedLine | null {
+  const item = lines[index];
+  if (!retailVatCells(item.line.text)) return null;
+  for (let back = 1; back <= 8 && index - back >= 0; back += 1) {
+    const prior = lines[index - back];
+    if (prior.pageNumber !== item.pageNumber) break;
+    if (isRetailVatTableHeader(prior.line.text)) return prior;
+    if (!retailVatCells(prior.line.text)) break;
+  }
+  return null;
+}
+
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean; skipExplanatoryParentheses?: boolean } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean; skipExplanatoryParentheses?: boolean; skipShippingBase?: boolean; skipElectricityDuty?: boolean; preferVatQuota?: boolean } = {},
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
+    if (options.ownLabelOnly && retailVatHeaderForRow(lines, index)) return [];
+    if (options.skipShippingBase && /^base imponible gastos? de envio\b/.test(normalized)) return [];
+    if (options.skipElectricityDuty && /\bimpuesto (?:sobre la )?electricidad\b/.test(normalized)) return [];
     // A PDF/OCR extractor can merge "TOTAL IVA" and "TOTAL A PAGAR" into one
     // line. Exclude only the misleading heading, not the entire row: blank
     // its characters to preserve the offsets of the real payable label.
@@ -292,7 +328,13 @@ function extractMoneyField(
       : -1;
     const segmentEnd = nextOwner >= 0 ? anchorEnd + nextOwner : Number.POSITIVE_INFINITY;
     const following = monies.filter((money) => money.index >= anchorEnd && money.index < segmentEnd);
-    let chosen = following[0] ?? (options.ownLabelOnly ? undefined : monies.at(-1));
+    // "IVA 21 % s/ 33,89 7,12" prints the taxable base before the
+    // quota. Both amounts stay reviewable; the quota owns the tax field.
+    const vatBaseAndQuota = options.preferVatQuota && TAX_ACRONYM.test(normalized)
+      && COMPLETE_TAX_RATE.test(normalized.slice(anchorEnd))
+      && /\bs\s*\/\s*/.test(normalized.slice(anchorEnd)) && following.length === 2;
+    let chosen = (vatBaseAndQuota ? following[1] : following[0])
+      ?? (options.ownLabelOnly ? undefined : monies.at(-1));
     let adjacent: LocatedLine | null = null;
     if (!chosen && options.adjacentAmount) {
       // Layout engines often break "TOTAL A PAGAR" and "23,45 €" into
@@ -748,13 +790,33 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
     if (!TAX_ACRONYM.test(searchable) && !/\bimpuestos?\b/.test(searchable)) continue;
 
+    // Retail fiscal tables put the rate, base, quota and total in fixed
+    // columns. A rate printed as "4,00" has no percent sign on its row;
+    // treating it as an IVA amount corrupts the invoice reconciliation.
+    if (isRetailVatTableHeader(item.line.text)) {
+      for (let offset = 1; offset <= 8 && index + offset < lines.length; offset += 1) {
+        const candidate = lines[index + offset];
+        if (candidate.pageNumber !== item.pageNumber) break;
+        const cells = retailVatCells(candidate.line.text);
+        if (!cells) break;
+        result.push({
+          ...cells,
+          confidence: Math.min(item.line.confidence, candidate.line.confidence),
+          trust: "doubtful",
+          evidence: [evidenceOf(item), evidenceOf(candidate)],
+        });
+      }
+      continue;
+    }
+    if (retailVatHeaderForRow(lines, index)) continue;
+
     // A real-world invoice layout uses "I.V.A / I.G.I.C. (Base Imponible:
     // 100,00) 21% EUR 21,00". The two explicit monetary values straddle
     // an identified tax *percentage*. A TOTAL or payment label appearing
     // before the second value invalidates this inference. Keep it doubtful.
     const vatIgicPair = /\bi\.?v\.?a\b\.?\s*\/\s*\bi\.?g\.?i\.?c\b\.?/.test(searchable);
     const baseHeader = /\bbase\s+imponible\b/.exec(searchable);
-    const taxRate = /\b(\d{1,2}(?:[,.]\d{1,2})?)\s*%/.exec(searchable);
+    const taxRate = COMPLETE_TAX_RATE.exec(searchable);
     if (vatIgicPair && baseHeader && taxRate) {
       const amounts = exactFinancialAmountMatches(item.line.text).flatMap((match) => {
         const cents = parseMoneyCents(match[0]);
@@ -842,7 +904,7 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
     const rateText = taxLabel
       ? searchable.slice(taxLabel.end, labels.find((label) => label.start >= taxLabel.end)?.start)
       : "";
-    const rate = rateText.match(/(\d{1,2}(?:[,.]\d{1,2})?)\s*%/);
+    const rate = rateText.match(COMPLETE_TAX_RATE);
 
     // Each amount belongs to the closest explicit field label, not to the
     // last figure on the OCR row (which might be TOTAL, cash or change).
@@ -1024,8 +1086,8 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
-  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/], { ownLabelOnly: true });
-  let taxesCents = extractMoneyField(located, [TAX_ACRONYM, /\bimpuestos?\b/], { ownLabelOnly: true });
+  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/], { ownLabelOnly: true, skipShippingBase: true });
+  let taxesCents = extractMoneyField(located, [TAX_ACRONYM, /\bimpuestos?\b/], { ownLabelOnly: true, skipElectricityDuty: true, preferVatQuota: true });
   // Spanish utilities and telecom invoices often use "IMPORTE FACTURA"
   // rather than a standalone TOTAL. Preserve contradictory candidates for
   // human review instead of silently treating the invoice amount as absent.
@@ -1060,7 +1122,8 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     const tableRows = taxLines.filter((row) => {
       const header = row.evidence[0];
       return row.evidence.length === 2 && header !== undefined
-        && /\bbase\s+imponible\b/.test(normalizeToken(header.rawText))
+        && (/\bbase\s+imponible\b/.test(normalizeToken(header.rawText))
+          || isRetailVatTableHeader(header.rawText))
         && /\bcuota\b/.test(normalizeToken(header.rawText));
     });
     const headers = new Set(tableRows.map((row) =>
