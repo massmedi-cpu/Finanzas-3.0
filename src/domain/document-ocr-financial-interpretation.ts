@@ -246,7 +246,7 @@ function isTaxTableFooter(lines: LocatedLine[], index: number) {
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean; skipExplanatoryParentheses?: boolean } = {},
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
@@ -276,6 +276,11 @@ function extractMoneyField(
       : labelsFound.reduce((earliest, found) => Math.min(earliest, found.end), Number.POSITIVE_INFINITY);
     const monies = exactFinancialAmountMatches(item.line.text)
       .flatMap((match) => {
+        // An explanatory VAT/discount figure inside parentheses is not owned
+        // by the surrounding TOTAL label. Keep it available to tax parsing.
+        const moneyStart = match.index ?? 0;
+        if (options.skipExplanatoryParentheses && !match[0].startsWith("(")
+          && item.line.text.lastIndexOf("(", moneyStart) > item.line.text.lastIndexOf(")", moneyStart)) return [];
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ raw: match[0], value, index: match.index }];
       });
@@ -1034,6 +1039,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     prefer: /\b(?:total\s+a\s+pagar|total\s+importe\s+factura|importe\s+total|importe(?:\s+de\s+la)?\s+factura|a\s+pagar|total\s+factura|total\s+final)\b/,
     adjacentAmount: true,
     skipTaxTableFooter: true,
+    skipExplanatoryParentheses: true,
   });
   const warnings: string[] = [];
   const taxLines = extractTaxLines(located);

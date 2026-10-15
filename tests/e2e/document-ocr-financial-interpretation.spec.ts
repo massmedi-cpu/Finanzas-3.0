@@ -1144,3 +1144,23 @@ test("REC-OCR-173 · a refund before a payment amount keeps separate signed evid
   expect(parsed.totalCents.trust).toBe("doubtful");
   expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
 });
+
+test("REC-OCR-174 · VAT in explanatory parentheses is not a payable total, but remains tax evidence", () => {
+  const printed = "TOTAL (IVA incluido 2,10 €)";
+  const original = result([line("tax-explanation", printed, 0.99)]);
+  const parsed = interpretDocumentOcrFinancially(original);
+  expect(parsed.totalCents.value).toBeNull();
+  expect(parsed.totalCents.trust).toBe("not_detected");
+  expect(parsed.taxesCents.value).toBe(210);
+  expect(original.plainText).toBe(printed);
+});
+
+test("REC-OCR-175 · a later payable total wins over parenthesized VAT without losing tax evidence", () => {
+  const printed = "TOTAL (IVA incluido 2,10 €) TOTAL A PAGAR 12,10 €";
+  const parsed = interpretDocumentOcrFinancially(result([line("mixed", printed, 0.99)]));
+  expect(parsed.totalCents.value).toBe(1210);
+  expect(parsed.totalCents.rawValue).toBe("12,10");
+  expect(parsed.totalCents.trust).toBe("reliable");
+  expect(parsed.taxesCents.value).toBe(210);
+  expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
+});
