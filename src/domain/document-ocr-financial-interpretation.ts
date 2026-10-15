@@ -325,7 +325,8 @@ function extractMoneyField(
       raw: chosen.raw,
       value: chosen.value,
       preferred: Boolean(preferred),
-      needsReview: adjacent !== null || following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+      needsReview: adjacent !== null || following.length === 0 || paymentBeforeAmount || conflictingAmounts
+         || chosen.raw.trim().startsWith("("), // Accounting parentheses remain subject to human sign verification.
       adjacent,
     }];
   });
