@@ -17,6 +17,7 @@ import {
 import styles from "./alerts.module.css";
 
 type DashboardEnvelope = {
+  dataThroughDate: string | null;
   failedSources: string[];
   data: {
     financial: null | {
@@ -290,9 +291,7 @@ export default function AlertsClient() {
           dateFrom: `${today.slice(0, 7)}-01`,
           dateTo: today,
           freshness,
-          activityLatestDate: dashboardResult.status === "fulfilled"
-            && typeof (dashboardResult.value as unknown as Record<string, unknown>).dataThroughDate === "string"
-              ? (dashboardResult.value as unknown as { dataThroughDate: string }).dataThroughDate : null,
+          activityLatestDate: dashboard?.dataThroughDate ?? null,
         }).state === "covered",
         syncDetail: syncDetail(syncRun),
         failedSourceCount: dashboard?.failedSources.length ?? 0,
