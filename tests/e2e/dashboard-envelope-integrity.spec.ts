@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { GET } from "../../app/api/dashboard/route";
+import { GET, operationsForScope } from "../../app/api/dashboard/route";
 import {
   HOME_SCOPE_SOURCES,
   isDashboardEnvelopeForScope,
@@ -78,4 +78,16 @@ test("REC-HOME-SCOPE-005 · ambiguous dashboard selectors fail before opening pr
       error: "invalid_request", code: "invalid_dashboard_parameters",
     });
   }
+});
+
+test("REC-ALT-028 · el backend de Alertas evita lectura mensual y de actividad reciente", () => {
+  const ops = operationsForScope("alerts", "2026-10-15");
+  expect(ops.map((op) => op.source)).toEqual(["financial", "budgets", "forecast"]);
+  expect(ops.map((op) => op.action)).toEqual(["financial.snapshot", "budget.snapshot", "forecast.snapshot"]);
+  expect(ops[0].payload).toMatchObject({ dateFrom: "2026-10-01", dateTo: "2026-10-15", accountId: null });
+  expect(ops[1].payload).toMatchObject({ month: "2026-10" });
+  expect(ops[2].payload).toMatchObject({ dateFrom: "2026-10-15", dateTo: "2026-11-14", accountId: null });
+  const altered = envelope("alerts");
+  altered.data.monthly = { forgedNet: 99_999 } as never;
+  expect(isDashboardEnvelopeForScope(altered, "alerts")).toBe(false);
 });

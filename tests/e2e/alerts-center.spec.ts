@@ -82,11 +82,11 @@ function dashboardFixture(
   }
   return {
     contractVersion: 1,
-    scope: "all",
+    scope: "alerts",
     asOfDate: day,
     dataThroughDate: null,
     generatedAt: new Date().toISOString(),
-    requestedSources: ["financial", "transactions", "monthly", "budgets", "forecast"],
+    requestedSources: ["financial", "budgets", "forecast"],
     failedSources: [],
     data,
     ...overrides,
@@ -119,7 +119,7 @@ async function mockAlerts(page: Page) {
     body: JSON.stringify(healthyFreshness()),
   }));
 
-  await page.route("**/api/dashboard?scope=all", async (route) => {
+  await page.route("**/api/dashboard?scope=alerts", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -229,7 +229,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
     status: 200, contentType: "application/json", body: JSON.stringify(healthyFreshness()),
   }));
   const reads: Array<{ pathname: string; status: string | null; unassociated: string | null; limit: string | null; method: string }> = [];
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify(dashboardFixture({ financial: null, budgets: null, forecast: null })),
@@ -273,7 +273,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
 
 test("REC-ALT-001 · cinco fuentes inválidas no se representan como cero alertas comprobadas", async ({ page }) => {
   const methods: string[] = [];
-  await page.route(/\/api\/(?:dashboard\?scope=all|source\/google\/sync|analysis\/source-freshness|transactions\?uncategorized=true&limit=1|documents\?scope=ordinary&.*)$/, async (route) => {
+  await page.route(/\/api\/(?:dashboard\?scope=alerts|source\/google\/sync|analysis\/source-freshness|transactions\?uncategorized=true&limit=1|documents\?scope=ordinary&.*)$/, async (route) => {
     methods.push(route.request().method());
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
@@ -288,7 +288,7 @@ test("REC-ALT-001 · cinco fuentes inválidas no se representan como cero alerta
 
 test("REC-ALT-002 · dashboard malformado pasa a lectura parcial, preserva las demás alertas y no bloquea", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify({ failedSources: null, data: { financial: null, budgets: null, forecast: null } }),
   }));
@@ -313,7 +313,7 @@ test("REC-ALT-003 · sync 200 corrupta no se clasifica como fuente correcta ni d
 
 test("REC-ALT-004 · Alertas nunca muestra cifras de otra selección aunque la API responda 200", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       financial: {
@@ -330,7 +330,7 @@ test("REC-ALT-004 · Alertas nunca muestra cifras de otra selección aunque la A
 
 test("REC-ALT-005 · una fuente declarada fallida no puede aportar alertas monetarias", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       financial: {
@@ -346,7 +346,7 @@ test("REC-ALT-005 · una fuente declarada fallida no puede aportar alertas monet
 
 test("REC-ALT-006 · metadatos de cobertura incompletos no se confunden con ausencia de incidencias", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify({
       failedSources: [],
@@ -420,7 +420,7 @@ test("REC-ALT-012 · fuente no disponible, sin falsas cifras pero con avisos fin
 
 test("REC-ALT-013 · snapshot de otro mes no genera alertas con cifras actuales", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       financial: {
@@ -440,7 +440,7 @@ test("REC-ALT-013 · snapshot de otro mes no genera alertas con cifras actuales"
 
 test("REC-ALT-014 · presupuesto de otro mes no puede declarar límites alcanzados", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       budgets: { month: "2026-09", categories: [{ categoryName: "Ocio", progressBps: 10500, status: "over" }] },
@@ -466,7 +466,7 @@ test("REC-ALT-015 · documentos legados 200 no acreditan los filtros Pruebas y s
 
 test("REC-ALT-017 · HTTP 200 con neto mensual inconsistente no crea un falso déficit", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       financial: { period: {
@@ -484,7 +484,7 @@ test("REC-ALT-017 · HTTP 200 con neto mensual inconsistente no crea un falso d�
 
 test("REC-ALT-018 · presupuesto incoherente no afirma que se superó el límite", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       budgets: { categories: [{
@@ -501,7 +501,7 @@ test("REC-ALT-018 · presupuesto incoherente no afirma que se superó el límite
 
 test("REC-ALT-019 · saldo futuro aritméticamente contradictorio nunca se anuncia como riesgo confirmado", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       forecast: {
@@ -525,7 +525,7 @@ test("REC-ALT-019 · saldo futuro aritméticamente contradictorio nunca se anunc
 
 test("REC-ALT-020 · una previsión de cuenta y fechas ajenas no contamina las alertas del día", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       forecast: {
@@ -582,7 +582,7 @@ test("REC-ALT-022 · un recuento documental fallido no borra el otro que sí est
 
 test("REC-ALT-023 · resumen de ayer HTTP 200 no puede presentarse como el mes actualizado", async ({ page }) => {
   await mockAlerts(page);
-  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+  await page.route("**/api/dashboard?scope=alerts", (route) => route.fulfill({
     status: 200, contentType: "application/json",
     body: JSON.stringify(dashboardFixture({
       financial: {
@@ -647,4 +647,25 @@ test("REC-ALT-026 · una lista 200 truncada no inventa documentos pendientes", a
   await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
   await expect(page.getByText("140 documentos sin asociar")).toHaveCount(0);
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-027 · solo solicita tres fuentes, sin escaneos mensuales ni actividad duplicada", async ({ page }) => {
+  await mockAlerts(page);
+  const called: string[] = [];
+  await page.route("**/api/dashboard?scope=alerts", async (route) => {
+    called.push(new URL(route.request().url()).searchParams.get("scope") ?? "");
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(dashboardFixture({
+        financial: { period: {
+          operatingNetCents: 0, quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
+        } },
+      })),
+    });
+  });
+  await page.goto("/alerts");
+  await expect(page.getByRole("heading", { name: "Alertas", exact: true })).toBeVisible();
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+  expect(called.length).toBeGreaterThan(0);
+  expect(called.every((scope) => scope === "alerts")).toBe(true);
 });

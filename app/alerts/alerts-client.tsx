@@ -183,7 +183,7 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
   // A 200 response can still contain another dashboard scope, forged money
   // from a failed source, or a partial list of sources. Reject it before
   // deriving financial alerts rather than treating unverified totals as true.
-  if (!isDashboardEnvelopeForScope(value, "all") || !isObject(value.data)) return false;
+  if (!isDashboardEnvelopeForScope(value, "alerts") || !isObject(value.data)) return false;
   const data = value.data;
   const day = value.asOfDate;
   const month = day.slice(0, 7);
@@ -364,7 +364,7 @@ export default function AlertsClient() {
     setError(null);
     const today = madridToday();
     const [dashboardResult, syncResult, uncategorizedResult, documentsResult, freshnessResult] = await Promise.allSettled([
-      readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000, isDashboardEnvelope, controller.signal),
+      readJson<DashboardEnvelope>("/api/dashboard?scope=alerts", 10_000, isDashboardEnvelope, controller.signal),
       readJson<SyncStatus>("/api/source/google/sync", 6_000, isSyncStatus, controller.signal),
       readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000, isTransactionCount, controller.signal),
       loadDocumentSummary(controller.signal),

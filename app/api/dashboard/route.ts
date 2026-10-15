@@ -12,8 +12,8 @@ const HEADERS = {
   "x-robots-tag": "noindex",
 };
 
-const SCOPES = new Set(["critical", "activity", "primary", "secondary", "all"] as const);
-type DashboardScope = "critical" | "activity" | "primary" | "secondary" | "all";
+const SCOPES = new Set(["critical", "activity", "primary", "secondary", "alerts", "all"] as const);
+type DashboardScope = "critical" | "activity" | "primary" | "secondary" | "alerts" | "all";
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
 
 type NamedOperation = PersistenceGatewayOperation & {
@@ -66,7 +66,7 @@ function transactionOperation(): NamedOperation {
   };
 }
 
-function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
+export function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
   const cashFlowStart = trailingMonthStart(today, 12);
@@ -115,6 +115,11 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
   if (scope === "activity") return [transactions];
   if (scope === "primary") return [financial, transactions];
   if (scope === "secondary") return secondary;
+  // Alertas only derives signals from current-month financials, budgets
+  // and the upcoming forecast. Avoid the 12-month monthly scan and a
+  // redundant recent-transactions query (its own count uses a filtered API).
+  // This is the same bounded three-source batch, not a second gateway path.
+  if (scope === "alerts") return [financial, ...secondary.slice(1)];
   return [financial, transactions, ...secondary];
 }
 
