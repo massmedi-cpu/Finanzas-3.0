@@ -196,7 +196,15 @@ function isTaxTableFooter(lines: LocatedLine[], index: number) {
   // into one line. A mere two-money count must not suppress a clearly owned
   // grand total just because the immediately preceding rows are VAT rates.
   // Tax-only "TOTAL 25,37 3,81" remains excluded below.
-  if (/\b(?:total\s+a\s+pagar|importe\s+total(?:\s+factura)?|importe(?:\s+de\s+la)?\s+factura|total\s+(?:factura|final))\b/.test(text)) return false;
+  // The extra label must own an amount AFTER it. An OCR fragment ending
+  // "TOTAL 10,00 2,10 IMPORTE TOTAL" still contains only the tax footer:
+  // borrowing 2,10 from before the unfinished label would invent a total.
+  const payableLabels = /\b(?:total\s+a\s+pagar|importe\s+total(?:\s+factura)?|importe(?:\s+de\s+la)?\s+factura|total\s+(?:factura|final))\b/g;
+  if ([...text.matchAll(payableLabels)].some((match) => {
+    const after = text.slice((match.index ?? 0) + match[0].length);
+    if (/^\s*(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?)\b/.test(after)) return false;
+    return exactFinancialAmountMatches(after).length > 0;
+  })) return false;
   for (let back = 1; back <= 6 && back <= index; back += 1) {
     const header = lines[index - back];
     if (header.pageNumber !== item.pageNumber) break;
