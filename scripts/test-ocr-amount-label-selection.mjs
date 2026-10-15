@@ -340,6 +340,73 @@ const cases = [
     amount: 123456,
     trust: "reliable",
   },
+  {
+    name: "ordinary space-grouped total never loses the leading thousands group",
+    lines: ["TOTAL 1 234,56 €"],
+    field: "totalCents",
+    amount: 123456,
+    trust: "reliable",
+    rawValue: "1 234,56",
+  },
+  {
+    name: "NBSP-grouped scanned total keeps its original evidence",
+    lines: ["TOTAL 1\u00a0234,56 €"],
+    field: "totalCents",
+    amount: 123456,
+    trust: "reliable",
+    rawValue: "1\u00a0234,56",
+  },
+  {
+    name: "narrow no-break spaces preserve all three groups",
+    lines: ["IMPORTE TOTAL: 1\u202f234\u202f567,89 €"],
+    field: "totalCents",
+    amount: 123456789,
+    trust: "reliable",
+    rawValue: "1\u202f234\u202f567,89",
+  },
+  {
+    name: "European minus separated by space cannot change the refund sign",
+    lines: ["TOTAL − 1 234,56"],
+    field: "totalCents",
+    amount: -123456,
+    trust: "reliable",
+  },
+  {
+    name: "prefixed EUR integer with whitespace grouping remains money",
+    lines: ["TOTAL EUR 1 234"],
+    field: "totalCents",
+    amount: 123400,
+    trust: "reliable",
+  },
+  {
+    name: "whole euro amount grouped with NBSP remains money",
+    lines: ["TOTAL 1\u00a0234 €"],
+    field: "totalCents",
+    amount: 123400,
+    trust: "reliable",
+  },
+  {
+    name: "US numeric grouping is not a truncated 234 euro amount",
+    lines: ["TOTAL 1,234.56"],
+    field: "totalCents",
+    amount: 123456,
+    trust: "reliable",
+    rawValue: "1,234.56",
+  },
+  {
+    name: "three-decimal malformed space-grouped quantity is not money",
+    lines: ["TOTAL 1 234,567 €"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "comma-grouped bare integer remains ambiguous even with euro sign",
+    lines: ["TOTAL 1,234 €"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
 ];
 
 // An invoice can be visually scanned even when its PDF has a selectable
@@ -362,6 +429,7 @@ for (const sample of cases) {
     assert.equal(field.value, sample.amount, `${sample.name}: amount`);
     assert.equal(field.trust, sample.trust, `${sample.name}: trust`);
     if (field.value !== null) assert.ok(field.evidence.length, `${sample.name}: original evidence retained`);
+    if (sample.rawValue !== undefined) assert.equal(field.rawValue, sample.rawValue, `${sample.name}: raw financial token preserved`);
     if (sample.evidenceLines) assert.deepEqual(
       field.evidence.map((entry) => entry.rawText),
       sample.evidenceLines,
