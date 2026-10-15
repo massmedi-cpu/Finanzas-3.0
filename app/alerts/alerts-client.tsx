@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isDashboardEnvelopeForScope } from "../../src/application/dashboard/dashboard-envelope-integrity";
 import {
   deriveGlobalAlerts,
   summarizeGlobalAlerts,
@@ -113,9 +114,10 @@ function moneyCents(value: unknown) {
 }
 
 function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
-  if (!isObject(value) || !Array.isArray(value.failedSources)
-    || !value.failedSources.every((item: unknown) => typeof item === "string")
-    || !isObject(value.data)) return false;
+  // A 200 response can still contain another dashboard scope, forged money
+  // from a failed source, or a partial list of sources. Reject it before
+  // deriving financial alerts rather than treating unverified totals as true.
+  if (!isDashboardEnvelopeForScope(value, "all") || !isObject(value.data)) return false;
   const data = value.data;
   if (data.financial !== null) {
     if (!isObject(data.financial) || !isObject(data.financial.period)
