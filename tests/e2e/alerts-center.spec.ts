@@ -70,7 +70,7 @@ function dashboardFixture(
     const expense = planned.reduce((sum, item) => sum - Math.min(0, item.amountCents as number), 0);
     data.forecast = {
       ...forecast,
-      period: { dateFrom: day, dateTo: madridDatePlus(30), accountId: null },
+      period: forecast.period ?? { dateFrom: day, dateTo: madridDatePlus(30), accountId: null },
       summary: {
         openingBalanceCents: (summary.projectedClosingBalanceCents as number) - income + expense,
         projectedIncomeCents: income,
@@ -139,7 +139,7 @@ async function mockAlerts(page: Page) {
           forecast: {
             summary: { projectedClosingBalanceCents: 300_00, plannedItems: 1 },
             items: [
-              { date: upcomingPaymentDate, concept: "Recibo", amountCents: -35_00, status: "planned", affectsProjection: true },
+              { id: "f0000000-0000-4000-8000-000000000001", date: upcomingPaymentDate, concept: "Recibo", amountCents: -35_00, status: "planned", affectsProjection: true },
             ],
           },
       })),
@@ -461,5 +461,99 @@ test("REC-ALT-015 · documentos legados 200 no acreditan los filtros Pruebas y s
   await page.goto("/alerts");
   await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
   await expect(page.getByText(/9\.999 documentos sin asociar/)).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-017 · HTTP 200 con neto mensual inconsistente no crea un falso déficit", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      financial: { period: {
+        operatingNetCents: -500_00, incomeCents: 200_00, expenseCents: 100_00,
+        quality: { suspectedDuplicateRows: 15, signMismatchRows: 0 },
+      } },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("El resultado del mes está en negativo")).toHaveCount(0);
+  await expect(page.getByText("15 posibles movimientos duplicados")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-018 · presupuesto incoherente no afirma que se superó el límite", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      budgets: { categories: [{
+        categoryName: "Ocio", progressBps: 12000, status: "over",
+        effectiveAmountCents: 100_00, actualExpenseCents: 125_00, remainingCents: 0,
+      }] },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("1 presupuesto superado")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-019 · saldo futuro aritméticamente contradictorio nunca se anuncia como riesgo confirmado", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      forecast: {
+        summary: {
+          openingBalanceCents: 500_00, projectedIncomeCents: 0,
+          projectedExpenseCents: 100_00, projectedNetCents: -100_00,
+          projectedClosingBalanceCents: -10_00, plannedItems: 1,
+        },
+        items: [{
+          id: "f0000000-0000-4000-8000-000000000002", date: madridDatePlus(1),
+          concept: "Cuota", amountCents: -100_00, status: "planned", affectsProjection: true,
+        }],
+      },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("La previsión termina con saldo negativo")).toHaveCount(0);
+  await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
+});
+
+test("REC-ALT-020 · una previsión de cuenta y fechas ajenas no contamina las alertas del día", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify(dashboardFixture({
+      forecast: {
+        period: {
+          dateFrom: madridDatePlus(-30), dateTo: madridDatePlus(-1),
+          accountId: "a0000000-0000-4000-8000-000000000001",
+        },
+        summary: { projectedClosingBalanceCents: -300_00, plannedItems: 0 },
+        items: [],
+      },
+    })),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("resumen financiero");
+  await expect(page.getByText("La previsión termina con saldo negativo")).toHaveCount(0);
+});
+
+test("REC-ALT-021 · respuesta documental de lectura no segura se excluye incluso con versión 3", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/documents?scope=ordinary&*", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      contractVersion: 3, total: 9000, limit: 1, offset: 0, items: [],
+      principles: { ...documentPrinciples, bankSource: "read_write" },
+    }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("documentos");
+  await expect(page.getByText(/9\.000 documentos sin asociar/)).toHaveCount(0);
   await expect(page.getByText("3 movimientos sin categorizar")).toBeVisible();
 });
