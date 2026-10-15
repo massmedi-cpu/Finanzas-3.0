@@ -130,16 +130,20 @@ function parseMoneyCents(raw: string): number | null {
 
 // OCR can mix prices (12,34) with weights, ratios and incomplete numeric
 // tokens (1,234). Never interpret the prefix "1,23" of "1,234" as money.
-// Preserve punctuation at the end of a sentence, but reject continuations
-// that belong to the same numeric token.
-const FINANCIAL_AMOUNT_TOKEN = /[-\u2212\u2013]?\d{1,3}(?:\.\d{3})*(?:,\d{2})|[-\u2212\u2013]?\d+(?:[,.]\d{2})/g;
+// PDF text often groups thousands with ordinary, non-breaking (U+00A0) or
+// narrow no-break (U+202F) spaces. Matching only the suffix "234,56" of a
+// printed "1 234,56" would silently understate the invoice by 1,000 euros.
+// Match the WHOLE grouped number, including signs separated by one space,
+// and preserve the original raw evidence without changing punctuation.
+const FINANCIAL_AMOUNT_TOKEN = /(?:[-\u2212\u2013][ \u00a0\u202f]?)?(?:\d{1,3}(?:[. \u00a0\u202f]\d{3})+,\d{2}|\d{1,3}(?:[, \u00a0\u202f]\d{3})+\.\d{2}|\d+[,.]\d{2})/g;
 // An integer is money only when the OCR line explicitly prints € after it.
 // A bare 21, 100 or 1.234 could instead be a rate, quantity or document ID.
-const INTEGER_EURO_TOKEN = /[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)(?=\s*€)/g;
+// Comma-grouped integers remain ambiguous (1,234 can be a weight in kg).
+const INTEGER_EURO_TOKEN = /(?:[-\u2212\u2013][ \u00a0\u202f]?)?(?:\d{1,3}(?:[. \u00a0\u202f]\d{3})+|\d+)(?=\s*€)/g;
 // Some receipts place the currency *before* a whole-euro amount: TOTAL € 50
 // or TOTAL EUR 1.234. Only an explicit currency token permits integer euros;
 // the boundary checks below reject accidental prefixes of decimal/weight data.
-const PREFIXED_EURO_INTEGER_TOKEN = /(?:€|\bEUR\b)\s*[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)/gi;
+const PREFIXED_EURO_INTEGER_TOKEN = /(?:€|\bEUR\b)\s*(?:[-\u2212\u2013][ \u00a0\u202f]?)?(?:\d{1,3}(?:[. \u00a0\u202f]\d{3})+|\d+)/gi;
 
 function exactFinancialAmountMatches(text: string) {
   return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN), ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN)]
