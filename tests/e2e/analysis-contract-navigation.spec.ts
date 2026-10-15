@@ -183,12 +183,17 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
   const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/route.ts"), "utf8");
   const recoverySource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
 
+  const diagnosticSource = readFileSync(resolve(process.cwd(), "src/infrastructure/persistence/gateway-observability.ts"), "utf8");
   expect(pageSource).toContain("PersistenceGatewayError");
-  expect(pageSource).toContain("status: error.status");
-  expect(pageSource).toContain("code: error.code ?? null");
-  expect(routeSource).toContain("analysis-api-gateway");
-  expect(routeSource).toContain("status: error.status");
-  expect(routeSource).toContain("code: error.code ?? null");
+  expect(pageSource).toContain('logPersistenceGatewayFailure("analysis-initial-snapshot", error)');
+  expect(routeSource).toContain('logPersistenceGatewayFailure("analysis-api-gateway", error)');
+  // The shared logger retains redacted status/code regardless of severity.
+  // A 403 requiring workspace is expected; unexpected failures remain errors.
+  expect(diagnosticSource).toContain("status: error.status");
+  expect(diagnosticSource).toContain("code: error.code ?? null");
+  expect(diagnosticSource).toContain('error.status === 403 && error.code === "workspace_context_required"');
+  expect(diagnosticSource).toContain("console.info(scope, safe)");
+  expect(diagnosticSource).toContain("console.error(scope, safe)");
   expect(recoverySource).toContain("responseErrorCode");
   expect(recoverySource).toContain("analysis_contract_invalid");
   expect(recoverySource).not.toMatch(/!response\.ok \|\| !isAnalysisSnapshot\(payload\)/);
