@@ -327,7 +327,7 @@ test("REC-DRIVE-136 · empty and oversized batches never enter the database", as
   expect(begins).toBe(0);
 });
 
-test("REC-DRIVE-137 · each metadata/media read has an independent abort deadline", async () => {
+test("REC-DRIVE-139 · each metadata/media read has an independent abort deadline", async () => {
   const signals: AbortSignal[] = [];
   const fetcher: typeof fetch = async (input, init) => {
     expect(init?.signal).toBeInstanceOf(AbortSignal);
