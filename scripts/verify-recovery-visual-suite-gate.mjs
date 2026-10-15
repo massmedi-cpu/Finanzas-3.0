@@ -13,6 +13,8 @@ const cases = [
   ["tests/e2e/document-ocr-financial-interpretation.spec.ts", [
     "REC-OCR-150", "REC-OCR-151", "REC-OCR-152",
     "REC-OCR-153", "REC-OCR-154", "REC-OCR-155",
+    "REC-OCR-156", "REC-OCR-157", "REC-OCR-158",
+    "REC-OCR-159", "REC-OCR-160", "REC-OCR-161",
   ]],
   ["tests/e2e/private-document-content-address.spec.ts", ["REC-DOC-117", "REC-DOC-118", "REC-DOC-119"]],
   ["tests/e2e/private-document-replay.spec.ts", ["REC-DOC-110", "REC-DOC-111", "REC-DOC-112", "REC-DOC-120"]],
