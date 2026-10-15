@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isDashboardEnvelopeForScope } from "../../src/application/dashboard/dashboard-envelope-integrity";
+import { parseHomeBankFreshness, resolveHomeBankCoverage } from "../../src/application/dashboard/home-bank-coverage";
 import {
   deriveGlobalAlerts,
   summarizeGlobalAlerts,
@@ -241,11 +242,12 @@ export default function AlertsClient() {
     setLoading(true);
     setError(null);
     const today = madridToday();
-    const [dashboardResult, syncResult, uncategorizedResult, documentsResult] = await Promise.allSettled([
+    const [dashboardResult, syncResult, uncategorizedResult, documentsResult, freshnessResult] = await Promise.allSettled([
       readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000, isDashboardEnvelope),
       readJson<SyncStatus>("/api/source/google/sync", 6_000, isSyncStatus),
       readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000, isTransactionCount),
       loadDocumentSummary(),
+      readJson<unknown>("/api/analysis/source-freshness", 8_000),
     ]);
 
     const degradedReads: string[] = [];
@@ -253,11 +255,14 @@ export default function AlertsClient() {
     const sync = syncResult.status === "fulfilled" ? syncResult.value : null;
     const uncategorized = uncategorizedResult.status === "fulfilled" ? uncategorizedResult.value : null;
     const documents = documentsResult.status === "fulfilled" ? documentsResult.value : null;
+    const freshness = freshnessResult.status === "fulfilled"
+      ? parseHomeBankFreshness(freshnessResult.value) : null;
 
     if (!dashboard) degradedReads.push("resumen financiero");
     if (!sync) degradedReads.push("sincronización");
     if (!uncategorized) degradedReads.push("movimientos sin categorizar");
     if (!documents) degradedReads.push("documentos");
+    if (!freshness) degradedReads.push("cobertura bancaria");
 
     if (!dashboard && !sync && !uncategorized && !documents) {
       setSnapshot(null);
@@ -281,6 +286,14 @@ export default function AlertsClient() {
       input: {
         today,
         syncState,
+        bankCoverageVerified: resolveHomeBankCoverage({
+          dateFrom: `${today.slice(0, 7)}-01`,
+          dateTo: today,
+          freshness,
+          activityLatestDate: dashboardResult.status === "fulfilled"
+            && typeof (dashboardResult.value as unknown as Record<string, unknown>).dataThroughDate === "string"
+              ? (dashboardResult.value as unknown as { dataThroughDate: string }).dataThroughDate : null,
+        }).state === "covered",
         syncDetail: syncDetail(syncRun),
         failedSourceCount: dashboard?.failedSources.length ?? 0,
         quality: dashboard?.data.financial?.period.quality ?? null,
