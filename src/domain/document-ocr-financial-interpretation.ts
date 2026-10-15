@@ -106,12 +106,16 @@ function fieldRequiringReview<T>(field: OcrInterpretedField<T>): OcrInterpretedF
 }
 
 function parseMoneyCents(raw: string): number | null {
+  // Parentheses with an explicit euro marker represent an accounting debit/credit
+  // sign. Bare parentheses are ambiguous: never silently turn them positive.
+  const accountingNegative = /^\s*\([^()]*\)\s*(?:€|\bEUR\b)?\s*$/i.test(raw)
+    && /€|\bEUR\b/i.test(raw);
   const cleaned = raw
     .replace(/[\u2212\u2013]/g, "-")
     .replace(/\s/g, "")
     .replace(/€/g, "")
     .replace(/[^\d,.-]/g, "");
-  if (!cleaned) return null;
+  if (!cleaned || (accountingNegative && cleaned.includes("-"))) return null;
 
   let normalized = cleaned;
   const lastComma = cleaned.lastIndexOf(",");
@@ -124,7 +128,7 @@ function parseMoneyCents(raw: string): number | null {
   }
   const value = Number(normalized);
   if (!Number.isFinite(value)) return null;
-  const cents = Math.round(value * 100);
+  const cents = Math.round(value * 100) * (accountingNegative ? -1 : 1);
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
@@ -145,11 +149,24 @@ const INTEGER_EURO_TOKEN = /(?:[-\u2212\u2013][ \u00a0\u202f]?)?(?:\d{1,3}(?:[. 
 // the boundary checks below reject accidental prefixes of decimal/weight data.
 const PREFIXED_EURO_INTEGER_TOKEN = /(?:€|\bEUR\b)\s*(?:[-\u2212\u2013][ \u00a0\u202f]?)?(?:\d{1,3}(?:[. \u00a0\u202f]\d{3})+|\d+)/gi;
 
+// Credit notes can print an accounting-negative amount as "(1.234,56 €)"
+// or "(EUR 1 234,56)". Require a visible currency marker and a complete
+// parenthesized token. A bare "(12,34)" is ambiguous, not positive proof.
+const ACCOUNTING_EURO_TOKEN = /\(\s*(?:(?:€|\bEUR\b)\s*)?(?:\d{1,3}(?:[. \u00a0\u202f]\d{3})+,\d{2}|\d{1,3}(?:[, \u00a0\u202f]\d{3})+\.\d{2}|\d+[,.]\d{2}|\d{1,3}(?:[. \u00a0\u202f]\d{3})+|\d+)\s*(?:€|\bEUR\b)?\s*\)(?:\s*(?:€|\bEUR\b))?/gi;
+
 function exactFinancialAmountMatches(text: string) {
-  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN), ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN)]
-    .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
-    .filter((match) => {
-    const start = match.index;
+  const candidates = [
+    ...text.matchAll(ACCOUNTING_EURO_TOKEN),
+    ...text.matchAll(FINANCIAL_AMOUNT_TOKEN),
+    ...text.matchAll(INTEGER_EURO_TOKEN),
+    ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN),
+  ].sort((left, right) => (left.index ?? 0) - (right.index ?? 0));
+  const accepted: RegExpMatchArray[] = [];
+  for (const match of candidates) {
+    // The accounting matcher also sees "(12,34)" without a sign. Reject it;
+    // later decimal matching must not steal its inner positive number.
+    if (match[0].startsWith("(") && !/€|\bEUR\b/i.test(match[0])) continue;
+    const start = match.index ?? 0;
     const end = start + match[0].length;
     const previous = text[start - 1] ?? "";
     const previousPrevious = text[start - 2] ?? "";
@@ -159,10 +176,17 @@ function exactFinancialAmountMatches(text: string) {
       || (/[.,]/.test(previous) && /\d/.test(previousPrevious));
     const endsInsideNumber = /\d/.test(next)
       || (/[.,]/.test(next) && /\d/.test(nextNext));
-    // Percentages such as "IVA 21,00%" are rates, never euro values.
     const isPercentage = /^\s*%/.test(text.slice(end));
-    return !startsInsideNumber && !endsInsideNumber && !isPercentage;
-  });
+    const bareParenthesized = text.slice(0, start).trimEnd().endsWith("(")
+      && text.slice(end).trimStart().startsWith(")");
+    // The complete accounting match must win over its inner positive match.
+    // This also prevents the same amount being counted twice in a tax table.
+    const overlapsAccepted = accepted.some((prior) =>
+      start < (prior.index ?? 0) + prior[0].length && end > (prior.index ?? 0));
+    if (startsInsideNumber || endsInsideNumber || isPercentage || bareParenthesized || overlapsAccepted) continue;
+    accepted.push(match);
+  }
+  return accepted;
 }
 
 function findLabelled(lines: LocatedLine[], labels: RegExp[]) {
