@@ -3,6 +3,10 @@ import AxeBuilder from "@axe-core/playwright";
 import { navigationItems } from "../../app/navigation-items";
 import { mockRecoveryHome } from "./helpers/recovery-home";
 
+// Native date inputs use the browser locale even when the document has lang="es".
+// Capture the Spanish product experience and keep ISO values explicit below.
+test.use({ locale: "es-ES" });
+
 const widths = [360, 390, 430, 600, 768, 820, 1024, 1100, 1366, 1440, 1920];
 const routes = [...navigationItems.map((item) => item.href), "/configuration/accounts", "/configuration/categories", "/configuration/merchants", "/configuration/rules", "/configuration/source", "/configuration/data", "/configuration/appearance"];
 
@@ -163,6 +167,8 @@ for (const theme of ["light", "dark"] as const) {
       const selectedRow = page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ });
       await selectedRow.click();
       await expect(page.getByRole("heading", { name: items[0].originalFileName })).toBeVisible();
+      await expect(selectedRow).toContainText("12/09/2026");
+      await expect(page.locator('input[type="date"]')).toHaveValue(items[0].documentDate);
       // REC-UI-DOC-006: narrow list panels must not collapse the filename to
       // one letter because status, file icon and metadata claim three columns.
       const filenameStyle = await selectedRow.locator("strong").first().evaluate(node => ({
