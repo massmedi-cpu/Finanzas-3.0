@@ -1092,3 +1092,14 @@ test("REC-OCR-168 · an invoice-labelled final total after TAX TOTAL is not a ta
   expect(parsed.totalCents.value).toBe(2800);
   expect(parsed.totalCents.rawValue).toBe("28,00");
 });
+
+
+test("REC-OCR-169 · dangling IMPORTE TOTAL after VAT footer cannot borrow a previous tax amount", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("tax-head", "TIPO IVA BASE IMPONIBLE CUOTA", 0.99, 0.10),
+    line("tax-row", "21% 10,00 2,10", 0.99, 0.20),
+    line("ambiguous-footer", "TOTAL 10,00 2,10 IMPORTE TOTAL", 0.99, 0.30),
+  ]));
+  expect(parsed.totalCents.value).toBeNull();
+  expect(parsed.totalCents.trust).toBe("not_detected");
+});
