@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDashboardEnvelopeForScope } from "../../src/application/dashboard/dashboard-envelope-integrity";
 import { parseHomeBankFreshness, resolveHomeBankCoverage } from "../../src/application/dashboard/home-bank-coverage";
 import {
+  areForecastItemsWithinSelection,
+  isForecastSummaryArithmeticConsistent,
+} from "../../src/application/forecast/forecast-contract";
+import {
   deriveGlobalAlerts,
   summarizeGlobalAlerts,
   type GlobalAlertInput,
@@ -63,6 +67,7 @@ type DashboardEnvelope = {
         plannedItems: number;
       };
       items: Array<{
+        id: string;
         date: string;
         concept: string;
         amountCents: number;
@@ -212,25 +217,8 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
       || data.forecast.period.dateFrom !== day
       || data.forecast.period.dateTo !== addDays(day, 30)
       || data.forecast.period.accountId !== null
-      || !moneyCents(data.forecast.summary.openingBalanceCents)
-      || !nonnegativeCount(data.forecast.summary.projectedIncomeCents)
-      || !nonnegativeCount(data.forecast.summary.projectedExpenseCents)
-      || !moneyCents(data.forecast.summary.projectedNetCents)
-      || !moneyCents(data.forecast.summary.projectedClosingBalanceCents)
-      || !Number.isSafeInteger(
-        (data.forecast.summary.projectedIncomeCents as number)
-        - (data.forecast.summary.projectedExpenseCents as number),
-      )
-      || data.forecast.summary.projectedNetCents !==
-        (data.forecast.summary.projectedIncomeCents as number)
-        - (data.forecast.summary.projectedExpenseCents as number)
-      || !Number.isSafeInteger(
-        (data.forecast.summary.openingBalanceCents as number)
-        + (data.forecast.summary.projectedNetCents as number),
-      )
-      || data.forecast.summary.projectedClosingBalanceCents !==
-        (data.forecast.summary.openingBalanceCents as number)
-        + (data.forecast.summary.projectedNetCents as number)
+      || !isForecastSummaryArithmeticConsistent(data.forecast.summary)
+      || !areForecastItemsWithinSelection(data.forecast.items, data.forecast.period)
       || !nonnegativeCount(data.forecast.summary.plannedItems)
       || !Array.isArray(data.forecast.items)
       || !data.forecast.items.every((item: unknown) =>
@@ -240,7 +228,8 @@ function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
         && typeof item.concept === "string"
         && moneyCents(item.amountCents)
         && ["planned", "excluded", "confirmed"].includes(String(item.status))
-        && typeof item.affectsProjection === "boolean")) return false;
+        && typeof item.affectsProjection === "boolean"
+        && item.affectsProjection === (item.status === "planned"))) return false;
   }
   if (data.forecast !== null && isObject(data.forecast)
     && isObject(data.forecast.summary) && Array.isArray(data.forecast.items)
