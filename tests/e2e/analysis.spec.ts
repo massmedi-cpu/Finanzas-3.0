@@ -234,6 +234,32 @@ test.describe("Fechas avanzadas de Análisis con navegador en inglés", () => {
   });
 });
 
+test.describe("Meses de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-MONTH-002 · referencia y filtro avanzado muestran español y conservan año-mes ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?month=2026-08&range=1m");
+    const form = page.getByRole("form", { name: "Filtros del análisis" });
+    const month = form.getByLabel("Mes de referencia");
+    await expect(month.locator("..")).toContainText("agosto de 2026");
+    await month.fill("2026-09");
+    await expect(month.locator("..")).toContainText("septiembre de 2026");
+    await form.getByRole("button", { name: "Aplicar cambios" }).click();
+    await expect(page).toHaveURL(/month=2026-09/);
+
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const advancedMonth = advanced.getByLabel("Mes para análisis avanzado");
+    await expect(advancedMonth.locator("..")).toContainText("septiembre de 2026");
+    await advancedMonth.fill("2026-08");
+    await expect(advancedMonth.locator("..")).toContainText("agosto de 2026");
+    await expect(advancedMonth).toHaveValue("2026-08");
+    await advanced.getByRole("button", { name: "Aplicar cambios" }).click();
+    await expect(page).toHaveURL(/month=2026-08/);
+  });
+});
+
 test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
   const snapshot = mockSnapshot();
   await mockAnalysisApi(page, snapshot);

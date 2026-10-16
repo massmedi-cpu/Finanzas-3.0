@@ -4,6 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import type { AnalysisSelectionInput } from "../../src/application/analysis/analysis-loader";
 import { SpanishDateInput } from "../../src/design/spanish-date-input";
+import { SpanishMonthInput } from "../../src/design/spanish-month-input";
 import styles from "./analysis-axioma53-controls.module.css";
 
 type PeriodMode = "month" | "year" | "custom";
@@ -230,7 +231,7 @@ export default function AnalysisAxioma53Controls({
               </div>
               <label className={styles.control}>
                 <span>Mes para análisis avanzado</span>
-                <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
+                <SpanishMonthInput label="Mes para análisis avanzado" name="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
               </label>
             </div>
           )}

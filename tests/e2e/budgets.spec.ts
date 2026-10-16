@@ -226,6 +226,31 @@ async function mockCoveredBudgetSource(page: import("@playwright/test").Page) {
   });
 }
 
+test.describe("Mes de Presupuestos con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-MONTH-001 · muestra el mes en español y consulta con año-mes ISO", async ({ page }) => {
+    await mockCoveredBudgetSource(page);
+    const writes: string[] = [];
+    await page.route("**/api/budgets*", async (route) => {
+      if (route.request().method() !== "GET") writes.push(route.request().method());
+      const month = new URL(route.request().url()).searchParams.get("month") ?? "2026-07";
+      await route.fulfill({ json: snapshotForMonth(month) });
+    });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto("/budgets?month=2026-07");
+    const month = page.getByRole("group", { name: "Controles de presupuesto" }).getByLabel("Mes", { exact: true });
+    await expect(month.locator("..")).toContainText("julio de 2026");
+    await expect(month).toHaveValue("2026-07");
+    await month.fill("2026-08");
+    await expect(month.locator("..")).toContainText("agosto de 2026");
+    await expect(page).toHaveURL(/month=2026-08/);
+    await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Agosto de 2026");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+    expect(writes).toEqual([]);
+  });
+});
+
 test("budget API rejects ambiguous or invalid writes before persistence", async ({ request }) => {
   const invalidMonth = await request.get("/api/budgets?month=2026-13");
   expect(invalidMonth.status()).toBe(400);

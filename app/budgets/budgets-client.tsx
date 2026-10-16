@@ -12,6 +12,7 @@ import {
   type BudgetSnapshot,
 } from "../../src/application/budgets/budget-planning";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
+import { SpanishMonthInput } from "../../src/design/spanish-month-input";
 import { resolvePeriodCoverage, type PeriodCoverage } from "../../src/application/data-coverage";
 import { hasCompletedSourceSyncEvidence } from "../../src/application/source-sync-incidents";
 import type { SourceFreshness } from "../analysis/analysis-source-freshness";
@@ -744,8 +745,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         <div className={styles.heroControls} role="group" aria-label="Controles de presupuesto">
           <label className={styles.monthField}>
             Mes
-            <input
-              type="month"
+            <SpanishMonthInput
+              label="Mes"
               min="0001-01"
               value={month}
               onChange={(event) => {
