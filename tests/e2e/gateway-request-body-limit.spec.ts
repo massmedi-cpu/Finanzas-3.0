@@ -2,7 +2,7 @@ import { gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { publicGatewayErrorCode } from "../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicGatewayErrorCode } from "../../src/infrastructure/http/gateway-public-error";
 import {
   MAX_COMPRESSED_GATEWAY_BODY_BYTES,
   MAX_DECOMPRESSED_GATEWAY_BODY_BYTES,
@@ -124,4 +124,29 @@ test("REC-SEC-GW-003 · Análisis nunca registra texto SQL ni errores remotos si
   expect(source).not.toContain('code: error.code ?? null');
   expect(publicGatewayErrorCode(new Error("invalid_account_id"))).toBe("invalid_account_id");
   expect(publicGatewayErrorCode(new Error("PostgreSQL details: IBAN ES000000"))).toBe("gateway_error");
+});
+
+test("REC-SEC-OCR-001 · errores PDF conocidos nunca revelan mensajes del documento", () => {
+  const known = {
+    InvalidPDFException: 422,
+    PasswordException: 422,
+    ocr_worker_timeout: 503,
+  };
+  const pdf = new Error("PDF rechazado: titular privado y referencia bancaria");
+  pdf.name = "InvalidPDFException";
+  expect(knownPublicErrorCode(pdf, known)).toBe("InvalidPDFException");
+
+  const encrypted = new Error("Clave del documento: 123456");
+  encrypted.name = "PasswordException";
+  expect(knownPublicErrorCode(encrypted, known)).toBe("PasswordException");
+
+  expect(knownPublicErrorCode(new Error("ocr_worker_timeout"), known)).toBe("ocr_worker_timeout");
+  expect(knownPublicErrorCode(new Error("OCR Error: token privadísimo"), known)).toBeNull();
+  expect(knownPublicErrorCode(new Error("toString"), known)).toBeNull();
+  expect(knownPublicErrorCode({ name: "PasswordException", message: "secreto" }, known)).toBeNull();
+
+  const api = readFileSync(join(process.cwd(), "app/api/documents/ocr/route.ts"), "utf8");
+  expect(api).toContain("const code = knownPublicErrorCode(error, known)");
+  expect(api).toContain("code }, { status: known[code], headers: HEADERS }");
+  expect(api).not.toContain("code: error.message || error.name");
 });
