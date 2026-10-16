@@ -10,6 +10,7 @@ import {
   type AnalysisSnapshot,
 } from "../../src/application/analysis/analysis-engine";
 import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { resolveBudgetSourcePresentation } from "../../src/application/analysis/analysis-presentation";
 import { runAnalysisSnapshotQuery } from "../../supabase/functions/financial-app-db-gateway/analysis-query";
 
@@ -636,6 +637,7 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
     name: `Comercio de prueba ${index + 1}`,
     href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-${index + 1}`,
   }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-005 mock URL must be accepted by production contract").toBe(true);
   await loadMockAnalysis(page, snapshot);
 
   const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
@@ -662,6 +664,7 @@ test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ra
     name: `Comercio disponible ${index + 1}`,
     href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-limited-${index + 1}`,
   }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-006 mock URL must be accepted by production contract").toBe(true);
   await loadMockAnalysis(page, snapshot);
   const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
   await expect(ranking).toContainText("como máximo los 30 comercios");
