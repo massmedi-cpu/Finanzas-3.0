@@ -239,13 +239,21 @@ test.describe("Meses de Análisis con navegador en inglés", () => {
 
   test("REC-MONTH-002 · referencia y filtro avanzado muestran español y conservan año-mes ISO", async ({ page }) => {
     await mockAnalysisApi(page, mockSnapshot());
-    await page.goto("/analysis?month=2026-08&range=1m");
+    await page.goto("/analysis?month=2026-09&range=1m");
     const form = page.getByRole("form", { name: "Filtros del análisis" });
     const month = form.getByLabel("Mes de referencia");
-    await expect(month.locator("..")).toContainText("agosto de 2026");
-    await month.fill("2026-09");
     await expect(month.locator("..")).toContainText("septiembre de 2026");
+    await month.fill("2026-08");
+    await expect(month.locator("..")).toContainText("agosto de 2026");
+    const selectedRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/analysis" && url.searchParams.get("month") === "2026-08";
+    });
     await form.getByRole("button", { name: "Aplicar cambios" }).click();
+    await selectedRequest;
+    // This fixture always answers with September; the control reflects the
+    // applied response instead of pretending August was loaded.
+    await expect(month).toHaveValue("2026-09");
     await expect(page).toHaveURL(/month=2026-09/);
 
     await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
