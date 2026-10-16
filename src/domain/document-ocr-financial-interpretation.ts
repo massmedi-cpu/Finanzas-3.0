@@ -1181,12 +1181,19 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
   if (result.status === "empty") warnings.push("ocr_empty");
   if (result.status === "needs_review") warnings.push("ocr_needs_review");
 
+  // A certain-looking hour cannot be certified on a document whose issue
+  // date is contradictory or only inferred. Keep the OCR evidence for review.
+  const date = extractDate(located);
+  const extractedTime = extractTime(located);
+  const time = date.value !== null && date.trust !== "reliable"
+    ? fieldRequiringReview(extractedTime) : extractedTime;
+
   return {
     interpretationVersion: 1,
     issuer: extractIssuer(located),
     taxId: extractTaxId(located),
-    date: extractDate(located),
-    time: extractTime(located),
+    date,
+    time,
     documentNumber: extractDocumentNumber(located),
     period: extractPeriod(located),
     taxBaseCents,
