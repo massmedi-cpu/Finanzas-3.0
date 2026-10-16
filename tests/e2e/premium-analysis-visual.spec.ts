@@ -664,7 +664,7 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
     ...source,
     id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
     name: `Categoría de prueba ${index + 1}`,
-    href: `/transactions?categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
   }));
   await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
