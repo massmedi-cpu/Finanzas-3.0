@@ -14,6 +14,7 @@ on:
       - 'src/infrastructure/google/google-drive-document-discovery.ts'
       - 'src/infrastructure/http/limited-response-body.ts'
       - 'src/infrastructure/http/gateway-request-body.ts'
+      - 'src/infrastructure/http/gateway-public-error.ts'
       - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
       - 'supabase/functions/financial-app-db-gateway/index.ts'
       - 'src/application/document-drive-inventory.ts'
