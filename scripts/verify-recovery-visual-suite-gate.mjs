@@ -11,7 +11,7 @@ const cases = [
   ["tests/e2e/budgets.spec.ts", ["REC-MONTH-001"]],
   ["tests/e2e/transactions.spec.ts", ["REC-DATE-004"]],
   ["tests/e2e/forecast-horizons-integrity.spec.ts", ["REC-DATE-005"]],
-  ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001"]],
+  ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001", "REC-CHART-021"]],
   ["tests/e2e/aud-e2e-analysis-light-contrast.spec.ts", ["REC-VIS-003"]],
   ["tests/e2e/analysis-error-layout-recovery.spec.ts", ["REC-UI-ANA-016"]],
   ["tests/e2e/recovery-route-shell-responsive.spec.ts", ["REC-VIS-004"]],
