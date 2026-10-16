@@ -97,6 +97,27 @@ async function openComparison(page: Page) {
   await expect(page.getByRole("heading", { name: "Comparador", level: 1 })).toBeVisible();
 }
 
+test.describe("Fechas del Comparador con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-002 · los cuatro periodos muestran día/mes/año y conservan la consulta ISO", async ({ page }) => {
+    await page.setViewportSize({ width: 360, height: 800 });
+    await openComparison(page);
+    const form = page.getByRole("form", { name: "Periodos de comparación" });
+    const from = form.getByLabel("Desde", { exact: true });
+    const to = form.getByLabel("Hasta", { exact: true });
+    await expect(from.first().locator("..")).toContainText("01/09/2026");
+    await expect(to.first().locator("..")).toContainText("10/09/2026");
+    await expect(from.nth(1).locator("..")).toContainText("01/08/2026");
+    await expect(to.nth(1).locator("..")).toContainText("05/08/2026");
+    await from.first().fill("2026-09-02");
+    await expect(from.first().locator("..")).toContainText("02/09/2026");
+    await form.getByRole("button", { name: "Comparar periodos" }).click();
+    await expect(page).toHaveURL(/primaryFrom=2026-09-02/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  });
+});
+
 test("REC-VIS-002 · tarjetas de Comparador muestran importes completos sin cortes arbitrarios", async ({ page }) => {
   await openComparison(page);
   const value = page.locator('[class*="metricValue"]').first();

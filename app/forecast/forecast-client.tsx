@@ -26,6 +26,7 @@ import {
 import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
 import { formatNumber } from "../../src/core/formatters";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
+import { SpanishDateInput } from "../../src/design/spanish-date-input";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
@@ -773,8 +774,8 @@ export function ForecastClient({
       <section className={styles.controls} aria-label="Periodo de previsión">
         <label>
           Desde
-          <input
-            type="date"
+          <SpanishDateInput
+            label="Desde"
             value={dateFrom}
             required
             disabled={busy !== null}
@@ -788,7 +789,7 @@ export function ForecastClient({
         </label>
         <label>
           Hasta
-          <input type="date" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => { datesEditedRef.current = true; setDateTo(event.target.value); }} />
+          <SpanishDateInput label="Hasta" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => { datesEditedRef.current = true; setDateTo(event.target.value); }} />
         </label>
       </section>
 
@@ -1011,9 +1012,9 @@ export function ForecastClient({
                 <form className={styles.manualForm} onSubmit={(event) => void createManual(event)} noValidate>
                   <label>
                     Fecha
-                    <input
-                      ref={manualDateRef}
-                      type="date"
+                    <SpanishDateInput
+                      inputRef={manualDateRef}
+                      label="Fecha"
                       value={manualDate}
                       min={dateFrom}
                       max={dateTo}

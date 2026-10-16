@@ -49,6 +49,31 @@ function fixture(dateFrom: string, dateTo: string, selectedAccount: string | nul
 const horizons = (page: Page) => page.getByRole("region", { name: "Tu dinero en cuatro horizontes" });
 const twelveMonths = (page: Page) => horizons(page).getByRole("article").filter({ has: page.getByText("12 meses", { exact: true }) });
 
+test.describe("Fechas de Previsión con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-005 · periodo y fecha manual conservan presentación española y valores ISO", async ({ page }) => {
+    await page.route("**/api/forecast*", async (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      await route.fulfill({ json: fixture(query.get("dateFrom")!, query.get("dateTo")!) });
+    });
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(`/forecast?dateFrom=${from}&dateTo=${monthlyTo}&accountId=${accountId}`);
+    const period = page.getByRole("region", { name: "Periodo de previsión" });
+    const start = period.getByLabel("Desde", { exact: true });
+    const end = period.getByLabel("Hasta", { exact: true });
+    await expect(start.locator("..")).toContainText("01/10/2026");
+    await expect(end.locator("..")).toContainText("31/10/2026");
+    const manual = page.getByLabel("Fecha", { exact: true });
+    await manual.fill("2026-10-20");
+    await expect(manual.locator("..")).toContainText("20/10/2026");
+    await start.fill("2026-10-02");
+    await expect(start.locator("..")).toContainText("02/10/2026");
+    await expect(page).toHaveURL(/dateFrom=2026-10-02/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(1);
+  });
+});
+
 test("REC-HORIZON-001 · another account's annual forecast is rejected and can be reread safely", async ({ page }) => {
   let rejected = true;
   const writes: string[] = [];

@@ -213,6 +213,27 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMov
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
 
+test.describe("Fechas avanzadas de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-003 · los rangos personalizados se leen en español y se envían en ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?periodMode=custom&dateFrom=2026-09-01&dateTo=2026-09-15&compareMode=custom&compareDateFrom=2026-08-01&compareDateTo=2026-08-15");
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const from = advanced.getByLabel("Desde", { exact: true });
+    const to = advanced.getByLabel("Hasta", { exact: true });
+    await expect(from.first().locator("..")).toContainText("01/09/2026");
+    await expect(to.first().locator("..")).toContainText("15/09/2026");
+    await expect(from.nth(1).locator("..")).toContainText("01/08/2026");
+    await expect(to.nth(1).locator("..")).toContainText("15/08/2026");
+    await from.first().fill("2026-09-02");
+    await expect(from.first().locator("..")).toContainText("02/09/2026");
+    await advanced.getByRole("button", { name: "Aplicar", exact: true }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
 test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
   const snapshot = mockSnapshot();
   await mockAnalysisApi(page, snapshot);

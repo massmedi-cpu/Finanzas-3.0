@@ -24,6 +24,7 @@ import {
   type ResolvedComparisonSelection,
 } from "../../src/application/comparison/comparison-selection";
 import { comparisonModuleLinks } from "../../src/application/navigation/module-context";
+import { SpanishDateInput } from "../../src/design/spanish-date-input";
 import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisSourceFreshness, { type SourceFreshness } from "../analysis/analysis-source-freshness";
 import ComparisonLoadingFrame from "./comparison-loading-frame";
@@ -607,13 +608,13 @@ export default function ComparisonClient({
           </div>
           <fieldset className={styles.periodFieldset} disabled={pending}>
             <legend>Periodo principal</legend>
-            <label>Desde<input type="date" required max={fallbackSelection.today} value={form.primaryFrom} onChange={(event) => updateField("primaryFrom", event.target.value)} /></label>
-            <label>Hasta<input type="date" required max={fallbackSelection.today} value={form.primaryTo} onChange={(event) => updateField("primaryTo", event.target.value)} /></label>
+            <label>Desde<SpanishDateInput label="Desde" required max={fallbackSelection.today} value={form.primaryFrom} onChange={(event) => updateField("primaryFrom", event.target.value)} /></label>
+            <label>Hasta<SpanishDateInput label="Hasta" required max={fallbackSelection.today} value={form.primaryTo} onChange={(event) => updateField("primaryTo", event.target.value)} /></label>
           </fieldset>
           <fieldset className={styles.periodFieldset} disabled={pending}>
             <legend>Periodo de referencia</legend>
-            <label>Desde<input type="date" required max={fallbackSelection.today} value={form.referenceFrom} onChange={(event) => updateField("referenceFrom", event.target.value)} /></label>
-            <label>Hasta<input type="date" required max={fallbackSelection.today} value={form.referenceTo} onChange={(event) => updateField("referenceTo", event.target.value)} /></label>
+            <label>Desde<SpanishDateInput label="Desde" required max={fallbackSelection.today} value={form.referenceFrom} onChange={(event) => updateField("referenceFrom", event.target.value)} /></label>
+            <label>Hasta<SpanishDateInput label="Hasta" required max={fallbackSelection.today} value={form.referenceTo} onChange={(event) => updateField("referenceTo", event.target.value)} /></label>
           </fieldset>
           <label className={styles.accountField}>Cuenta
             <select disabled={pending} value={form.accountId} onChange={(event) => updateField("accountId", event.target.value)}>

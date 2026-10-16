@@ -246,6 +246,24 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   expect(controlsTooSmall).toBe(0);
 });
 
+test.describe("Fechas de Movimientos con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-004 · los filtros muestran día/mes/año y aplican fechas ISO", async ({ page }) => {
+    await mockTransactionApi(page);
+    await page.goto("/transactions?dateFrom=2026-09-01&dateTo=2026-09-09");
+    const form = page.getByRole("form", { name: "Filtros de movimientos" });
+    const from = form.getByLabel("Desde", { exact: true });
+    const to = form.getByLabel("Hasta", { exact: true });
+    await expect(from.locator("..")).toContainText("01/09/2026");
+    await expect(to.locator("..")).toContainText("09/09/2026");
+    await from.fill("2026-09-02");
+    await expect(from.locator("..")).toContainText("02/09/2026");
+    await form.getByRole("button", { name: "Aplicar filtros" }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
 test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas", async ({ page }) => {
   await mockTransactionApi(page);
   await page.goto("/transactions");

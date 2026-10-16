@@ -5,6 +5,10 @@ const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8
 const cases = [
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
+  ["tests/e2e/comparison-ui.spec.ts", ["REC-DATE-002"]],
+  ["tests/e2e/analysis.spec.ts", ["REC-DATE-003"]],
+  ["tests/e2e/transactions.spec.ts", ["REC-DATE-004"]],
+  ["tests/e2e/forecast-horizons-integrity.spec.ts", ["REC-DATE-005"]],
   ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001"]],
   ["tests/e2e/aud-e2e-analysis-light-contrast.spec.ts", ["REC-VIS-003"]],
   ["tests/e2e/analysis-error-layout-recovery.spec.ts", ["REC-UI-ANA-016"]],

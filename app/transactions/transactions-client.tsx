@@ -7,6 +7,7 @@ import { buildBulkTransactionPatch, type BulkReviewState } from "../../src/appli
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatInteger } from "../../src/core/formatters";
 import { formatMoneyCents } from "../../src/core/money";
+import { SpanishDateInput } from "../../src/design/spanish-date-input";
 import {
   authRecoveryFromCode,
   requestErrorCode,
@@ -1155,8 +1156,8 @@ async function saveEdit(row: TransactionRow) {
             {(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
-        <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
-        <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
+        <label><span>Desde</span><SpanishDateInput label="Desde" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
+        <label><span>Hasta</span><SpanishDateInput label="Hasta" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
         </div>
         <div className={styles.moreFiltersHeader}>
           <button
