@@ -229,7 +229,7 @@ test.describe("Fechas avanzadas de Análisis con navegador en inglés", () => {
     await expect(to.nth(1).locator("..")).toContainText("15/08/2026");
     await from.first().fill("2026-09-02");
     await expect(from.first().locator("..")).toContainText("02/09/2026");
-    await advanced.getByRole("button", { name: "Aplicar", exact: true }).click();
+    await advanced.getByRole("button", { name: "Aplicar cambios", exact: true }).click();
     await expect(page).toHaveURL(/dateFrom=2026-09-02/);
   });
 });
