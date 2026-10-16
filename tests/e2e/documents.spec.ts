@@ -405,6 +405,45 @@ test.describe("fecha documental independiente del idioma del navegador", () => {
   });
 });
 
+test.describe("hora documental independiente del idioma del navegador", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-TIME-001 · revisión OCR muestra 24 horas y conserva HH:mm al confirmar", async ({ page }) => {
+    await mockDocumentApi(page, []);
+    let submittedTime: unknown;
+    await page.route("**/api/documents/ocr-review*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      const submitted = route.request().postDataJSON() as Record<string, unknown>;
+      submittedTime = submitted.documentTime;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 2, revision: 1,
+          documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
+          rawEvidenceImmutable: true, bankSource: "read_only",
+          financialWrites: false, requiresHumanReview: true,
+          reviewedValues: { ...submitted },
+        }),
+      });
+    });
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+    const panel = page.getByTestId("ocr-review-panel");
+    await panel.getByRole("button", { name: "Analizar documento" }).click();
+    const review = panel.getByTestId("ocr-confirmation-form");
+    const time = review.getByLabel("Hora", { exact: true });
+    await expect(time).toHaveValue("");
+    await expect(time.locator("..")).toContainText("hh:mm");
+    await time.fill("21:05");
+    await expect(time).toHaveValue("21:05");
+    await expect(time.locator("..")).toContainText("21:05");
+    await expect(time.locator("..")).toContainText("24 h");
+    await review.getByRole("button", { name: "Confirmar revisión" }).click();
+    await expect(panel.getByText("Guardada como revisión 1.")).toBeVisible();
+    expect(submittedTime).toBe("21:05");
+  });
+});
+
 test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);

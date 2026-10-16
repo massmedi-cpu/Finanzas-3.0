@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
 const cases = [
-  ["tests/e2e/documents.spec.ts", ["REC-DOC-139"]],
+  ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-DATE-002"]],
   ["tests/e2e/analysis.spec.ts", ["REC-DATE-003"]],
