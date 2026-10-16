@@ -44,6 +44,11 @@ function isSafeTransactionHref(value: unknown): value is string {
     if (!dateFrom || !dateTo
       || !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)
       || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)
+      || dateFrom > dateTo
+      || ![dateFrom, dateTo].every((day) => {
+        const parsed = new Date(`${day}T12:00:00Z`);
+        return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day;
+      })
       || params.get("kind") !== "expense") return false;
     if (params.has("merchantId") && params.has("categoryId")) return false;
     if (params.has("uncategorized") && (params.get("uncategorized") !== "true"
