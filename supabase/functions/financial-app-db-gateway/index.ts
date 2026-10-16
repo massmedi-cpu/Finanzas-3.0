@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
   try {
     identity = await verifyVercel(req);
   } catch (error) {
-    console.error("financial-app-db-gateway-auth", error instanceof Error ? error.message : String(error));
+    console.error("financial-app-db-gateway-auth", publicGatewayErrorCode(error));
     return json({ error: "unauthorized" }, 401);
   }
 
@@ -167,8 +167,9 @@ Deno.serve(async (req) => {
   try {
     body = await readGatewayJsonBody(req);
   } catch (error) {
-    console.error("financial-app-db-gateway-body", error instanceof Error ? error.message : String(error));
-    return json({ error: error instanceof Error ? error.message : "invalid_gateway_body" }, 400);
+    const code = publicGatewayErrorCode(error);
+    console.error("financial-app-db-gateway-body", code);
+    return json({ error: code }, 400);
   }
   const action = body?.action;
   const payload = body?.payload ?? {};
