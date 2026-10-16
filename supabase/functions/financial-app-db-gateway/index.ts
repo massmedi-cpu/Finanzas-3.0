@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { readGatewayJsonBody } from "../../../src/infrastructure/http/gateway-request-body.ts";
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error.ts";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleBudgetLogicAction } from "./budget-logic.ts";
@@ -312,8 +313,10 @@ Deno.serve(async (req) => {
     if (error instanceof WorkspaceContextError) {
       return json({ error: error.code }, error.status);
     }
-    console.error("financial-app-db-gateway", error instanceof Error ? error.message : String(error));
-    return json({ error: error instanceof Error ? error.message : "gateway_error" }, 400);
+    const code = publicGatewayErrorCode(error);
+    // SQL errors may include private values: log/return only bounded codes.
+    console.error("financial-app-db-gateway", code);
+    return json({ error: code }, 400);
   } finally {
     await sql.end({ timeout: 1 });
   }
