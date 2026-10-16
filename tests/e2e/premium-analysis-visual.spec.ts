@@ -188,6 +188,11 @@ test("REC-CHART-021 · Análisis enlaza días observados y comercios a los movim
   );
   await expect(merchants.locator("..").getByRole("link", { name: "Gasolinera", exact: true }))
     .toHaveAttribute("href", /merchantId=44444444-4444-4444-8444-444444444444$/);
+  // Tappable and keyboard-accessible in both themes, without tiny SVG dots.
+  await expect(merchant).toBeVisible();
+  expect(await merchant.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await merchant.focus();
+  await expect(merchant).toBeFocused();
 });
 
 for (const width of WIDTHS) {
