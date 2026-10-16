@@ -1979,7 +1979,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                       Cambios de metadatos sin guardar. Guárdalos antes de cambiar de documento o salir.
                     </div>
                   ) : null}
-                  <div className={styles.formGrid}>
+                  <div className={`${styles.formGrid} ${styles.metadataGrid}`}>
                     <label>Tipo<select disabled={busy !== null} value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
                     <SpanishDateField disabled={busy !== null} value={editor.documentDate} onChange={(documentDate) => setEditor((value) => ({ ...value, documentDate }))} />
                     <label>Emisor<input disabled={busy !== null} value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>

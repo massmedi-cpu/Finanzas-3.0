@@ -247,6 +247,13 @@
   container-name: document-detail;
   container-type: inline-size;
 }
+/* REC-UI-DOC-013 · Reserve the date's full DD/MM/AAAA text, calendar and
+ * clear button before the other metadata fields take their share. */
+@container document-detail (min-width: 44rem) {
+  .metadataGrid {
+    grid-template-columns: minmax(7rem, .8fr) minmax(13rem, 1.35fr) minmax(9rem, 1.2fr) minmax(7rem, .85fr);
+  }
+}
 @container document-detail (max-width: 44rem) {
   .formGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .subsectionHeading, .detailHeader { flex-wrap: wrap; }

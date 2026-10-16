@@ -403,6 +403,32 @@ test.describe("fecha documental independiente del idioma del navegador", () => {
     await expect(review.locator("output")).toHaveText("23/11/2026");
     expect(writes.filter((write) => write.action === "metadata")).toHaveLength(2);
   });
+
+  test("REC-DOC-140 · la fecha completa no se cruza con el calendario en la ficha", async ({ page }) => {
+    await mockDocumentApi(page, []);
+    await page.setViewportSize({ width: 1366, height: 900 });
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+    const date = page.locator("form").filter({ has: page.getByRole("button", { name: "Guardar metadatos" }) })
+      .getByLabel("Fecha", { exact: true });
+    await expect(date).toHaveValue("2026-09-02");
+
+    for (const width of [1366, 1024, 360]) {
+      await page.setViewportSize({ width, height: 900 });
+      const placement = await date.locator("..").evaluate((control) => {
+        const display = control.querySelector("output[aria-live]");
+        const calendar = control.querySelector('svg[data-product-icon="calendar"]');
+        if (!display || !calendar) throw new Error("date control incomplete");
+        const text = display.getBoundingClientRect();
+        const icon = calendar.getBoundingClientRect();
+        const box = control.getBoundingClientRect();
+        return { textRight: text.right, iconLeft: icon.left, iconRight: icon.right, boxRight: box.right };
+      });
+      expect(placement.textRight + 4, `La fecha se solapa con el icono a ${width}px`).toBeLessThanOrEqual(placement.iconLeft);
+      expect(placement.iconRight, `El icono se sale del campo a ${width}px`).toBeLessThanOrEqual(placement.boxRight);
+      await expect(date.locator("..").locator("output")).toHaveText("02/09/2026");
+    }
+  });
 });
 
 test.describe("hora documental independiente del idioma del navegador", () => {
