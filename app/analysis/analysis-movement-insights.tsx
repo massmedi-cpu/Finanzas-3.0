@@ -530,7 +530,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
                   <title>{`${row.name} · ${row.rows} movimientos · media ${formatMoney(row.averageCents ?? 0)} · total ${formatMoney(row.expenseCents)}`}</title>
                 </circle>
                 {index < 5 && (
-                  <text className={styles.pointLabel} x={x > width / 2 ? x - radius - 5 : x + radius + 5} y={Math.max(top + 11, y - 5)} textAnchor={x > width / 2 ? "end" : "start"}>{truncateLabel(row.name, width < 480 ? 13 : 17)}</text>
+                  <text className={styles.pointLabel} x={x > width / 2 ? x - radius - 5 : x + radius + 5} y={Math.max(top + 11, y - 5)} textAnchor={x > width / 2 ? "end" : "start"}>{truncateLabel(row.name, width < 300 ? 13 : 17)}</text>
                 )}
               </g>
             );
