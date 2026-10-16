@@ -2,6 +2,7 @@ import { gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { publicGatewayErrorCode } from "../../src/infrastructure/http/gateway-public-error";
 import {
   MAX_COMPRESSED_GATEWAY_BODY_BYTES,
   MAX_DECOMPRESSED_GATEWAY_BODY_BYTES,
@@ -76,4 +77,35 @@ test("REC-GATEWAY-MEM-005 · deployed Edge entrypoint calls the bounded request 
   expect(edge).toContain("body = await readGatewayJsonBody(req)");
   expect(edge).not.toContain("await req.arrayBuffer()");
   expect(edge).not.toContain("gunzipSync(");
+});
+
+test("REC-SEC-GW-002 · SQL details and private values never become public gateway errors", () => {
+  for (const code of [
+    "invalid_account_id", "document_storage_unavailable",
+    "workspace_owner_required", "google_oauth_store_failed",
+    "duplicate_ordered_ids", "unsupported_action",
+  ]) {
+    expect(publicGatewayErrorCode(new Error(code))).toBe(code);
+  }
+  for (const unsafe of [
+    "duplicate key value violates unique constraint \"accounts_pkey\" (IBAN ES7620...)",
+    "PostgresError: connection to db.btzukbfesxdratqnxuoj.supabase.co failed",
+    "Bearer confidential_token_123",
+    "invalid_account_1234567890123456789012",
+    "invalid_account_id; SELECT * FROM financial_app.transactions",
+    "invalid_account_id\\nBanco: Saldo privado 2.000 €",
+    "google_oauth_store_failed: refresh_token=secret-value",
+    "invalid_account_" + "a".repeat(90),
+  ]) {
+    expect(publicGatewayErrorCode(new Error(unsafe)), unsafe).toBe("gateway_error");
+  }
+  expect(publicGatewayErrorCode({ message: "invalid_account_id" })).toBe("gateway_error");
+  expect(publicGatewayErrorCode(null)).toBe("gateway_error");
+
+  const edge = readFileSync(join(process.cwd(),
+    "supabase/functions/financial-app-db-gateway/index.ts"), "utf8");
+  expect(edge).toContain("const code = publicGatewayErrorCode(error)");
+  expect(edge).toContain("return json({ error: code }, 400)");
+  expect(edge).not.toContain('error instanceof Error ? error.message : String(error)');
+  expect(edge).not.toContain('return json({ error: error instanceof Error ? error.message');
 });
