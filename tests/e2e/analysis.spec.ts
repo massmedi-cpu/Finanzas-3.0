@@ -634,7 +634,7 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
     ...template,
     id: `merchant-${index + 1}`,
     name: `Comercio de prueba ${index + 1}`,
-    href: `/transactions?merchantId=merchant-${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-${index + 1}`,
   }));
   await loadMockAnalysis(page, snapshot);
 
@@ -646,7 +646,7 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
   await expect(ranking.getByRole("listitem")).toHaveCount(18);
   await expect(ranking.getByRole("link", { name: "Ver movimientos de Comercio de prueba 18" })).toHaveAttribute(
     "href",
-    "/transactions?merchantId=merchant-18",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-18",
   );
   await expect(ranking.getByRole("button", { name: "Ver menos" })).toHaveAttribute("aria-expanded", "true");
   await ranking.getByRole("button", { name: "Ver menos" }).click();
@@ -660,7 +660,7 @@ test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ra
     ...template,
     id: `merchant-limited-${index + 1}`,
     name: `Comercio disponible ${index + 1}`,
-    href: `/transactions?merchantId=merchant-limited-${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-limited-${index + 1}`,
   }));
   await loadMockAnalysis(page, snapshot);
   const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
