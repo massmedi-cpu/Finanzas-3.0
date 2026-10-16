@@ -11,3 +11,19 @@ export function publicGatewayErrorCode(error: unknown): string {
     ? message
     : "gateway_error";
 }
+
+
+/**
+ * Never return the message of a third-party exception just because its
+ * *name* matches a known failure. The response code must itself be an exact
+ * member of the route's public allowlist.
+ */
+export function knownPublicErrorCode(
+  error: unknown,
+  statuses: Readonly<Record<string, number>>,
+): string | null {
+  if (!(error instanceof Error)) return null;
+  if (Object.prototype.hasOwnProperty.call(statuses, error.message)) return error.message;
+  if (Object.prototype.hasOwnProperty.call(statuses, error.name)) return error.name;
+  return null;
+}
