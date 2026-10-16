@@ -5,6 +5,7 @@ import {
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 import { sourceConnectionFileId, syncSummary } from "../../../../src/application/source-freshness-summary";
+import { publicGatewayErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
 
 export { syncSummary };
 export const dynamic = "force-dynamic";
@@ -40,10 +41,11 @@ function transactionDate(payload: unknown) {
 
 function logGatewayFailure(scope: string, error: unknown) {
   if (error instanceof PersistenceGatewayError) {
-    console.warn(scope, { status: error.status, code: error.code ?? null });
+    // Older gateway deployments may return arbitrary remote error text.
+    console.warn(scope, { status: error.status, code: publicGatewayErrorCode(new Error(error.code ?? "gateway_error")) });
     return;
   }
-  console.warn(scope, error instanceof Error ? error.message : String(error));
+  console.warn(scope, { code: publicGatewayErrorCode(error) });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
