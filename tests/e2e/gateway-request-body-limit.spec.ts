@@ -106,6 +106,9 @@ test("REC-SEC-GW-002 · SQL details and private values never become public gatew
     "supabase/functions/financial-app-db-gateway/index.ts"), "utf8");
   expect(edge).toContain("const code = publicGatewayErrorCode(error)");
   expect(edge).toContain("return json({ error: code }, 400)");
+  expect(edge).toContain('console.error("financial-app-db-gateway-auth", publicGatewayErrorCode(error))');
+  expect(edge).toContain('console.error("financial-app-db-gateway-body", code)');
+  expect(edge).not.toContain('return json({ error: error instanceof Error ? error.message');
   expect(edge).not.toContain('error instanceof Error ? error.message : String(error)');
   expect(edge).not.toContain('return json({ error: error instanceof Error ? error.message');
 });
