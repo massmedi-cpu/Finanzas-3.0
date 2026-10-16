@@ -154,6 +154,42 @@ const SNAPSHOT = buildAnalysisSnapshot({
   gateway: GATEWAY,
 });
 
+// REC-CHART-021 · Visible drilldowns from the actual chart data use only the
+// observed day or the known merchant identity. Synthetic data; no bank writes.
+test("REC-CHART-021 · Análisis enlaza días observados y comercios a los movimientos correctos", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+
+  const daily = page.getByText("Ver datos diarios", { exact: true });
+  await daily.click();
+  await expect(daily.locator("..").getByRole("link", { name: "1 sept", exact: true }))
+    .toHaveAttribute("href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-01&kind=expense");
+  const noActivity = daily.locator("..").getByRole("row", { name: /^2 sept / });
+  await expect(noActivity).toBeVisible();
+  await expect(noActivity.getByRole("link")).toHaveCount(0);
+
+  const merchants = page.getByText("Ver datos de comercios", { exact: true });
+  await merchants.click();
+  const merchant = merchants.locator("..").getByRole("link", { name: "Mercado Central", exact: true });
+  await expect(merchant).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=22222222-2222-4222-8222-222222222222",
+  );
+  await expect(merchants.locator("..").getByRole("link", { name: "Gasolinera", exact: true }))
+    .toHaveAttribute("href", /merchantId=44444444-4444-4444-8444-444444444444$/);
+});
+
 for (const width of WIDTHS) {
   test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }, testInfo) => {
     await page.route("**/api/analysis**", async (route) => {
