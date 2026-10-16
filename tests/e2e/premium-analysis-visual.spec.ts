@@ -5,6 +5,7 @@ import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
 } from "../../src/application/analysis/analysis-engine";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 
 const WIDTHS = [360, 430, 768, 1024, 1280, 1440] as const;
 
@@ -666,6 +667,7 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
     name: `Categoría de prueba ${index + 1}`,
     href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
   }));
+  expect(isAnalysisSnapshot(expandedSnapshot), "AUD-E2E-ANA-001 category fixture must pass the production snapshot contract").toBe(true);
   await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
   await page.route("**/api/analysis/source-freshness", (route) =>
