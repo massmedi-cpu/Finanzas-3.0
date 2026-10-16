@@ -564,6 +564,36 @@ test("REC-OCR-179 · una fecha imposible no certifica su hora de compra", () => 
   }
 });
 
+test("REC-OCR-180 · la hora no puede parecer fiable si hay fechas de emisión contradictorias", () => {
+  const contradictory = interpretDocumentOcrFinancially(result([
+    line("date-one", "FECHA/HORA: 2026-10-11 19:35", 0.99, 0.10),
+    line("date-two", "FECHA/HORA: 12/10/2026 19:35", 0.99, 0.20),
+  ]));
+  expect(contradictory.date.trust).toBe("doubtful");
+  expect(contradictory.time.value).toBe("19:35");
+  expect(contradictory.time.trust).toBe("doubtful");
+  expect(contradictory.time.evidence.length).toBeGreaterThan(0);
+
+  const separate = interpretDocumentOcrFinancially(result([
+    line("date-one", "Fecha de emisión: 11/10/2026", 0.99, 0.10),
+    line("date-two", "Fecha de emisión: 12/10/2026", 0.99, 0.20),
+    line("purchase-time", "Hora de compra: 19:35", 0.99, 0.30),
+  ]));
+  expect(separate.date.trust).toBe("doubtful");
+  expect(separate.time.value).toBe("19:35");
+  expect(separate.time.trust).toBe("doubtful");
+  expect(separate.time.evidence[0]?.lineId).toBe("purchase-time");
+
+  const consistent = interpretDocumentOcrFinancially(result([
+    line("date-one", "FECHA/HORA: 2026-10-11 19:35", 0.99, 0.10),
+    line("date-two", "FECHA/HORA: 11/10/2026 19:35", 0.99, 0.20),
+  ]));
+  expect(consistent.date.value).toBe("2026-10-11");
+  expect(consistent.date.trust).toBe("reliable");
+  expect(consistent.time.value).toBe("19:35");
+  expect(consistent.time.trust).toBe("reliable");
+});
+
 test("REC-OCR-107 · vencimiento en la misma línea no oculta una emisión explícita", () => {
   const observed = interpretDocumentOcrFinancially(result([
     line("datetime", "Fecha de emisión: 11/10/2026 15:20 · Vencimiento: 24/10/2026", 0.96, 0.12),
