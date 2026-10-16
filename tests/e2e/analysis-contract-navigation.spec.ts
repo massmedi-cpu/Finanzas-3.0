@@ -155,6 +155,46 @@ test("Análisis · el cliente acepta sólo snapshots completos, reconciliados y 
   })).toBe(false);
 });
 
+test("REC-SEC-ANA-001 · Análisis rechaza enlaces externos, parámetros ambiguos y destinos inseguros", () => {
+  const href = "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&merchantId=22222222-2222-4222-8222-222222222222";
+  const merchant = {
+    id: "22222222-2222-4222-8222-222222222222", name: "Comercio de prueba",
+    expenseCents: 1200, previousExpenseCents: 1000, deltaCents: 200,
+    changeBps: 2000, shareBps: 280, rows: 2, previousRows: 2,
+    averageCents: 600, habitualAverageCents: 500, habitualRows: 4,
+    habitualVariationBps: 2000, href,
+  };
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, merchantDrivers: [merchant] })).toBe(true);
+  expect(isAnalysisSnapshot({
+    ...VALID_SNAPSHOT,
+    categoryDrivers: [{ ...merchant, id: null, href:
+      "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&uncategorized=true" }],
+  })).toBe(true);
+
+  const unsafe = [
+    "javascript:alert(1)",
+    "https://example.org/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense",
+    "//example.org/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense",
+    `${href}&kind=expense`,
+    `${href}&redirect=https%3A%2F%2Fexample.org`,
+    `${href}#outside`,
+    href.replace("kind=expense", "kind=income"),
+    "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&uncategorized=false",
+    "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&merchantId=x&categoryId=y",
+  ];
+  for (const candidate of unsafe) {
+    expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, merchantDrivers: [{ ...merchant, href: candidate }] }), candidate).toBe(false);
+  }
+  const anomaly = {
+    transactionId: "tx-1", bankDate: "2026-08-10", amountCents: -2000,
+    merchantId: merchant.id, merchantName: merchant.name,
+    categoryId: null, categoryName: "Sin categoría", conceptNormalized: "Compra",
+    habitualCents: 1500, historyRows: 4, variationBps: 100, href,
+  };
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, anomalies: [anomaly] })).toBe(true);
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, anomalies: [{ ...anomaly, href: "javascript:alert(1)" }] })).toBe(false);
+});
+
 test("Análisis v5 · el shell compartido queda fuera de la espera del snapshot financiero", () => {
   const pageSource = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
   const layoutSource = readFileSync(resolve(process.cwd(), "app/layout.tsx"), "utf8");
