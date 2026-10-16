@@ -574,7 +574,7 @@ function extractTime(lines: LocatedLine[]) {
   const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
   // Receipt printers frequently put date and time on one line, labelled
   // FECHA/HORA or FECHA Y HORA. Prefer that timestamp, not opening hours.
-  const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
+  const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
   let unknown: OcrInterpretedField<string> | null = null;
   let issueTime: OcrInterpretedField<string> | null = null;
   let contradictoryIssueTimes = false;
