@@ -19,6 +19,7 @@ const cases = [
   ["tests/e2e/cash-flow-theme-contrast.spec.ts", ["REC-VIS-005"]],
   // These backend-integrity regressions must run, not merely exist in Git.
   ["tests/e2e/financial-api-query-guards.spec.ts", ["REC-OBS-001"]],
+  ["tests/e2e/gateway-request-body-limit.spec.ts", ["REC-SEC-GW-002"]],
   ["tests/e2e/document-ocr-financial-interpretation.spec.ts", [
     "REC-OCR-150", "REC-OCR-151", "REC-OCR-152",
     "REC-OCR-153", "REC-OCR-154", "REC-OCR-155",
@@ -60,6 +61,7 @@ assert.ok(workflow.includes("'scripts/test-drive-atomic-batch.mjs'"), "Changing 
 assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-discovery-integrity.mjs"), "Drive discovery pagination tests must execute as early gate");
 assert.ok(workflow.includes("'src/infrastructure/google/google-drive-document-discovery.ts'"), "Discovery code changes must trigger CI");
 assert.ok(workflow.includes("'src/application/analysis/analysis-contract.ts'"), "Analysis contract changes must retrigger the security browser gate");
+assert.ok(workflow.includes("'src/infrastructure/http/gateway-public-error.ts'"), "Gateway error sanitization changes must retrigger the browser security gate");
 assert.ok(workflow.includes("'scripts/test-drive-discovery-integrity.mjs'"), "Discovery test changes must trigger CI");
 // A passing browser job is not independently reviewable unless its screenshots
 // and failure traces survive the ephemeral CI runner. The first Playwright command
