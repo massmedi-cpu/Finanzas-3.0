@@ -21,6 +21,7 @@ on:
       - 'src/application/document-ocr-confirmation-integrity.ts'
       - 'src/application/dashboard/dashboard-envelope-integrity.ts'
       - 'src/application/dashboard/dashboard-source-safety.ts'
+      - 'src/application/analysis/analysis-contract.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
       - 'scripts/test-document-drive-inventory.mjs'
       - 'scripts/test-drive-atomic-batch.mjs'
@@ -147,6 +148,7 @@ jobs:
           tests/e2e/recurrences.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
+          tests/e2e/analysis-contract-navigation.spec.ts
           tests/e2e/analysis-error-layout-recovery.spec.ts
           tests/e2e/aud-e2e-analysis-light-contrast.spec.ts
           tests/e2e/analysis.spec.ts
