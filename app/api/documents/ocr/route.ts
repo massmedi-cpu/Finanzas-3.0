@@ -23,6 +23,8 @@ import {
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
+import { knownPublicErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -353,8 +355,8 @@ function apiError(error: unknown) {
       InvalidPDFException: 422,
       PasswordException: 422,
     };
-    const status = known[error.message] ?? known[error.name];
-    if (status) return Response.json({ error: "ocr_failed", code: error.message || error.name }, { status, headers: HEADERS });
+    const code = knownPublicErrorCode(error, known);
+    if (code) return Response.json({ error: "ocr_failed", code }, { status: known[code], headers: HEADERS });
   }
   console.error("document-ocr-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
