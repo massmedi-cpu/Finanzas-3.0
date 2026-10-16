@@ -57,6 +57,14 @@ function periodHref(snapshot: AnalysisSnapshot) {
   return `/transactions?${params.toString()}`;
 }
 
+// AP5 · The detail link follows the precise day and account represented by a
+// chart observation. Empty observed days are not clickable financial evidence.
+function dailyExpenseHref(snapshot: AnalysisSnapshot, date: string) {
+  const params = new URLSearchParams({ dateFrom: date, dateTo: date, kind: "expense" });
+  if (snapshot.selection.accountId) params.set("accountId", snapshot.selection.accountId);
+  return `/transactions?${params.toString()}`;
+}
+
 function transactionHref(snapshot: AnalysisSnapshot, row: AnalysisSnapshot["topTransactions"][number]) {
   const params = new URLSearchParams({
     dateFrom: row.bankDate,
@@ -95,7 +103,7 @@ function ChartData({
 }: {
   label: string;
   columns: string[];
-  rows: { key: string; cells: string[] }[];
+  rows: { key: string; cells: Array<string | { label: string; href: string }> }[];
 }) {
   return (
     <details className={styles.chartData}>
@@ -105,7 +113,11 @@ function ChartData({
         <table className={columns.length > 3 ? styles.wideData : undefined}>
           <thead><tr>{columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr></thead>
           <tbody>{rows.map((row) => (
-            <tr key={row.key}>{row.cells.map((cell, index) => <td key={columns[index]}>{cell}</td>)}</tr>
+            <tr key={row.key}>{row.cells.map((cell, index) => (
+              <td key={columns[index]}>
+                {typeof cell === "string" ? cell : <Link prefetch={false} href={cell.href}>{cell.label}</Link>}
+              </td>
+            ))}</tr>
           ))}</tbody>
         </table>
       </div>
@@ -248,7 +260,11 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
         columns={["Fecha", "Gasto", "Movimientos"]}
         rows={rows.map((row) => ({
           key: row.date,
-          cells: [formatDate(row.date), formatMoney(row.expenseCents), formatInteger(row.rows)],
+          cells: [
+            row.hasActivity ? { label: formatDate(row.date), href: dailyExpenseHref(snapshot, row.date) } : formatDate(row.date),
+            formatMoney(row.expenseCents),
+            formatInteger(row.rows),
+          ],
         }))}
       />
     </div>
@@ -514,7 +530,12 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
         columns={["Comercio", "Compras", "Media", "Gasto"]}
         rows={rows.map((row) => ({
           key: `${row.id ?? "none"}-${row.name}`,
-          cells: [row.name, formatInteger(row.rows), formatMoney(row.averageCents ?? 0), formatMoney(row.expenseCents)],
+          cells: [
+            row.href ? { label: row.name, href: row.href } : row.name,
+            formatInteger(row.rows),
+            formatMoney(row.averageCents ?? 0),
+            formatMoney(row.expenseCents),
+          ],
         }))}
       />
     </div>
