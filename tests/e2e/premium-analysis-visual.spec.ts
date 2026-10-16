@@ -196,6 +196,34 @@ test("REC-CHART-021 · Análisis enlaza días observados y comercios a los movim
   await expect(merchant).toBeFocused();
 });
 
+// REC-VIS-006 · Based on the retained 360px merchant chart screenshot:
+// ordinary merchant names must not be shortened when the SVG has room.
+test("REC-VIS-006 · el gráfico móvil conserva Mercado Central sin cortar el nombre", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.route("**/api/analysis**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) }));
+  await page.route("**/api/analysis/source-freshness", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
+    }) }));
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+  const plot = page.getByRole("region", { name: "Gráfica de comercios" }).locator("svg");
+  await expect(plot).toBeVisible();
+  await expect.poll(() => plot.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width)).toBeLessThan(480);
+  const label = plot.locator("text").filter({ hasText: /^Mercado Central$/ });
+  await expect(label).toHaveText("Mercado Central");
+  const bounds = await label.evaluate((node) => {
+    const box = (node as SVGGraphicsElement).getBBox();
+    const root = node.ownerSVGElement!;
+    return { left: box.x, right: box.x + box.width, total: root.viewBox.baseVal.width };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.total);
+});
+
 for (const width of WIDTHS) {
   test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }, testInfo) => {
     await page.route("**/api/analysis**", async (route) => {
