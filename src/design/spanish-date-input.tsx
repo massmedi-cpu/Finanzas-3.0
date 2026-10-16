@@ -24,7 +24,7 @@ export function SpanishDateInput({ label, value, onChange, inputRef, "aria-descr
 
   return (
     <div className={styles.dateControl}>
-      <output id={displayId} className={value ? styles.value : styles.placeholder} aria-live="polite">{display}</output>
+      <span id={displayId} className={value ? styles.value : styles.placeholder} aria-live="polite">{display}</span>
       <ProductIcon name="calendar" className={styles.calendarIcon} />
       <input
         {...props}
