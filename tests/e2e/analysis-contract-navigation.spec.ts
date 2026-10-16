@@ -179,6 +179,9 @@ test("REC-SEC-ANA-001 · Análisis rechaza enlaces externos, parámetros ambiguo
     `${href}&redirect=https%3A%2F%2Fexample.org`,
     `${href}#outside`,
     href.replace("kind=expense", "kind=income"),
+    href.replace("2026-03-01", "2026-02-30"),
+    href.replace("2026-08-31", "2026-08-32"),
+    href.replace("dateFrom=2026-03-01", "dateFrom=2026-10-01"),
     "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&uncategorized=false",
     "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&merchantId=x&categoryId=y",
   ];
