@@ -112,3 +112,16 @@ test("REC-SEC-GW-002 · SQL details and private values never become public gatew
   expect(edge).not.toContain('error instanceof Error ? error.message : String(error)');
   expect(edge).not.toContain('return json({ error: error instanceof Error ? error.message');
 });
+
+
+test("REC-SEC-GW-003 · Análisis nunca registra texto SQL ni errores remotos sin filtrar", () => {
+  const source = readFileSync(join(process.cwd(),
+    "app/api/analysis/source-freshness/route.ts"), "utf8");
+  expect(source).toContain('import { publicGatewayErrorCode }');
+  expect(source).toContain('code: publicGatewayErrorCode(error)');
+  expect(source).toContain('publicGatewayErrorCode(new Error(error.code ?? "gateway_error"))');
+  expect(source).not.toContain('error instanceof Error ? error.message : String(error)');
+  expect(source).not.toContain('code: error.code ?? null');
+  expect(publicGatewayErrorCode(new Error("invalid_account_id"))).toBe("invalid_account_id");
+  expect(publicGatewayErrorCode(new Error("PostgreSQL details: IBAN ES000000"))).toBe("gateway_error");
+});
