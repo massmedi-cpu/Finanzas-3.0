@@ -65,6 +65,19 @@ function dailyExpenseHref(snapshot: AnalysisSnapshot, date: string) {
   return `/transactions?${params.toString()}`;
 }
 
+// Construct local, encoded URLs from verified analysis fields; never render an
+// untrusted href from a network snapshot as an actionable chart link.
+function merchantExpenseHref(snapshot: AnalysisSnapshot, merchantId: string) {
+  const params = new URLSearchParams({
+    dateFrom: snapshot.selection.dateFrom,
+    dateTo: snapshot.selection.dateTo,
+    kind: "expense",
+    merchantId,
+  });
+  if (snapshot.selection.accountId) params.set("accountId", snapshot.selection.accountId);
+  return `/transactions?${params.toString()}`;
+}
+
 function transactionHref(snapshot: AnalysisSnapshot, row: AnalysisSnapshot["topTransactions"][number]) {
   const params = new URLSearchParams({
     dateFrom: row.bankDate,
@@ -531,7 +544,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
         rows={rows.map((row) => ({
           key: `${row.id ?? "none"}-${row.name}`,
           cells: [
-            row.href ? { label: row.name, href: row.href } : row.name,
+            row.id ? { label: row.name, href: merchantExpenseHref(snapshot, row.id) } : row.name,
             formatInteger(row.rows),
             formatMoney(row.averageCents ?? 0),
             formatMoney(row.expenseCents),
