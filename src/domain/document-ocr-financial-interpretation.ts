@@ -568,13 +568,29 @@ function extractDate(lines: LocatedLine[]) {
   return unlabelled ?? emptyField<string>();
 }
 
+// An ISO/Spanish date printed alongside an issue time must be a real
+// calendar day before the paired time can be certified as reliable.
+function isRealPrintedTimestampDate(value: string) {
+  const iso = value.match(/^(\d{4})([-./])(\d{1,2})\2(\d{1,2})$/);
+  const spanish = iso ? null : value.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
+  if (!iso && !spanish) return false;
+  const day = Number(iso?.[4] ?? spanish?.[1]);
+  const month = Number(iso?.[3] ?? spanish?.[2]);
+  const printedYear = iso?.[1] ?? spanish?.[3] ?? "";
+  const year = Number(printedYear.length === 2 ? "20" + printedYear : printedYear);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day;
+}
+
 function extractTime(lines: LocatedLine[]) {
   const pattern = /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/;
   const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas|vencimiento|caducidad|vigencia|plazo\s+de\s+pago)\b/;
   const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
   // Receipt printers frequently put date and time on one line, labelled
   // FECHA/HORA or FECHA Y HORA. Prefer that timestamp, not opening hours.
-  const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*(?:\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
+  const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*(\d{4}[-./]\d{1,2}[-./]\d{1,2}|\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4})\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
   let unknown: OcrInterpretedField<string> | null = null;
   let issueTime: OcrInterpretedField<string> | null = null;
   let contradictoryIssueTimes = false;
@@ -582,13 +598,17 @@ function extractTime(lines: LocatedLine[]) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
     const normalized = normalizeToken(item.line.text);
-    if (unrelated.test(normalized) && !issueTimestamp.test(normalized)
+    const issueTimestampMatch = normalized.match(issueTimestamp);
+    if (unrelated.test(normalized) && !issueTimestampMatch
       && !explicitTime.test(normalized)) continue;
     const candidate = fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
-    if (explicitTime.test(normalized) || issueTimestamp.test(normalized)) {
-      // A continuation page may contain legal timetables or timestamps.
-      // Textually clear does not prove this is the transaction time.
-      const attributed = item.pageNumber > 1 ? fieldRequiringReview(candidate) : candidate;
+    if (explicitTime.test(normalized) || issueTimestampMatch) {
+      // A continuation page or impossible printed issue date cannot establish
+      // a reliable time even when its OCR characters are high confidence.
+      const doubtfulPrintedDate = issueTimestampMatch !== null
+        && !isRealPrintedTimestampDate(issueTimestampMatch[1]);
+      const attributed = item.pageNumber > 1 || doubtfulPrintedDate
+        ? fieldRequiringReview(candidate) : candidate;
       if (issueTime && issueTime.value !== attributed.value) {
         contradictoryIssueTimes = true;
         if (issueTime.trust !== "reliable" && attributed.trust === "reliable") {
