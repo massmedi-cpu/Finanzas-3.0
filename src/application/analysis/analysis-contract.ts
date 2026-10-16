@@ -26,6 +26,37 @@ function isNullableString(value: unknown) {
   return value === null || typeof value === "string";
 }
 
+// AP1 · API-provided drilldown paths are untrusted. Navigation may only lead
+// to the local transaction list with one coherent set of safe filter keys.
+function isSafeTransactionHref(value: unknown): value is string {
+  if (typeof value !== "string" || !value.startsWith("/transactions?")) return false;
+  try {
+    const parsed = new URL(value, "https://financial-app.invalid");
+    if (parsed.origin !== "https://financial-app.invalid"
+      || parsed.pathname !== "/transactions"
+      || parsed.hash !== "") return false;
+    const params = parsed.searchParams;
+    const allowed = new Set(["dateFrom", "dateTo", "kind", "accountId", "categoryId", "merchantId", "uncategorized"]);
+    const keys = [...params.keys()];
+    if (keys.some((key) => !allowed.has(key) || params.getAll(key).length !== 1)) return false;
+    const dateFrom = params.get("dateFrom");
+    const dateTo = params.get("dateTo");
+    if (!dateFrom || !dateTo
+      || !/^\d{4}-\d{2}-\d{2}$/.test(dateFrom)
+      || !/^\d{4}-\d{2}-\d{2}$/.test(dateTo)
+      || params.get("kind") !== "expense") return false;
+    if (params.has("merchantId") && params.has("categoryId")) return false;
+    if (params.has("uncategorized") && (params.get("uncategorized") !== "true"
+      || params.has("merchantId") || params.has("categoryId"))) return false;
+    for (const key of ["accountId", "categoryId", "merchantId"]) {
+      if (params.has(key) && !params.get(key)?.trim()) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isOptionalFiniteNumber(value: unknown) {
   return value === undefined || isFiniteNumber(value);
 }
@@ -198,7 +229,7 @@ function isDriver(value: Record<string, unknown>) {
     && isNullableFiniteNumber(value.shareBps)
     && isNonNegativeInteger(value.rows)
     && isNonNegativeInteger(value.previousRows)
-    && isNullableString(value.href);
+    && (value.href === null || isSafeTransactionHref(value.href));
 }
 
 function isMerchantDriver(value: Record<string, unknown>) {
@@ -227,7 +258,7 @@ function isAnomaly(value: Record<string, unknown>) {
     && isFiniteNumber(value.habitualCents)
     && isNonNegativeInteger(value.historyRows)
     && isNullableFiniteNumber(value.variationBps)
-    && typeof value.href === "string";
+    && isSafeTransactionHref(value.href);
 }
 
 function isFixedVariable(value: unknown) {
