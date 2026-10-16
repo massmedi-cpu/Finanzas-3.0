@@ -169,6 +169,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { name: items[0].originalFileName })).toBeVisible();
       await expect(selectedRow).toContainText("12/09/2026");
       await expect(page.locator('input[type="date"]')).toHaveValue(items[0].documentDate);
+      await expect(page.locator("form output")).toHaveText("12/09/2026");
       // REC-UI-DOC-006: narrow list panels must not collapse the filename to
       // one letter because status, file icon and metadata claim three columns.
       const filenameStyle = await selectedRow.locator("strong").first().evaluate(node => ({

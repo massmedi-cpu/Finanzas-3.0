@@ -10,6 +10,7 @@ import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
 import ocrStyles from "./ocr-review.module.css";
 import { OcrPageReviewWorkbench } from "./ocr-page-review-workbench";
+import { SpanishDateField } from "./spanish-date-field";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = DocumentOcrResult["status"];
@@ -786,7 +787,7 @@ export function OcrReviewPanel({
 
               <div className={styles.formGrid}>
                 <label>Tipo<select disabled={editsLocked} value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>
-                <label>Fecha<input disabled={editsLocked} type="date" value={draft.documentDate} onChange={(event) => updateDraft("documentDate", event.target.value)} /></label>
+                <SpanishDateField disabled={editsLocked} value={draft.documentDate} onChange={(documentDate) => updateDraft("documentDate", documentDate)} />
                 <label>Hora<input disabled={editsLocked} type="time" value={draft.documentTime} onChange={(event) => updateDraft("documentTime", event.target.value)} /></label>
                 <label>Emisor<input disabled={editsLocked} value={draft.issuerName} maxLength={300} onChange={(event) => updateDraft("issuerName", event.target.value)} /></label>
                 <label>CIF / NIF<input disabled={editsLocked} value={draft.issuerTaxId} maxLength={40} onChange={(event) => updateDraft("issuerTaxId", event.target.value)} /></label>

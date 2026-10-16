@@ -367,6 +367,44 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   expect(undersized).toBe(0);
 });
 
+test.describe("fecha documental independiente del idioma del navegador", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DOC-139 · muestra día/mes/año y conserva ISO al guardar, borrar y revisar OCR", async ({ page }) => {
+    const writes: Array<Record<string, unknown>> = [];
+    await mockDocumentApi(page, writes);
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+
+    const metadata = page.locator("form").filter({ has: page.getByRole("button", { name: "Guardar metadatos" }) });
+    const date = metadata.getByLabel("Fecha", { exact: true });
+    await expect(date).toHaveValue("2026-09-02");
+    await expect(metadata.locator("output")).toHaveText("02/09/2026");
+
+    await date.fill("2026-10-05");
+    await expect(metadata.locator("output")).toHaveText("05/10/2026");
+    await metadata.getByRole("button", { name: "Guardar metadatos" }).click();
+    await expect(page.getByTestId("document-metadata-dirty")).toHaveCount(0);
+    expect(writes.some((write) => write.action === "metadata" && write.documentDate === "2026-10-05")).toBe(true);
+
+    await metadata.getByRole("button", { name: "Quitar fecha" }).click();
+    await expect(date).toHaveValue("");
+    await expect(metadata.locator("output")).toHaveText("dd/mm/aaaa");
+    await metadata.getByRole("button", { name: "Guardar metadatos" }).click();
+    await expect(page.getByTestId("document-metadata-dirty")).toHaveCount(0);
+    expect(writes.some((write) => write.action === "metadata" && write.documentDate === null)).toBe(true);
+
+    const panel = page.getByTestId("ocr-review-panel");
+    await panel.getByRole("button", { name: "Analizar documento" }).click();
+    const review = panel.getByTestId("ocr-confirmation-form");
+    const reviewDate = review.getByLabel("Fecha", { exact: true });
+    await reviewDate.fill("2026-11-23");
+    await expect(reviewDate).toHaveValue("2026-11-23");
+    await expect(review.locator("output")).toHaveText("23/11/2026");
+    expect(writes.filter((write) => write.action === "metadata")).toHaveLength(2);
+  });
+});
+
 test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);

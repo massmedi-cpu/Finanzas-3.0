@@ -15,6 +15,7 @@ import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
+import { SpanishDateField } from "./spanish-date-field";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import styles from "./documents.module.css";
 
@@ -1980,7 +1981,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                   ) : null}
                   <div className={styles.formGrid}>
                     <label>Tipo<select disabled={busy !== null} value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
-                    <label>Fecha<input disabled={busy !== null} type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
+                    <SpanishDateField disabled={busy !== null} value={editor.documentDate} onChange={(documentDate) => setEditor((value) => ({ ...value, documentDate }))} />
                     <label>Emisor<input disabled={busy !== null} value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
                     <label>Importe (€)<input disabled={busy !== null} inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
