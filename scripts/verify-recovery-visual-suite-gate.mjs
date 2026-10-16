@@ -12,6 +12,7 @@ const cases = [
   ["tests/e2e/transactions.spec.ts", ["REC-DATE-004"]],
   ["tests/e2e/forecast-horizons-integrity.spec.ts", ["REC-DATE-005"]],
   ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001", "REC-CHART-021"]],
+  ["tests/e2e/analysis-contract-navigation.spec.ts", ["REC-SEC-ANA-001"]],
   ["tests/e2e/aud-e2e-analysis-light-contrast.spec.ts", ["REC-VIS-003"]],
   ["tests/e2e/analysis-error-layout-recovery.spec.ts", ["REC-UI-ANA-016"]],
   ["tests/e2e/recovery-route-shell-responsive.spec.ts", ["REC-VIS-004"]],
@@ -58,6 +59,7 @@ assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-
 assert.ok(workflow.includes("'scripts/test-drive-atomic-batch.mjs'"), "Changing Drive rollback tests must retrigger CI");
 assert.ok(workflow.includes("node --experimental-strip-types scripts/test-drive-discovery-integrity.mjs"), "Drive discovery pagination tests must execute as early gate");
 assert.ok(workflow.includes("'src/infrastructure/google/google-drive-document-discovery.ts'"), "Discovery code changes must trigger CI");
+assert.ok(workflow.includes("'src/application/analysis/analysis-contract.ts'"), "Analysis contract changes must retrigger the security browser gate");
 assert.ok(workflow.includes("'scripts/test-drive-discovery-integrity.mjs'"), "Discovery test changes must trigger CI");
 // A passing browser job is not independently reviewable unless its screenshots
 // and failure traces survive the ephemeral CI runner. The first Playwright command
