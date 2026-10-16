@@ -533,6 +533,37 @@ test("REC-OCR-178 · las fechas ISO con hora explícita conservan su atribución
   expect(expiry.time.value).toBeNull();
 });
 
+test("REC-OCR-179 · una fecha imposible no certifica su hora de compra", () => {
+  for (const printed of [
+    "FECHA/HORA: 2026-02-30 19:35",
+    "Fecha y hora: 31.04.2026 19:35",
+    "Emitida el 2027/02/29 a las 19:35",
+    "FECHA/HORA: 29/02/2027 19:35",
+    "FECHA/HORA: 2026-13-01 19:35",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("invalid-date-time", printed, 0.99),
+      line("payable", "TOTAL A PAGAR 7,90 €", 0.99, 0.85),
+    ]));
+    expect(parsed.date.value, printed).toBeNull();
+    expect(parsed.time.value, printed).toBe("19:35");
+    expect(parsed.time.trust, printed).toBe("doubtful");
+    expect(parsed.time.evidence[0]?.lineId, printed).toBe("invalid-date-time");
+  }
+  for (const printed of [
+    "FECHA/HORA: 2028-02-29 19:35",
+    "FECHA/HORA: 29/02/2028 19:35",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("leap-day-time", printed, 0.99),
+    ]));
+    expect(parsed.date.value, printed).toBe("2028-02-29");
+    expect(parsed.date.trust, printed).toBe("reliable");
+    expect(parsed.time.value, printed).toBe("19:35");
+    expect(parsed.time.trust, printed).toBe("reliable");
+  }
+});
+
 test("REC-OCR-107 · vencimiento en la misma línea no oculta una emisión explícita", () => {
   const observed = interpretDocumentOcrFinancially(result([
     line("datetime", "Fecha de emisión: 11/10/2026 15:20 · Vencimiento: 24/10/2026", 0.96, 0.12),
