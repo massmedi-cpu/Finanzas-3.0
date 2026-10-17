@@ -1,5 +1,8 @@
 import { createClient } from "supabase-js";
 import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
+import { matchesPrivateDocumentReplay } from "../../../src/domain/private-document-replay.ts";
+import { matchesPrivateDocumentUploadPathContract, privateDocumentContentId } from "../../../src/domain/private-document-content-address.ts";
+import { registerAtomicDriveDocumentBatch } from "../../../src/domain/atomic-drive-document-batch.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -16,6 +19,7 @@ const MIME_EXTENSIONS = new Map([
 ]);
 const BUCKET = "financial-app-documents";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -244,19 +248,13 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
   }
 
   if (action === "document.register") {
-    const type = documentType(payload.type);
-    const originalFileName = text(payload.originalFileName, "document_file_name", 500);
-    const mime = text(payload.mimeType, "document_mime_type", 200);
-    const provider = text(payload.storageProvider, "document_storage_provider", 32);
-    if (provider !== "supabase" && provider !== "google_drive") throw new Error("invalid_document_storage_provider");
-    const storageKey = text(payload.storageKey, "document_storage_key", 1000);
-    const driveFileId = nullableText(payload.sourceDriveFileId, "document_drive_file_id", 300);
-    const sizeBytes = safeInteger(payload.sizeBytes, "document_size", true);
-    if (sizeBytes !== null && sizeBytes < 0) throw new Error("invalid_document_size");
-    const sourceModifiedAt = nullableText(payload.sourceModifiedAt, "document_source_modified_at", 80);
-    return documentQuery(() => sql`
-      select financial_app.register_document(${type},${originalFileName},${mime},${provider},${storageKey},${driveFileId},${sizeBytes}::bigint,${sourceModifiedAt}::timestamptz) as result
-    `);
+    // This legacy generic write endpoint did not verify the bytes of a
+    // Supabase object OR validate that a claimed Google Drive file actually
+    // exists. Both source kinds have verified dedicated routes:
+    //   document.upload_finalize -> download + MIME + SHA-256
+    //   document.drive_batch      -> Next.js Drive read-only preflight
+    // Never allow a signed gateway request to bypass those entrypoints.
+    return json({ error: "document_registration_requires_verified_source" }, 403);
   }
 
   if (action === "document.update") {
@@ -304,16 +302,72 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const mime = mimeType(payload.mimeType);
     const sizeBytes = safeInteger(payload.sizeBytes, "document_size") as number;
     if (sizeBytes <= 0 || sizeBytes > MAX_FILE_BYTES) throw new Error("invalid_document_size");
+    const contentSha256 = nullableText(payload.expectedSha256, "document_content_sha256", 64);
+    if (contentSha256 !== null && !SHA256_HEX.test(contentSha256)) {
+      throw new Error("invalid_document_content_sha256");
+    }
     const extension = MIME_EXTENSIONS.get(mime)!;
     const workspaceId = await currentWorkspaceId(sql);
-    const path = `uploads/${workspaceId}/${crypto.randomUUID()}.${extension}`;
+    // Older clients/recovery paths retain their random UUID object names.
+    // Modern SHA-aware clients obtain the SAME private object path even on
+    // different devices, making parallel same-content uploads idempotent.
+    const path = `uploads/${workspaceId}/${contentSha256 === null
+      ? crypto.randomUUID() : privateDocumentContentId(contentSha256)}.${extension}`;
+    if (contentSha256 !== null) {
+      const existing = await sql`
+        select id, type, original_file_name, mime_type, size_bytes
+          from financial_app.documents
+         where workspace_id=${workspaceId}::uuid
+           and storage_provider='supabase' and storage_key=${path}
+      `;
+      if (existing.length) {
+        const old = existing[0];
+        if (old.mime_type !== mime || Number(old.size_bytes) !== sizeBytes) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        // A 122-bit content-derived UUID is a lookup hint, not full-proof
+        // identity. Verify ALL 256 hash bits against private Storage before
+        // claiming that an existing registration represents these bytes.
+        // This also fails closed if the previously registered blob vanished.
+        const supabase = storageClient();
+        const candidate = await supabase.storage.from(BUCKET).download(path);
+        if (candidate.error || !candidate.data) {
+          return json({ error: "document_upload_registered_content_unavailable" }, 503);
+        }
+        const bytes = new Uint8Array(await candidate.data.arrayBuffer());
+        if (bytes.byteLength !== sizeBytes || !documentBytesMatchMimeType(bytes, mime)) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const actualSha256 = Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+        if (actualSha256 !== contentSha256) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        // The stored object is confirmed byte-for-byte. Reuse the original
+        // without signing a second write or modifying reviewed metadata.
+        return json({
+          alreadyRegistered: true,
+          documentId: old.id,
+          type: old.type,
+          originalFileName: old.original_file_name,
+          mimeType: old.mime_type,
+          sizeBytes, path, expectedSha256: contentSha256,
+          contentAddressVersion: 1, hashVerificationVersion: 1, hashAlgorithm: "sha256",
+        });
+      }
+    }
     const supabase = storageClient();
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path, { upsert: false });
     if (error || !data?.signedUrl || !data?.token) {
       console.error("document-storage-sign", error?.name ?? "unknown");
       return json({ error: "document_upload_sign_failed" }, 503);
     }
-    return json({ bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl, originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES });
+    return json({
+      bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl,
+      originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES,
+      hashVerificationVersion: 1, hashAlgorithm: "sha256",
+      contentAddressVersion: contentSha256 === null ? null : 1,
+    });
   }
 
   if (action === "document.upload_finalize") {
@@ -321,9 +375,26 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const originalFileName = text(payload.originalFileName, "document_file_name", 500);
     const mime = mimeType(payload.mimeType);
     const path = text(payload.path, "document_storage_key", 1000);
+    // Legacy signed objects may predate digest-aware recovery. New clients
+    // provide BOTH size and SHA-256; neither may silently override bytes read
+    // from the private server-owned Storage object.
+    const expectedSize = safeInteger(payload.expectedSizeBytes, "document_expected_size", true);
+    if (expectedSize !== null && (expectedSize <= 0 || expectedSize > MAX_FILE_BYTES)) {
+      throw new Error("invalid_document_expected_size");
+    }
+    const expectedSha256 = nullableText(payload.expectedSha256, "document_expected_sha256", 64);
+    if (expectedSha256 !== null && !SHA256_HEX.test(expectedSha256)) {
+      throw new Error("invalid_document_expected_sha256");
+    }
     const workspaceId = await currentWorkspaceId(sql);
     const pathMatch = path.match(STORAGE_PATH);
     if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) throw new Error("invalid_document_storage_key");
+    // v5-shaped content-derived paths are only valid for their ORIGINAL
+    // SHA-256. Legacy random v4 paths remain recoverable. The downloaded
+    // object is independently hashed below, before any database mutation.
+    if (!matchesPrivateDocumentUploadPathContract(path, expectedSha256)) {
+      return json({ error: "document_upload_content_address_conflict" }, 409);
+    }
 
     const supabase = storageClient();
     let stored: any;
@@ -351,22 +422,103 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
       await removeRejectedUpload(supabase, path);
       return json({ error: "document_upload_size_mismatch" }, 409);
     }
+    // Do NOT delete on client-declared expectation mismatches: the existing
+    // object can be genuine despite a stale/corrupt browser journal. Retrying
+    // the same private path with the right evidence must remain possible.
+    if (expectedSize !== null && expectedSize !== actualSize) {
+      return json({ error: "document_upload_expected_size_mismatch" }, 409);
+    }
+    if (expectedSha256 !== null) {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      if (actualSha256 !== expectedSha256) {
+        return json({ error: "document_upload_hash_mismatch" }, 409);
+      }
+    }
     if (!documentBytesMatchMimeType(bytes, mime)) {
       await removeRejectedUpload(supabase, path);
       return json({ error: "document_upload_content_mismatch" }, 409);
     }
 
-    return documentQuery(() => sql`
-      select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
-    `);
+    try {
+      // A retry against the SAME private path must not silently overwrite an
+      // already classified/associated original. Serialize concurrent finalizes
+      // across devices at the database boundary, not just via browser locks.
+      // This advisory lock is transaction-scoped and scoped to the workspace
+      // and private Storage path; it releases on commit, rollback or failure.
+      const result = await sql.begin(async (tx: any) => {
+        await tx`select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(${workspaceId + ":" + path}, 0::bigint))`;
+        const registered = await tx`
+          select id, type, original_file_name, mime_type, size_bytes
+            from financial_app.documents
+           where workspace_id=${workspaceId}::uuid
+             and storage_provider='supabase' and storage_key=${path}
+           for update
+        `;
+        if (registered.length) {
+          const old = registered[0];
+          const exactReplay = matchesPrivateDocumentReplay({
+            type: old.type, originalFileName: old.original_file_name,
+            mimeType: old.mime_type, sizeBytes: old.size_bytes === null ? null : Number(old.size_bytes),
+          }, { type, originalFileName, mimeType: mime, sizeBytes: actualSize });
+          // Two devices can sign the SAME SHA-derived path simultaneously
+          // before either finishes storing it. If their chosen filenames or
+          // classification differ, the SAME verified bytes still refer to
+          // the ONE original. Preserve the first canonical metadata instead
+          // of overwriting it or blocking recovery forever.
+          const sameContentDifferentLabel = !exactReplay
+            && expectedSha256 !== null
+            && path === `uploads/${workspaceId}/${privateDocumentContentId(expectedSha256)}.${MIME_EXTENSIONS.get(mime)}`
+            && old.mime_type === mime
+            && Number(old.size_bytes) === actualSize;
+          if (!exactReplay && !sameContentDifferentLabel) {
+            return { conflict: true, contentDuplicate: false, result: null };
+          }
+          const unchanged = await tx`select financial_app.document_detail(${old.id}::uuid) as result`;
+          return {
+            conflict: false, contentDuplicate: sameContentDifferentLabel,
+            result: unchanged[0]?.result ?? null,
+          };
+        }
+        const inserted = await tx`
+          select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
+        `;
+        return { conflict: false, contentDuplicate: false, result: inserted[0]?.result ?? null };
+      });
+      if (result.conflict) return json({ error: "document_upload_replay_conflict" }, 409);
+      if (!result.result || typeof result.result !== "object" || Array.isArray(result.result)) {
+        return json({ error: "document_upload_registration_unverified" }, 503);
+      }
+      // The client must confirm the SAME path and server-side digest
+      // attestation, not trust a generic HTTP 200 with plausible metadata.
+      return json({
+        ...result.result,
+        ...(result.contentDuplicate ? { contentDuplicate: true } : {}),
+        ...(expectedSha256 === null ? {} : {
+          uploadIntegrity: { sha256: expectedSha256, sizeBytes: actualSize, verified: true },
+        }),
+      });
+    } catch (error) {
+      return databaseError(error);
+    }
   }
 
   if (action === "document.open") {
     const id = uuid(payload.id, "document_id");
     try {
-      const rows = await sql`select storage_provider,storage_key,source_drive_file_id from financial_app.documents where id=${id}::uuid`;
+      // Authorization must be explicit at this direct SQL read boundary,
+      // independently of any current or future RLS/database role settings.
+      const workspaceId = await currentWorkspaceId(sql);
+      const rows = await sql`
+        select storage_provider,storage_key,source_drive_file_id
+          from financial_app.documents
+         where id=${id}::uuid and workspace_id=${workspaceId}::uuid
+      `;
       const row = rows[0];
       if (!row) return json({ error: "document_not_found" }, 404);
+      if (row.storage_provider !== "google_drive" && row.storage_provider !== "supabase") {
+        return json({ error: "document_storage_provider_unavailable" }, 409);
+      }
       if (row.storage_provider === "google_drive") {
         if (!row.source_drive_file_id) return json({ error: "document_drive_file_unavailable" }, 409);
         return json({ provider: "google_drive", url: `https://drive.google.com/open?id=${encodeURIComponent(row.source_drive_file_id)}` });
@@ -379,19 +531,41 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
   }
 
   if (action === "document.drive_batch") {
-    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) throw new Error("invalid_document_drive_batch");
-    let imported = 0;
-    for (const raw of payload.files) {
+    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) {
+      throw new Error("invalid_document_drive_batch");
+    }
+
+    // Fully validate the entire Drive batch BEFORE opening a transaction.
+    // Duplicate IDs inside one batch are ambiguous and must not silently
+    // overwrite a newer revision with an older one.
+    const seenFileIds = new Set<string>();
+    const documents = payload.files.map((raw: any) => {
       const type = documentType(raw?.type ?? "other");
       const name = text(raw?.name, "document_file_name", 500);
       const mime = mimeType(raw?.mimeType);
       const fileId = text(raw?.fileId, "document_drive_file_id", 300);
       const size = safeInteger(raw?.sizeBytes, "document_size", true);
       const modifiedTime = nullableText(raw?.modifiedTime, "document_source_modified_at", 80);
-      await sql`select financial_app.register_document(${type},${name},${mime},'google_drive',${fileId},${fileId},${size}::bigint,${modifiedTime}::timestamptz)`;
-      imported += 1;
+      if (size === null || size <= 0 || size > MAX_FILE_BYTES) {
+        throw new Error("invalid_document_size");
+      }
+      if (seenFileIds.has(fileId)) throw new Error("invalid_document_drive_batch_duplicate");
+      seenFileIds.add(fileId);
+      return { type, name, mime, fileId, size, modifiedTime };
+    });
+
+    // A failed record rolls back ALL document registrations in this batch.
+    // Never report a partial import as if it had completed successfully.
+    // This affects only document metadata; original Drive files stay read-only.
+    let imported: number;
+    try {
+      imported = await registerAtomicDriveDocumentBatch(documents, sql, async (tx: any, file) => {
+        await tx`select financial_app.register_document(${file.type},${file.name},${file.mime},'google_drive',${file.fileId},${file.fileId},${file.size}::bigint,${file.modifiedTime}::timestamptz)`;
+      });
+    } catch (error) {
+      return databaseError(error);
     }
-    return json({ imported, total: payload.files.length, ocrUsed: false });
+    return json({ imported, total: documents.length, ocrUsed: false });
   }
 
   if (action === "test.document_engine") {

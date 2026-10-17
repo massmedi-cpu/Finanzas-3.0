@@ -7,10 +7,12 @@ import {
   requestErrorCode,
   type AuthRecoveryState,
 } from "../../src/application/auth-recovery";
-import type {
-  ForecastCandidateSnapshot,
-  ForecastItem,
-  ForecastSnapshot,
+import {
+  isForecastSnapshot,
+  isForecastCandidateSnapshotForItem,
+  type ForecastCandidateSnapshot,
+  type ForecastItem,
+  type ForecastSnapshot,
 } from "../../src/application/forecast/forecast-contract";
 import {
   recurrencesHrefForForecast,
@@ -22,10 +24,15 @@ import {
   type ResolvedForecastSelection,
 } from "../../src/application/forecast/forecast-selection";
 import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
+import { formatNumber } from "../../src/core/formatters";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
+import { SpanishDateInput } from "../../src/design/spanish-date-input";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
+import { ForecastHorizonPanel } from "./forecast-horizon-panel";
+import ModuleContextNavigation from "../module-context-navigation";
+import { forecastModuleLinks } from "../../src/application/navigation/module-context";
 import { ForecastScenarios } from "./forecast-scenarios";
 import styles from "./forecast.module.css";
 
@@ -92,6 +99,7 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
+  if (code === "forecast_snapshot_invalid_contract" || code === "invalid_forecast_snapshot_contract") return "El servidor ha devuelto cifras o un periodo que no coinciden con la consulta. No se mostrarán como previsión verificada; vuelve a intentar la lectura.";
   if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
     return "La previsión no ha podido calcularse. Los datos disponibles siguen intactos; puedes reintentar.";
@@ -155,6 +163,7 @@ export function ForecastClient({
   const dateFromRef = useRef(initialFrom);
   const dateToRef = useRef(initialTo);
   const accountIdRef = useRef(initialAccountId);
+  const datesEditedRef = useRef(false);
   const loadSequence = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const skipInitialReloadRef = useRef(Boolean(initialSnapshot));
@@ -183,6 +192,8 @@ export function ForecastClient({
   const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
   const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const candidateAbortRef = useRef<AbortController | null>(null);
+  const candidateSequence = useRef(0);
   const recurrenceHandoffAppliedRef = useRef<string | null>(null);
   const [recurrenceFlowState, setRecurrenceFlowState] = useState<RecurrenceFlowState>(
     recurrenceHandoff?.refresh ? "refreshing" : "review",
@@ -192,6 +203,23 @@ export function ForecastClient({
   const handoffDateTo = recurrenceHandoff?.dateTo ?? null;
   const handoffAccountId = recurrenceHandoff?.accountId ?? null;
   const handoffRefresh = recurrenceHandoff?.refresh ?? false;
+  const moduleSelection = useMemo(() => {
+    try {
+      return resolveForecastSelection({ dateFrom, dateTo, accountId: initialAccountId });
+    } catch {
+      return null;
+    }
+  }, [dateFrom, dateTo, initialAccountId]);
+
+  useEffect(() => {
+    if (!datesEditedRef.current || !moduleSelection) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("dateFrom", moduleSelection.dateFrom);
+    url.searchParams.set("dateTo", moduleSelection.dateTo);
+    if (moduleSelection.accountId) url.searchParams.set("accountId", moduleSelection.accountId);
+    else url.searchParams.delete("accountId");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [moduleSelection]);
   const maxPeriodDate = useMemo(() => {
     try {
       return forecastEndDateLimit(dateFrom);
@@ -202,6 +230,14 @@ export function ForecastClient({
 
   const loadSnapshot = useCallback(async (): Promise<ForecastSnapshot | null> => {
     const sequence = ++loadSequence.current;
+    // Every independent snapshot reload invalidates prior reconciliation offers.
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
+    setCandidateFor(null);
+    setCandidateData(null);
+    // An aborted GET never reaches its own finalizer; release only lookup busy state.
+    setBusy((current) => current?.startsWith("candidates:") ? null : current);
     const requestedFrom = dateFromRef.current;
     const requestedTo = dateToRef.current;
     loadAbortRef.current?.abort();
@@ -219,12 +255,32 @@ export function ForecastClient({
       });
       const params = new URLSearchParams({ dateFrom: selection.dateFrom, dateTo: selection.dateTo });
       if (selection.accountId) params.set("accountId", selection.accountId);
-      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
+      // Switching periods must not keep showing an earlier period's totals
+      // if the new financial source is slow or returns an invalid HTTP 200.
+      setSnapshot((current) => current
+        && (current.period.dateFrom !== selection.dateFrom
+          || current.period.dateTo !== selection.dateTo
+          || current.period.accountId !== selection.accountId) ? null : current);
+      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       }));
       if (controller.signal.aborted || sequence !== loadSequence.current) return null;
-      const nextSnapshot = data as ForecastSnapshot;
+      if (!isForecastSnapshot(data)
+        || data.period.dateFrom !== selection.dateFrom
+        || data.period.dateTo !== selection.dateTo
+        || data.period.accountId !== selection.accountId
+        || !data.summary
+        || !Number.isSafeInteger(data.summary.openingBalanceCents)
+        || !Number.isSafeInteger(data.summary.projectedIncomeCents)
+        || !Number.isSafeInteger(data.summary.projectedExpenseCents)
+        || !Number.isSafeInteger(data.summary.projectedNetCents)
+        || !Number.isSafeInteger(data.summary.projectedClosingBalanceCents)
+        || !data.items.every((item) => item && typeof item.id === "string"
+          && typeof item.date === "string" && Number.isSafeInteger(item.amountCents))) {
+        throw new Error("forecast_snapshot_invalid_contract");
+      }
+      const nextSnapshot = data;
       accountIdRef.current = nextSnapshot.period.accountId;
       setSnapshot(nextSnapshot);
       return nextSnapshot;
@@ -254,6 +310,8 @@ export function ForecastClient({
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
   }, []);
 
   async function runMutation(
@@ -266,7 +324,16 @@ export function ForecastClient({
     setNotice(null);
     try {
       await task();
-      return await loadSnapshot();
+      const refreshed = await loadSnapshot();
+      if (!refreshed) {
+        // The mutation may already have committed. A failed GET must not
+        // leave a success banner from task(), nor invite a new write as
+        // though the previous response proved nothing happened.
+        setNotice(null);
+        setError("La operación puede haberse guardado, pero no se ha podido verificar al releer la previsión. Comprueba el calendario antes de repetirla.");
+        return null;
+      }
+      return refreshed;
     } catch (err) {
       const message = err instanceof Error ? err.message : "La operación no se ha podido completar";
       if (message === "forecast_write_conflict") {
@@ -300,6 +367,7 @@ export function ForecastClient({
       setNotice(null);
       return;
     }
+    let generated = 0;
     const refreshed = await runMutation("refresh", async () => {
       const result = await readJson(await fetch("/api/forecast", {
         method: "POST",
@@ -311,8 +379,9 @@ export function ForecastClient({
           accountId: selection.accountId,
         }),
       }));
-      setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
+      generated = Number.isSafeInteger(result.generated) && result.generated >= 0 ? result.generated : 0;
     });
+    if (refreshed) setNotice(`Recurrencias actualizadas: ${generated} fechas previstas.`);
     if (refreshed && handoffRecurrenceId) {
       const hasImpact = refreshed.items.some((item) => item.recurrenceId === handoffRecurrenceId);
       setRecurrenceFlowState(hasImpact ? "ready" : "empty");
@@ -420,17 +489,32 @@ export function ForecastClient({
     manualRequestRef.current = { fingerprint, key: idempotencyKey };
 
     setManualErrors({});
-    await runMutation("manual", async () => {
-      await readJson(await fetch("/api/forecast", {
+    let acknowledgedId: string | null = null;
+    const verified = await runMutation("manual", async () => {
+      const saved = await readJson(await fetch("/api/forecast", {
         method: "POST",
         headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
         body: JSON.stringify(payload),
       }));
+      // The POST may have committed even if the following GET fails. Keep
+      // the same idempotency key and the editable draft until the created
+      // item is independently visible in the requested forecast snapshot.
+      acknowledgedId = typeof saved?.id === "string" ? saved.id : null;
+    });
+    const persisted = verified?.items.find((item) => item.id === acknowledgedId
+      && item.origin === "manual"
+      && item.date === payload.date
+      && item.concept === payload.concept
+      && item.amountCents === payload.amountCents);
+    if (persisted) {
       manualRequestRef.current = null;
       setManualConcept("");
       setManualAmount("");
-      setNotice("Previsión manual añadida.");
-    });
+      setNotice("Previsión manual añadida y verificada en el calendario.");
+    } else if (verified) {
+      setError("El alta puede haberse realizado, pero el calendario todavía no contiene la previsión identificada. Conservamos el formulario y la misma clave de operación para evitar duplicados.");
+      setNotice(null);
+    }
   }
 
   async function toggleExcluded(item: ForecastItem) {
@@ -445,7 +529,7 @@ export function ForecastClient({
     }
 
     setExcludeErrorFor((current) => current === item.id ? null : current);
-    await runMutation(`exclude:${item.id}`, async () => {
+    const verified = await runMutation(`exclude:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -457,37 +541,90 @@ export function ForecastClient({
           expectedUpdatedAt: item.updatedAt,
         }),
       }));
-      setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
     });
+    if (verified) {
+      const saved = verified.items.find((entry) => entry.id === item.id);
+      if (saved?.excluded === nextExcluded) {
+        setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
+      } else {
+        setNotice(null);
+        setError("La operación puede haberse aplicado, pero la previsión todavía muestra el estado anterior. Comprueba el calendario antes de repetirla.");
+      }
+    }
   }
 
   async function loadCandidates(item: ForecastItem) {
+    // Never search against a stale account or a period still being replaced.
+    if (!snapshot || snapshot.period.dateFrom !== dateFromRef.current
+      || snapshot.period.dateTo !== dateToRef.current
+      || !snapshot.items.some((entry) => entry.id === item.id)) return;
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    const sequence = candidateSequence.current;
+    const controller = new AbortController();
+    candidateAbortRef.current = controller;
+    const isCurrent = () => !controller.signal.aborted && sequence === candidateSequence.current;
     setCandidateFor(item.id);
     setCandidateData(null);
     setBusy(`candidates:${item.id}`);
     setError(null);
     try {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
-      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
-      setCandidateData(data as ForecastCandidateSnapshot);
-      window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
+      const data: unknown = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      }));
+      if (!isCurrent()) return;
+      if (!isForecastCandidateSnapshotForItem(data, item, 7, 8)) {
+        throw new Error("forecast_candidates_untrusted_response");
+      }
+      setCandidateData(data);
+      window.requestAnimationFrame(() => {
+        if (isCurrent()) candidateCloseRef.current?.focus();
+      });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");
+      if (!isCurrent()) return;
+      const code = err instanceof Error ? err.message : "";
+      setError(code === "forecast_candidates_untrusted_response"
+        ? "La respuesta de conciliación no corresponde a esta previsión o contiene movimientos no verificados. No se permite conciliar hasta comprobarlos."
+        : code === "invalid_forecast_candidates_contract"
+          ? "La búsqueda devolvió movimientos no verificados para esta previsión. No se permite conciliar hasta comprobarlos."
+          : code === "authentication_required" || code === "authentication_unavailable"
+          ? "No se pueden consultar movimientos reales sin una sesión válida. Vuelve a iniciar sesión."
+          : "No se pudieron verificar los movimientos reales. Reintenta la búsqueda.");
       setCandidateFor(null);
       window.requestAnimationFrame(() => candidateTriggerRefs.current[item.id]?.focus());
     } finally {
-      setBusy(null);
+      if (isCurrent()) {
+        candidateAbortRef.current = null;
+        setBusy(null);
+      }
     }
   }
 
   function closeCandidates(itemId: string) {
+    candidateSequence.current += 1;
+    candidateAbortRef.current?.abort();
+    candidateAbortRef.current = null;
     setCandidateFor(null);
     setCandidateData(null);
+    setBusy((current) => current === `candidates:${itemId}` ? null : current);
     window.requestAnimationFrame(() => candidateTriggerRefs.current[itemId]?.focus());
   }
 
   async function reconcile(item: ForecastItem, transactionId: string | null) {
-    await runMutation(`reconcile:${item.id}`, async () => {
+    if (transactionId !== null) {
+      const visibleItem = snapshot?.items.find((entry) => entry.id === item.id);
+      const periodIsCurrent = snapshot?.period.dateFrom === dateFromRef.current
+        && snapshot?.period.dateTo === dateToRef.current;
+      if (!visibleItem || !periodIsCurrent || candidateFor !== item.id
+        || !candidateData || !isForecastCandidateSnapshotForItem(candidateData, visibleItem, 7, 8)
+        || !candidateData.candidates.some((candidate) => candidate.transactionId === transactionId)) {
+        setError("La coincidencia bancaria ya no está verificada para el periodo actual. Vuelve a buscar el movimiento real.");
+        return;
+      }
+    }
+    const verified = await runMutation(`reconcile:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
@@ -499,10 +636,18 @@ export function ForecastClient({
           expectedUpdatedAt: item.updatedAt,
         }),
       }));
-      setCandidateFor(null);
-      setCandidateData(null);
-      setNotice(transactionId ? "Previsión conciliada con el movimiento real." : "Conciliación eliminada.");
     });
+    if (verified) {
+      const saved = verified.items.find((entry) => entry.id === item.id);
+      if (saved?.confirmedTransactionId === transactionId) {
+        setCandidateFor(null);
+        setCandidateData(null);
+        setNotice(transactionId ? "Previsión conciliada con el movimiento real." : "Conciliación eliminada.");
+      } else {
+        setNotice(null);
+        setError("La conciliación puede haberse guardado, pero la previsión todavía no refleja el movimiento confirmado. Comprueba el calendario antes de repetirla.");
+      }
+    }
   }
 
   const items = snapshot?.items ?? EMPTY_FORECAST_ITEMS;
@@ -538,7 +683,7 @@ export function ForecastClient({
     dateTo,
     accountId: handoffAccountId,
   };
-  const recurrencesHref = recurrencesHrefForForecast(recurrenceContextSelection);
+  const recurrencesHref = recurrencesHrefForForecast(moduleSelection ?? recurrenceContextSelection);
   const visiblePeriodIsStale = Boolean(snapshot && (
     snapshot.period.dateFrom !== dateFrom || snapshot.period.dateTo !== dateTo
   ));
@@ -629,12 +774,13 @@ export function ForecastClient({
       <section className={styles.controls} aria-label="Periodo de previsión">
         <label>
           Desde
-          <input
-            type="date"
+          <SpanishDateInput
+            label="Desde"
             value={dateFrom}
             required
             disabled={busy !== null}
             onChange={(event) => {
+              datesEditedRef.current = true;
               const nextFrom = event.target.value;
               setDateFrom(nextFrom);
               if (dateToRef.current < nextFrom) setDateTo(nextFrom);
@@ -643,7 +789,7 @@ export function ForecastClient({
         </label>
         <label>
           Hasta
-          <input type="date" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => setDateTo(event.target.value)} />
+          <SpanishDateInput label="Hasta" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => { datesEditedRef.current = true; setDateTo(event.target.value); }} />
         </label>
       </section>
 
@@ -654,7 +800,14 @@ export function ForecastClient({
         </p>
       ) : null}
 
-      {error ? <div className={styles.error} role="alert">{error}</div> : null}
+      {error ? (
+        <div className={styles.error} role="alert">
+          <p>{error}</p>
+          <button className={styles.secondaryButton} disabled={loading || busy !== null} onClick={() => void loadSnapshot()}>
+            Reintentar lectura
+          </button>
+        </div>
+      ) : null}
       {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/forecast" /> : null}
       {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
@@ -674,6 +827,7 @@ export function ForecastClient({
           </section>
           ) : null}
 
+          <ForecastHorizonPanel sourceSnapshot={snapshot} />
           {hasProjectedEvents ? <ForecastScenarios snapshot={snapshot} /> : null}
           {hasProjectedEvents ? <ForecastBalanceChart snapshot={snapshot} /> : null}
           {!hasProjectedEvents ? (
@@ -698,9 +852,9 @@ export function ForecastClient({
                   <h2>Movimientos previstos</h2>
                 </div>
                 <div className={styles.counts}>
-                  <span>{snapshot.summary.plannedItems} previstos</span>
-                  <span>{snapshot.summary.confirmedItems} confirmados</span>
-                  <span>{snapshot.summary.excludedItems} excluidos</span>
+                  <span>{formatNumber(snapshot.summary.plannedItems)} {snapshot.summary.plannedItems === 1 ? "previsto" : "previstos"}</span>
+                  <span>{formatNumber(snapshot.summary.confirmedItems)} {snapshot.summary.confirmedItems === 1 ? "confirmado" : "confirmados"}</span>
+                  <span>{formatNumber(snapshot.summary.excludedItems)} {snapshot.summary.excludedItems === 1 ? "excluido" : "excluidos"}</span>
                 </div>
               </div>
 
@@ -811,13 +965,17 @@ export function ForecastClient({
                             ) : null}
                           </div>
 
-                          {candidateFor === item.id ? (
-                            <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
+                          {candidateFor === item.id && snapshot?.period.dateFrom === dateFrom && snapshot?.period.dateTo === dateTo ? (
+                            <div id={candidatesId} className={styles.candidates} role="group" aria-label={`Movimientos reales candidatos para ${item.concept}`}>
                               <div className={styles.candidateHeader}>
                                 <strong>Candidatos reales ±7 días</strong>
                                 <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
                               </div>
-                              {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
+                              {busy === `candidates:${item.id}` ? (
+                                <p className={styles.candidateEmpty} role="status" aria-live="polite">
+                                  Buscando coincidencias bancarias verificables…
+                                </p>
+                              ) : candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
                                 <div key={candidate.transactionId} className={styles.candidateRow}>
                                   <div>
                                     <strong>{candidate.concept || "Movimiento bancario"}</strong>
@@ -828,8 +986,10 @@ export function ForecastClient({
                                     Conciliar
                                   </button>
                                 </div>
-                              )) : (
+                              )) : candidateData ? (
                                 <p className={styles.candidateEmpty}>No hay movimientos elegibles cercanos con el mismo signo.</p>
+                              ) : (
+                                <p className={styles.candidateEmpty} role="status">Todavía no se ha verificado la búsqueda de movimientos reales.</p>
                               )}
                             </div>
                           ) : null}
@@ -852,9 +1012,9 @@ export function ForecastClient({
                 <form className={styles.manualForm} onSubmit={(event) => void createManual(event)} noValidate>
                   <label>
                     Fecha
-                    <input
-                      ref={manualDateRef}
-                      type="date"
+                    <SpanishDateInput
+                      inputRef={manualDateRef}
+                      label="Fecha"
                       value={manualDate}
                       min={dateFrom}
                       max={dateTo}
@@ -937,13 +1097,16 @@ export function ForecastClient({
                 </ul>
                 {snapshot.balanceContext.quality.integrityDeltaAccounts > 0 ? (
                   <div className={styles.qualityWarning}>
-                    Hay {snapshot.balanceContext.quality.integrityDeltaAccounts} cuenta con diferencia de reconstrucción conocida. La previsión mantiene el saldo bancario explícito como referencia.
+                    Hay {formatNumber(snapshot.balanceContext.quality.integrityDeltaAccounts)} {snapshot.balanceContext.quality.integrityDeltaAccounts === 1 ? "cuenta con diferencia de reconstrucción conocida" : "cuentas con diferencias de reconstrucción conocidas"}. La previsión mantiene el saldo bancario explícito como referencia.
                   </div>
                 ) : null}
               </section>
             </aside>
           </section>
         </>
+      ) : null}
+      {moduleSelection ? (
+        <ModuleContextNavigation links={forecastModuleLinks(moduleSelection)} ariaLabel="Continuar desde Previsión" />
       ) : null}
     </main>
   );

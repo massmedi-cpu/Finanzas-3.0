@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatMoneyCents } from "../src/core/money";
 import { ProductIcon } from "../src/design/product-icons";
 import { MAX_GLOBAL_SEARCH_QUERY_LENGTH, moveGlobalSearchIndex, prepareGlobalSearchQuery } from "./global-search-policy";
@@ -19,7 +20,7 @@ type SearchItem = {
   amountCents?: number | null;
   date?: string | null;
 };
-type SearchResponse = { query: string; items: SearchItem[]; partial: boolean };
+type SearchResponse = { query: string; items: SearchItem[]; partial: boolean; error?: string };
 
 const KIND_LABEL: Record<SearchKind, string> = {
   transaction: "Movimiento",
@@ -57,6 +58,7 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
+  const [sessionRequired, setSessionRequired] = useState(false);
   const [requestTimedOut, setRequestTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -77,6 +79,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     setActiveIndex(-1);
     const opener = openerRef.current;
@@ -125,6 +128,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     setActiveIndex(-1);
   }, [pathname]);
@@ -147,6 +151,7 @@ export default function GlobalSearch() {
     requestRef.current = controller;
     setLoading(true);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     // La respuesta queda vinculada al término exacto, incluso antes del siguiente efecto React.
     setItems([]);
@@ -161,6 +166,8 @@ export default function GlobalSearch() {
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => null) as SearchResponse | null;
+          if ((response.status === 401 || response.status === 403)
+            && payload?.error === "workspace_session_required") throw new Error("search_session_required");
           if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
           if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
           setItems(payload.items);
@@ -174,6 +181,7 @@ export default function GlobalSearch() {
             setResultsQuery("");
             setPartial(false);
             setError(true);
+            setSessionRequired(cause instanceof Error && cause.message === "search_session_required");
             setRequestTimedOut(deadlineExceeded);
           }
         })
@@ -246,7 +254,7 @@ export default function GlobalSearch() {
   const statusMessage = searching
     ? "Buscando resultados…"
     : error
-      ? requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
+      ? sessionRequired ? "No hay una sesión válida para consultar tus datos. Inicia sesión y reintenta." : requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
       : preparedQuery
         ? `Resultados rápidos: ${visibleItems.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
@@ -257,7 +265,7 @@ export default function GlobalSearch() {
         <ProductIcon name="search" />
         <span>Buscar</span><kbd>/</kbd>
       </button>
-      {open && (
+      {open && createPortal(
         <div className={styles.backdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`} onKeyDown={onDialogKeyDown}>
             <div className={styles.topline}>
@@ -296,8 +304,12 @@ export default function GlobalSearch() {
                 <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
                 <div className={styles.hint}>
-                  <strong>{requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
-                  <span>{requestTimedOut ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos." : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
+                  <strong>{sessionRequired ? "Necesitas iniciar sesión" : requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
+                  <span>{sessionRequired
+                    ? "La sesión ha caducado o no tienes acceso a este espacio. Inicia sesión y reintenta. No se ha mostrado información bancaria sin verificar."
+                    : requestTimedOut
+                      ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos."
+                      : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
                   <button type="button" className={styles.retryButton} onClick={() => { setRetryCount((current) => current + 1); inputRef.current?.focus(); }}>
                     Reintentar búsqueda
                   </button>
@@ -338,7 +350,7 @@ export default function GlobalSearch() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </>
   );
 }

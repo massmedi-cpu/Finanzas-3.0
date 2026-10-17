@@ -9,6 +9,7 @@ const contract = read("src/application/forecast/forecast-contract.ts");
 const engine = read("src/application/forecast/forecast-horizon-engine.ts");
 const panel = read("app/forecast/forecast-horizon-panel.tsx");
 const page = read("app/forecast/page.tsx");
+const client = read("app/forecast/forecast-client.tsx");
 
 const versionParts = String(pkg.version).split(".").map(Number);
 const versionNumber = (versionParts[0] ?? 0) * 1_000_000 + (versionParts[1] ?? 0) * 1_000 + (versionParts[2] ?? 0);
@@ -53,11 +54,9 @@ for (const token of [
   "/api/forecast",
 ]) requireText(panel, token, "interfaz");
 
-for (const token of [
-  "ForecastHorizonPanel",
-  "dateFrom={resolvedSelection.dateFrom}",
-  "accountId={resolvedSelection.accountId}",
-]) requireText(page, token, "integracion");
+requireText(page, "initialSelection={resolvedSelection}", "seleccion validada del servidor");
+requireText(client, "<ForecastHorizonPanel sourceSnapshot={snapshot}", "horizontes ligados al calendario vigente");
+requireText(panel, "isForecastSnapshotForSelection(data", "respuesta financiera de horizontes validada");
 
 const forbidden = [
   [engine.includes("confirmedTransactionId"), "el motor de horizontes no debe recalcular confirmados"],

@@ -390,7 +390,7 @@ export default function SourceClient() {
             Financial App guarda sus revisiones, trazabilidad y cambios manuales en su propia base de datos.
           </p>
         </div>
-        <div className="configuration-summary" aria-label="Estado de la fuente bancaria">
+        <div className="configuration-summary" role="group" aria-label="Estado de la fuente bancaria">
           <div><strong>{google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
           <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
           <div><strong>{runtimeReady ? "Sí" : "No"}</strong><span>Sincronización disponible</span></div>
@@ -481,7 +481,7 @@ export default function SourceClient() {
             </div>
 
             {preflight && (
-              <div className={styles.preflightBlock} aria-label="Prevalidación de la fuente bancaria">
+              <div className={styles.preflightBlock} role="region" aria-label="Prevalidación de la fuente bancaria">
                 <div className="panel-heading">
                   <div><p className="panel-kicker">PREVALIDACIÓN READ-ONLY</p><h3>Fotografía autoritativa antes de importar</h3></div>
                   <span className="status-chip">Validada</span>

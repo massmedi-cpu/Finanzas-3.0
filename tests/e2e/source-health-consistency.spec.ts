@@ -78,12 +78,18 @@ function json(route: Route, body: unknown) {
   return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function openComparison(page: Page, sync: typeof BASE_SYNC) {
-  await page.route("**/api/analysis/source-freshness", (route) => json(route, {
-    available: true,
-    latestMovementDate: "2026-09-27",
-    sync,
-  }));
+async function openComparison(page: Page, sync: typeof BASE_SYNC, earliestMovementDate: string | null = "2026-01-01") {
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => {
+    // The user selected a specific bank account. The genuine component now
+    // sends accountId to avoid showing all-accounts sync as verified coverage
+    // for an individual account. Match the real scoped URL, not a stale
+    // unscoped endpoint; still enforce the selected-account contract.
+    expect(new URL(route.request().url()).searchParams.get("accountId")).toBe(ACCOUNT_ID);
+    return json(route, {
+      available: true, earliestMovementDate,
+      latestMovementDate: "2026-09-27", sync,
+    });
+  });
   await page.route(/\/api\/compare(?:\?.*)?$/, (route) => json(route, comparisonSnapshot()));
   await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-10&accountId=${ACCOUNT_ID}`);
   await expect(page.getByRole("heading", { name: "Comparador", level: 1 })).toBeVisible();
@@ -140,7 +146,7 @@ test("Comparador separa movimientos ausentes de los avisos adicionales", async (
   await openComparison(page, { ...BASE_SYNC, rowsMissing: 2, warningsCount: 3 });
 
   const status = page.getByRole("status", { name: /Fuente sincronizada con incidencias/ });
-  await expect(status).toContainText("2 movimientos ya no están en la fuente");
+  await expect(status).toContainText("2 movimientos ausentes de los datos importados");
   await expect(status).toContainText("1 aviso adicional");
   await expect(status).not.toContainText("3 avisos");
 });
@@ -149,5 +155,15 @@ test("Comparador mantiene el estado limpio cuando todos los contadores están a 
   await openComparison(page, BASE_SYNC);
 
   await expect(page.getByRole("status", { name: /Fuente sincronizada/ })).toContainText("Datos al día");
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveCount(0);
+});
+
+
+test("REC-SOURCE-141 · a clean sync cannot certify complete banking history without a first movement date", async ({ page }) => {
+  await openComparison(page, BASE_SYNC, null);
+  const status = page.getByRole("status", { name: /Fuente sincronizada/ });
+  await expect(status).toContainText("Cobertura histórica sin verificar");
+  await expect(status).toContainText("no la fecha inicial del histórico bancario");
+  await expect(status).not.toContainText("Datos al día");
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveCount(0);
 });

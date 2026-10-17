@@ -94,3 +94,5 @@ test("F11 scanned PDF fallback rasterizes the page and recovers receipt text wit
   expect(result.principles.financialWrites).toBe(false);
   expect(result.principles.requiresHumanReview).toBe(true);
 });
+
+

@@ -1,0 +1,58 @@
+name: Authenticated optimized read capacity 10k-50k
+
+on:
+  pull_request:
+    branches: [main, chat/twenty-one-routes-responsive-shell-20261010, chat/integrated-b-e-c-visual-20261010]
+    paths:
+      - 'app/**'
+      - 'src/application/**'
+      - 'src/infrastructure/**'
+      - 'supabase/migrations/**'
+      - 'supabase/functions/financial-app-db-gateway/**'
+      - 'supabase/tests/aud_e2e_authenticated.ts'
+      - 'supabase/tests/aud_e2e_capacity.ts'
+      - 'scripts/aud-e2e-*'
+      - 'tests/e2e/aud-e2e-capacity.spec.ts'
+      - 'playwright.authenticated-capacity.config.ts'
+      - 'package*.json'
+      - '.github/workflows/authenticated-read-capacity.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: authenticated-capacity-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  optimized-read-capacity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies and Chromium
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Measure real isolated Auth, optimized Next, gateway and PostgreSQL reads
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+          AUD_ISOLATED_SUITE: capacity
+        run: bash scripts/aud-e2e-authenticated-isolation.sh
+      - name: Preserve synthetic timing report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: authenticated-capacity-${{ github.event.pull_request.head.sha }}
+          path: capacity-evidence/authenticated-read-capacity.json
+          if-no-files-found: warn
+          retention-days: 7
+      # Only synthetic timings and runtime information, never Auth context,
+      # database files, tokens, HTTP traces, screenshots or signed URLs.

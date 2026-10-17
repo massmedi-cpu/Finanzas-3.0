@@ -202,7 +202,7 @@ export default function SourceOverviewClient() {
           <h1>Fuente bancaria</h1>
           <p className="hero-copy">Conecta y actualiza tus movimientos sin modificar el archivo original de Google.</p>
         </div>
-        <div className="configuration-summary" aria-label="Resumen de la fuente bancaria">
+        <div className="configuration-summary" role="group" aria-label="Resumen de la fuente bancaria">
           <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
           <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Última actualización</span></div>
           <div><strong>{stateLabel}</strong><span>Estado</span></div>

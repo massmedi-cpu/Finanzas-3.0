@@ -6,6 +6,8 @@ set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { echo 'AUD_AUTH|ci_runner_required'; exit 1; }
 [[ "${AUD_VALIDATION_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || exit 1
 [[ "$(git rev-parse HEAD)" == "$AUD_VALIDATION_SHA" ]] || exit 1
+suite="${AUD_ISOLATED_SUITE:-acceptance}"
+[[ "$suite" == acceptance || "$suite" == capacity ]] || { echo 'AUD_AUTH|invalid_suite'; exit 1; }
 for forbidden in SUPABASE_ACCESS_TOKEN FINANCIAL_APP_DB_URL VERCEL_OIDC_TOKEN GOOGLE_SERVICE_ACCOUNT_JSON; do
   [[ -z "${!forbidden:-}" ]] || { echo 'AUD_AUTH|external_credentials_forbidden'; exit 1; }
 done
@@ -23,6 +25,40 @@ cleanup() {
 trap cleanup EXIT
 
 npx --yes supabase@2.120.0 init --workdir "$workdir" >/dev/null
+# Auth accounts are provisioned directly via admin.createUser({ email_confirm: true }).
+# Mail testing is not part of this isolated Auth/RLS/Storage/capacity suite.
+# Disable the optional Inbucket container: port 54324 can be occupied on a
+# GitHub runner and must not prevent genuine PostgreSQL from being measured.
+node - "$workdir/supabase/config.toml" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const config = fs.readFileSync(file, 'utf8');
+// Supabase CLI can leave the default enabled=true implicit in config.toml.
+// Handle explicit true, explicit false and absent [inbucket] without changing
+// Auth, Postgres or Storage. All changes remain inside this disposable workdir.
+const marker = /^(\[inbucket\]\r?\n)/m;
+let updated;
+const found = config.match(marker);
+if (!found) {
+  updated = config.replace(/\s*$/, '\n') + '[inbucket]\nenabled = false\n';
+} else {
+  const start = found.index + found[0].length;
+  const relativeNext = config.slice(start).search(/^\[[^\r\n]+\]/m);
+  const end = relativeNext < 0 ? config.length : start + relativeNext;
+  let body = config.slice(start, end);
+  if (/^enabled\s*=\s*(?:true|false)\s*$/m.test(body)) {
+    body = body.replace(/^enabled\s*=\s*(?:true|false)\s*$/m, 'enabled = false');
+  } else {
+    body = 'enabled = false\n' + body;
+  }
+  updated = config.slice(0, start) + body + config.slice(end);
+}
+if (!/\[inbucket\]\r?\nenabled = false/.test(updated)) {
+  throw new Error('local_mail_capture_not_disabled');
+}
+fs.writeFileSync(file, updated);
+process.stdout.write('AUD_AUTH|mail_capture_disabled=true|db_auth_storage_intact=true\n');
+NODE
 # Start Auth, REST and Storage against the genuine managed schemas, not stubs.
 # Migrations are copied verbatim before start; no production bootstrap data.
 cp -a supabase/migrations "$workdir/supabase/migrations"
@@ -77,6 +113,22 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 curl -fs --max-time 2 http://127.0.0.1:54330/jwks >/dev/null
+if [[ "$suite" == capacity ]]; then
+  npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
+    --allow-read --allow-write="$workdir" \
+    --config supabase/functions/financial-app-db-gateway/deno.json \
+    supabase/tests/aud_e2e_capacity.ts prepare
+  # Measure the optimized application, never next dev or an external preview.
+  NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run build
+  capacity_status=0
+  npx playwright test --config=playwright.authenticated-capacity.config.ts || capacity_status=$?
+  npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
+    --allow-read --config supabase/functions/financial-app-db-gateway/deno.json \
+    supabase/tests/aud_e2e_capacity.ts verify
+  [[ "$capacity_status" == 0 ]] || exit "$capacity_status"
+  echo "AUD_CAPACITY|status=ok|optimized_next=true|auth_gateway_postgres=true|cloud_access=false|sha=$AUD_VALIDATION_SHA"
+  exit 0
+fi
 npx playwright test --config=playwright.authenticated-isolation.config.ts
 npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
   --allow-read --allow-write="$workdir" \

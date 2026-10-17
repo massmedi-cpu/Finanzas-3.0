@@ -107,6 +107,15 @@ async function mockInicio(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
 
+    // This legacy fixture has a latest bank movement but no certified start
+    // or completed-import evidence. The month is observed, never complete.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-11", sync: null,
+      });
+      return;
+    }
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
@@ -213,8 +222,11 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.getByText("Balance del mes protegido", { exact: true })).toBeVisible();
   await expect(page.getByText("Balance registrado en positivo", { exact: true })).toHaveCount(0);
   await expect(page.getByText("La previsión termina en negativo", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toBeVisible();
-  await expect(page.getByText("Privacidad activa · referencia monetaria local eliminada", { exact: true })).toBeVisible();
+  // With a legacy upper-only source, the month is partial. Do not claim
+  // confirmed savings or reveal a percentage when monetary privacy is on.
+  await expect(page.locator('section[aria-label="Resumen financiero principal"]').getByText(/Importes parciales|histórico sin verificar/)).toBeVisible();
+  await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Importes ocultos", { exact: true })).toBeVisible();
   await expect(page.getByText(/La comparación entre visitas está pausada mientras ocultas importes/i)).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).toBeNull();
 

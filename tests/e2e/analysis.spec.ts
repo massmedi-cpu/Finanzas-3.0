@@ -1,10 +1,16 @@
 import { expect, test } from "@playwright/test";
 import {
+  dateHasConfirmedCoverage,
+  periodComparisonIsReliable,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
+import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
   type AnalysisSnapshot,
 } from "../../src/application/analysis/analysis-engine";
 import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { resolveBudgetSourcePresentation } from "../../src/application/analysis/analysis-presentation";
 import { runAnalysisSnapshotQuery } from "../../supabase/functions/financial-app-db-gateway/analysis-query";
 
@@ -176,13 +182,14 @@ async function mockAnalysisApi(
   page: Parameters<typeof test>[0] extends never ? never : any,
   snapshot: AnalysisSnapshot,
   latestMovementDate = snapshot.selection.dateTo,
+  earliestMovementDate: string | null = "2025-01-01",
 ) {
   let selectedRequestSeen = false;
   await page.route("**/api/analysis/source-freshness", async (route: any) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate, sync: null }),
+      body: JSON.stringify({ available: true, latestMovementDate, earliestMovementDate, sync: null }),
     });
   });
   await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
@@ -197,8 +204,8 @@ async function mockAnalysisApi(
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo) {
-  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate);
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate: string | null = "2025-01-01") {
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate, earliestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: "1 mes" }).click();
@@ -206,6 +213,96 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMov
   await expect.poll(selectedRequestSeen).toBe(true);
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
+
+test.describe("Fechas avanzadas de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-003 · los rangos personalizados se leen en español y se envían en ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?periodMode=custom&dateFrom=2026-09-01&dateTo=2026-09-15&compareMode=custom&compareDateFrom=2026-08-01&compareDateTo=2026-08-15");
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const from = advanced.getByLabel("Desde", { exact: true });
+    const to = advanced.getByLabel("Hasta", { exact: true });
+    await expect(from.first().locator("..")).toContainText("01/09/2026");
+    await expect(to.first().locator("..")).toContainText("15/09/2026");
+    await expect(from.nth(1).locator("..")).toContainText("01/08/2026");
+    await expect(to.nth(1).locator("..")).toContainText("15/08/2026");
+    await from.first().fill("2026-09-02");
+    await expect(from.first().locator("..")).toContainText("02/09/2026");
+    await advanced.getByRole("button", { name: "Aplicar cambios", exact: true }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
+test.describe("Meses de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-MONTH-002 · referencia y filtro avanzado muestran español y conservan año-mes ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?month=2026-09&range=1m");
+    const form = page.getByRole("form", { name: "Filtros del análisis" });
+    const month = form.getByLabel("Mes de referencia");
+    await expect(month.locator("..")).toContainText("septiembre de 2026");
+    await month.fill("2026-08");
+    await expect(month.locator("..")).toContainText("agosto de 2026");
+    const selectedRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/analysis" && url.searchParams.get("month") === "2026-08";
+    });
+    await form.getByRole("button", { name: "Aplicar cambios" }).click();
+    await selectedRequest;
+    // This fixture always answers with September; the control reflects the
+    // applied response instead of pretending August was loaded.
+    await expect(month).toHaveValue("2026-09");
+    await expect(page).toHaveURL(/month=2026-09/);
+
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const advancedMonth = advanced.getByLabel("Mes para análisis avanzado");
+    await expect(advancedMonth.locator("..")).toContainText("septiembre de 2026");
+    await advancedMonth.fill("2026-08");
+    await expect(advancedMonth.locator("..")).toContainText("agosto de 2026");
+    await expect(advancedMonth).toHaveValue("2026-08");
+    await advanced.getByRole("button", { name: "Aplicar cambios" }).click();
+    await expect(page).toHaveURL(/month=2026-08/);
+  });
+});
+
+test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await mockAnalysisApi(page, snapshot);
+  let finishedAt: string | null = null;
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2025-01-01",
+        latestMovementDate: "2026-09-15",
+        sync: {
+          status: "success",
+          startedAt: "2026-10-01T09:00:00Z",
+          finishedAt,
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+  await page.goto("/analysis?month=2026-09&range=1m");
+  await expect(page.getByText("Sincronización sin finalización verificada")).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+
+  finishedAt = "2026-10-01T10:00:00Z";
+  await page.reload();
+  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sincronización sin finalización verificada")).toHaveCount(0);
+});
 
 test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
   const snapshot = mockSnapshot();
@@ -238,6 +335,40 @@ test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora"
   await expect(kpis).not.toContainText("−100");
   await expect(kpis).not.toContainText("-100");
   await expect(page.getByRole("heading", { name: /Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación/i })).toBeVisible();
+  const changeSection = page.locator('section[aria-labelledby="change-heading"]');
+  await expect(changeSection).toContainText("Sin cobertura bancaria confirmada");
+  await expect(changeSection.getByRole("list", { name: /categoría/i })).toHaveCount(0);
+  await expect(changeSection).not.toContainText("Más gasto");
+  await expect(changeSection).not.toContainText("Menos gasto");
+  await expect(page.getByLabel("Lectura rápida")).toContainText("Sin cobertura");
+  await expect(page.getByLabel("Lectura rápida")).not.toContainText("Mayor cambio");
+  await expect(page.locator('section[aria-labelledby="axioma53-accumulated-heading"]')).toContainText("No hay cobertura bancaria confirmada");
+});
+
+test("REC-ANA-001 · un mes con cobertura parcial muestra gastos reales sin inventar variaciones", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  // All 550,00 € of the financial-period fixture have observed dates. The
+  // calendar after 05/09 is unavailable, not a confirmed sequence of zeroes.
+  snapshot.dailySpend = [{ date: "2026-09-02", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-05");
+
+  const changeSection = page.locator('section[aria-labelledby="change-heading"]');
+  await expect(changeSection).toContainText("Sin comparación fiable");
+  await expect(changeSection).toContainText("Importes observados del periodo");
+  const observed = changeSection.getByRole("list", { name: "Gastos observados por categoría, periodo incompleto" });
+  await expect(observed.getByRole("listitem")).toHaveCount(2);
+  await expect(observed.getByRole("listitem", { name: /Alimentación: gasto observado 350,00/ })).toBeVisible();
+  await expect(observed.getByRole("link", { name: "Ver movimientos" }).first()).toHaveAttribute("href", new RegExp(`categoryId=${CATEGORY_FOOD}`));
+  await expect(changeSection).not.toContainText("Más gasto");
+  await expect(changeSection).not.toContainText("Menos gasto");
+  await expect(changeSection.getByRole("button", { name: "Variación" })).toHaveCount(0);
+  await expect(page.getByLabel("Lectura rápida")).toContainText("Gasto observado");
+  await expect(page.getByLabel("Lectura rápida")).not.toContainText("Mayor cambio");
+  const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulation).toContainText("Datos observados hasta el 05/09/2026");
+  await accumulation.getByText("Ver acumulado por día").click();
+  await expect(accumulation.getByRole("table").getByRole("row")).toHaveCount(6);
+  await expect(accumulation.getByRole("table")).not.toContainText("06/09/2026");
 });
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
@@ -431,4 +562,378 @@ test("AUD-E2E-NAV-001 · avanzado refleja los 3 meses aplicados sin recarga", as
   const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
   await expect(advanced.getByRole("button", { name: "3 meses" })).toHaveAttribute("aria-pressed", "true");
   await expect(advanced.getByLabel("Mes para análisis avanzado")).toHaveValue("2026-09");
+});
+
+
+test("REC-ANA-002 · evolución mensual no representa un mes sin cobertura como cero", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.history = [
+    { monthStart: "2026-07-01", rows: 1, incomeCents: 10_000, expenseCents: 2_000, operatingNetCents: 8_000, savingsCents: 8_000, savingsRateBps: 8_000 },
+    { monthStart: "2026-08-01", rows: 3, incomeCents: 20_000, expenseCents: 15_000, operatingNetCents: 5_000, savingsCents: 5_000, savingsRateBps: 2_500 },
+    { monthStart: "2026-09-01", rows: 0, incomeCents: 0, expenseCents: 0, operatingNetCents: 0, savingsCents: 0, savingsRateBps: null },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-08-31");
+
+  const chart = page.getByRole("region", { name: "Comparativa financiera visual" });
+  await expect(chart).toBeVisible();
+  await expect(chart.locator('button[data-month-coverage="covered"]')).toHaveCount(2);
+  const missing = chart.locator('button[data-month-coverage="none"]');
+  await expect(missing).toHaveCount(1);
+  await expect(missing).toContainText("Sin dato");
+  const data = chart.getByRole("table", { name: "Datos de la comparativa financiera" });
+  await expect(data.getByRole("row", { name: /Ingresos/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await expect(data.getByRole("row", { name: /Gastos/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await expect(data.getByRole("row", { name: /Neto/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await missing.click();
+  const readout = chart.getByRole("tooltip");
+  await expect(readout).toContainText("Sin datos bancarios confirmados para este mes");
+  await expect(readout).not.toContainText("equilibrio");
+  await expect(readout.getByRole("link", { name: /Ver movimientos/ })).toHaveCount(0);
+});
+
+test("REC-ANA-003 · el acumulado conserva el máximo visual anterior a una devolución", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [
+    { date: "2026-09-01", expenseCents: 10_000, rows: 1 },
+    { date: "2026-09-02", expenseCents: -9_000, rows: 1 },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-09-15");
+
+  const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulation.locator("strong").first()).toHaveText(/10,00\s*€/);
+  await expect(accumulation).toContainText("ajustes o devoluciones");
+  await expect(accumulation.getByRole("img", { name: /Gasto acumulado: 10,00/ })).toBeVisible();
+  await expect(accumulation.locator("svg")).toContainText(/100,00/);
+  const linePath = await accumulation.locator("path").last().getAttribute("d");
+  const pointsY = [...(linePath ?? "").matchAll(/[ML]\s+[\d.]+\s+(-?[\d.]+)/g)].map((match) => Number(match[1]));
+  expect(pointsY.length).toBe(15);
+  expect(pointsY.every((y) => y >= 22 && y <= 204)).toBe(true);
+});
+
+test("REC-ANA-004 · cero neto por devolución no se muestra como un céntimo", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [
+    { date: "2026-09-01", expenseCents: 10_000, rows: 1 },
+    { date: "2026-09-02", expenseCents: -10_000, rows: 1 },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-09-15");
+
+  const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulation.locator("strong").first()).toHaveText(/0,00\s*€/);
+  await expect(accumulation.getByRole("img", { name: /Gasto acumulado: 0,00/ })).toBeVisible();
+  await expect(accumulation.locator("strong").first()).not.toContainText("0,01");
+  await accumulation.getByText("Ver acumulado por día").click();
+  await expect(accumulation.getByRole("table")).toContainText(/100,00/);
+  await expect(accumulation.getByRole("table").getByRole("row").last()).toContainText(/0,00/);
+});
+
+test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más allá de quince", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  const template = snapshot.merchantDrivers[0];
+  expect(template).toBeDefined();
+  snapshot.merchantDrivers = Array.from({ length: 18 }, (_, index) => ({
+    ...template,
+    id: `merchant-${index + 1}`,
+    name: `Comercio de prueba ${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-${index + 1}`,
+  }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-005 mock URL must be accepted by production contract").toBe(true);
+  await loadMockAnalysis(page, snapshot);
+
+  const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
+  await expect(ranking.getByRole("listitem")).toHaveCount(5);
+  const showAll = ranking.getByRole("button", { name: "Ver todos" });
+  await expect(showAll).toHaveAttribute("aria-expanded", "false");
+  await showAll.click();
+  await expect(ranking.getByRole("listitem")).toHaveCount(18);
+  await expect(ranking.getByRole("link", { name: "Ver movimientos de Comercio de prueba 18" })).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-18",
+  );
+  await expect(ranking.getByRole("button", { name: "Ver menos" })).toHaveAttribute("aria-expanded", "true");
+  await ranking.getByRole("button", { name: "Ver menos" }).click();
+  await expect(ranking.getByRole("listitem")).toHaveCount(5);
+});
+
+test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ranking completo", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  const template = snapshot.merchantDrivers[0];
+  snapshot.merchantDrivers = Array.from({ length: 30 }, (_, index) => ({
+    ...template,
+    id: `merchant-limited-${index + 1}`,
+    name: `Comercio disponible ${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-limited-${index + 1}`,
+  }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-006 mock URL must be accepted by production contract").toBe(true);
+  await loadMockAnalysis(page, snapshot);
+  const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
+  await expect(ranking).toContainText("como máximo los 30 comercios");
+  await expect(ranking).toContainText("Puede haber más fuera de este ranking");
+  await expect(ranking.getByRole("button", { name: "Ver todos los disponibles" })).toBeVisible();
+  await expect(ranking.getByRole("link", { name: "Buscar otros en Movimientos" })).toHaveAttribute(
+    "href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
+  );
+});
+
+test("REC-ANA-007 · cifras y fechas del acumulado legibles en 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [
+    { date: "2026-09-01", expenseCents: 123_456_789, rows: 1 },
+    { date: "2026-09-02", expenseCents: -23_456_789, rows: 1 },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-09-15");
+  const region = page.getByRole("region", { name: "Gráfica de gasto acumulado" });
+  const visual = await region.locator("svg").evaluate((svg) => {
+    const ticks = [...svg.querySelectorAll("g text")];
+    const viewBox = (svg as SVGSVGElement).viewBox.baseVal;
+    const scale = svg.getBoundingClientRect().width / viewBox.width;
+    return {
+      minRenderedLabelPx: Math.min(...ticks.map((node) => parseFloat(getComputedStyle(node).fontSize) * scale)),
+      allTicksVisible: ticks.every((node) => {
+        const box = (node as SVGGraphicsElement).getBBox();
+        return box.x >= -0.5 && box.x + box.width <= viewBox.width + 0.5;
+      }),
+    };
+  });
+  expect(visual.minRenderedLabelPx).toBeGreaterThanOrEqual(14);
+  expect(visual.allTicksVisible).toBe(true);
+  await expect(region).toContainText("1.234.567,89");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("REC-COV-003 · Análisis omite los días anteriores al primer dato bancario", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-15", "2026-09-04");
+
+  const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulated).toContainText("Datos registrados desde el 04/09/2026");
+  await expect(accumulated).toContainText("Los días anteriores no se representan como ceros");
+  const disclosure = accumulated.getByText("Ver acumulado por día", { exact: true });
+  await disclosure.click();
+  const dates = accumulated.getByRole("table").locator("tbody tr td:first-child");
+  await expect(dates.first()).toHaveText("04/09/2026");
+  await expect(dates).toHaveCount(12);
+  await expect(dates.first()).not.toHaveText("01/09/2026");
+  const comparisons = page.getByLabel("Indicadores principales del periodo");
+  await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+});
+
+test("REC-COV-006 · el extremo bancario se solicita para la cuenta realmente seleccionada", async ({ page }) => {
+  const accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const snapshot = mockSnapshot();
+  snapshot.selection.accountId = accountId;
+  const scopes: Array<string | null> = [];
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const value = new URL(route.request().url()).searchParams.get("accountId");
+    scopes.push(value);
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true, earliestMovementDate: "2026-09-04",
+        latestMovementDate: "2026-09-15", sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+  });
+  await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
+  await expect.poll(() => scopes.includes(accountId)).toBe(true);
+  await expect(page.getByRole("heading", { level: 1, name: "Análisis" })).toBeVisible();
+});
+
+
+test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histórico", () => {
+  const legacy = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-10-10",
+  });
+  // The only known movement is after September: its existence does not
+  // establish that the historical September interval contains any rows.
+  expect(legacy.state).toBe("unknown");
+  expect(legacy.fromDate).toBeUndefined();
+  expect(periodComparisonIsReliable(legacy)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-12", legacy)).toBe(false);
+
+  const currentObserved = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-09-15",
+  });
+  expect(currentObserved.state).toBe("partial");
+  expect(periodComparisonIsReliable(currentObserved)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-15", currentObserved)).toBe(false);
+
+  const knownBounds = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: "2026-08-01",
+    latestMovementDate: "2026-10-10",
+  });
+  expect(knownBounds.state).toBe("covered");
+  expect(dateHasConfirmedCoverage("2026-09-12", knownBounds)).toBe(true);
+});
+
+test("REC-COV-011 · las incidencias de sincronización invalidan la cobertura completa aparente", () => {
+  const period = {
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: "2026-08-01",
+    latestMovementDate: "2026-10-03",
+  };
+  expect(resolvePeriodCoverage(period).state).toBe("covered");
+  for (const sync of [
+    { status: "started" },
+    { status: "partial", rowsFailed: 2 },
+    { status: "failed" },
+    { status: "success", rowsMissing: 1 },
+    { status: "success", duplicatesDetected: 3 },
+    { status: "success", warningsCount: 1 },
+  ]) {
+    const coverage = resolvePeriodCoverage({ ...period, sync });
+    expect(coverage.state).toBe("partial");
+    expect(periodComparisonIsReliable(coverage)).toBe(false);
+    expect(coverage.throughDate).toBe("2026-09-30");
+  }
+  const clean = resolvePeriodCoverage({ ...period, sync: {
+    status: "success",
+    startedAt: "2026-10-03T09:00:00Z",
+    finishedAt: "2026-10-03T09:01:00Z",
+    rowsSeen: 300,
+    rowsFailed: 0,
+    rowsMissing: 0,
+    duplicatesDetected: 0,
+    warningsCount: 0,
+  } });
+  expect(clean.state).toBe("covered");
+
+  // A "success" string without evidence of a completed run must not
+  // silently upgrade date bounds into verified financial coverage.
+  for (const sync of [
+    { status: "success", finishedAt: null, rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "not-a-date", rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "2026-10-03T09:01:00Z", rowsSeen: null, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+  ]) {
+    const partial = resolvePeriodCoverage({ ...period, sync });
+    expect(partial.state).toBe("partial");
+    expect(periodComparisonIsReliable(partial)).toBe(false);
+  }
+});
+
+test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-15", null);
+
+  const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await accumulated.getByText("Ver acumulado por día", { exact: true }).click();
+  const dates = accumulated.getByRole("table").getByRole("row").locator("td:first-child");
+  await expect(dates.first()).toHaveText("04/09/2026");
+  await expect(dates.first()).not.toHaveText("01/09/2026");
+  await expect(dates).toHaveCount(12);
+  const comparisons = page.getByLabel("Indicadores principales del periodo");
+  await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+});
+
+
+test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura anterior", async ({ page }) => {
+  const overall = mockSnapshot();
+  const selectedAccountId = overall.accounts[0].id;
+  const individual: AnalysisSnapshot = {
+    ...overall,
+    selection: { ...overall.selection, accountId: selectedAccountId },
+  };
+  let releaseScopedRequest: (() => void) | undefined;
+  const holdScopedRequest = new Promise<void>((resolve) => {
+    releaseScopedRequest = resolve;
+  });
+  let scopedRequestSeen = false;
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    if (account === selectedAccountId) {
+      scopedRequestSeen = true;
+      await holdScopedRequest;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: account ? "2026-09-04" : "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(account === selectedAccountId ? individual : overall),
+    });
+  });
+
+  try {
+    await page.goto("/analysis?month=2026-09&range=1m");
+    const comparisons = page.getByLabel("Indicadores principales del periodo");
+    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(0);
+    await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption(selectedAccountId);
+    await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+    await expect.poll(() => scopedRequestSeen).toBe(true);
+    // While the new scoped request is pending, the old account's complete
+    // bounds cannot certify the selected account's comparisons.
+    // A pending account-scoped freshness fetch has no trusted banking bounds.
+    // The correct UI state is UNKNOWN, not a comparison approved from account A.
+    await expect(comparisons.getByText("Cobertura desconocida · comparación no disponible", { exact: true })).toHaveCount(4);
+  } finally {
+    releaseScopedRequest?.();
+  }
+});
+
+
+test("REC-COV-010 · volver a todas las cuentas no hereda la cuenta de la URL original", async ({ page }) => {
+  const specific = mockSnapshot();
+  const accountId = specific.accounts[0].id;
+  specific.selection.accountId = accountId;
+  const all = mockSnapshot();
+  const freshnessScopes: Array<string | null> = [];
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    freshnessScopes.push(scope);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(scope === accountId ? specific : all),
+    });
+  });
+
+  await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
+  await expect.poll(() => freshnessScopes.includes(accountId)).toBe(true);
+  await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption("");
+  const requestsBeforeSwitch = freshnessScopes.length;
+  await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+  await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m(?!.*accountId)/);
+  await expect.poll(() => freshnessScopes.slice(requestsBeforeSwitch).includes(null)).toBe(true);
 });

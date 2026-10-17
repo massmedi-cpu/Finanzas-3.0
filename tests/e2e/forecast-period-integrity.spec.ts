@@ -116,3 +116,120 @@ test("la selección avisa de un horizonte de más de 730 días sin consultar el 
   await expect(page.locator("main").getByRole("alert")).toContainText("730 días");
   expect(requestedPeriods).not.toContain("2024-01-01:2026-10-31");
 });
+
+
+for (const failure of ["http_503", "stale_200"] as const) {
+  test(failure === "http_503"
+    ? "REC-FCAST-031 · uncertain manual POST retains form and original idempotency key after GET failure"
+    : "REC-FCAST-032 · 200 with stale forecast cannot confirm a successful manual POST", async ({ page }) => {
+    let manual: { date: string; concept: string; amountCents: number } | null = null;
+    let posted = false;
+    let verifyAttempt = 0;
+    const idempotencyKeys: string[] = [];
+    await page.route("**/api/forecast*", async (route) => {
+      const req = route.request();
+      if (req.method() === "POST") {
+        const body = req.postDataJSON();
+        idempotencyKeys.push(req.headers()["idempotency-key"] ?? "");
+        posted = true;
+        manual = { date: body.date, concept: body.concept, amountCents: body.amountCents };
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ id: ITEM_ID, origin: "manual" }) });
+        return;
+      }
+      const url = new URL(req.url());
+      const from = url.searchParams.get("dateFrom") ?? "2026-10-01";
+      const to = url.searchParams.get("dateTo") ?? "2026-10-31";
+      if (posted && ++verifyAttempt === 1) {
+        if (failure === "http_503") {
+          await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporarily_unavailable"}' });
+        } else {
+          await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forecastSnapshot(from, to, null)) });
+        }
+        return;
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forecastSnapshot(from, to, manual)) });
+    });
+
+    await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+    const concept = page.getByLabel("Concepto");
+    const amount = page.getByLabel("Importe");
+    await concept.fill("Seguro de octubre verificado");
+    await amount.fill("18,90");
+    await page.getByRole("button", { name: "Añadir al calendario" }).click();
+    await expect.poll(() => idempotencyKeys.length).toBe(1);
+    await expect(page.locator("main").getByRole("alert")).toContainText("puede haberse");
+    await expect(concept).toHaveValue("Seguro de octubre verificado");
+    await expect(amount).toHaveValue("18,90");
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Añadir al calendario" }).click();
+    await expect(page.getByRole("heading", { name: "Seguro de octubre verificado" })).toBeVisible();
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toBeVisible();
+    expect(idempotencyKeys).toHaveLength(2);
+    expect(idempotencyKeys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+    expect(idempotencyKeys[0]).toBe(idempotencyKeys[1]);
+    await expect(concept).toHaveValue("");
+    await expect(amount).toHaveValue("");
+  });
+}
+
+
+for (const invalidResponse of ["other_period", "invalid_amount", "other_account"] as const) {
+  test(invalidResponse === "other_period"
+    ? "REC-FCAST-035 · HTTP 200 with a different forecast period never displays another month's money"
+    : invalidResponse === "invalid_amount"
+      ? "REC-FCAST-036 · HTTP 200 with unsafe forecast totals is not financial evidence"
+      : "REC-FCAST-037 · HTTP 200 with a different banking account must not become verified money", async ({ page }) => {
+    let reads = 0;
+    await page.route("**/api/forecast*", async (route) => {
+      reads += 1;
+      const url = new URL(route.request().url());
+      const from = url.searchParams.get("dateFrom") ?? "2026-10-01";
+      const to = url.searchParams.get("dateTo") ?? "2026-10-31";
+      const valid = forecastSnapshot(from, to, {
+        date: "2026-10-15", concept: "DATO AJENO NO VERIFICADO", amountCents: -8999,
+      });
+      const payload = invalidResponse === "other_period"
+        ? { ...valid, period: { ...valid.period, dateFrom: "2026-09-01" } }
+        : invalidResponse === "other_account"
+          ? { ...valid, period: { ...valid.period, accountId: "10000000-0000-4000-8000-000000000073" } }
+          : { ...valid, summary: { ...valid.summary, projectedClosingBalanceCents: Number.MAX_SAFE_INTEGER + 10 } };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(payload) });
+    });
+    await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+    await expect(page.locator("main").getByRole("alert")).toContainText("No se mostrarán como previsión verificada");
+    await expect(page.getByRole("heading", { name: "DATO AJENO NO VERIFICADO" })).toHaveCount(0);
+    await expect(page.getByText("Previsión manual añadida y verificada en el calendario.")).toHaveCount(0);
+    expect(reads).toBeGreaterThanOrEqual(1);
+  });
+}
+
+
+test("REC-FCAST-041 · una respuesta 502 por contrato bancario incoherente se explica sin mostrar dinero", async ({ page }) => {
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 502,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "invalid_forecast_snapshot", code: "invalid_forecast_snapshot_contract" }),
+  }));
+  await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no coinciden con la consulta");
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
+});
+
+
+test("REC-FCAST-050 · un GET 200 sin saldos estructurados da error accesible y no rompe la pantalla", async ({ page }) => {
+  await page.route("**/api/forecast*", async (route) => {
+    const from = new URL(route.request().url()).searchParams.get("dateFrom") || "2026-10-01";
+    const to = new URL(route.request().url()).searchParams.get("dateTo") || "2026-10-31";
+    const response = forecastSnapshot(from, to, null);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...response, balanceContext: { accounts: [] } }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se mostrarán como previsión verificada");
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
+});

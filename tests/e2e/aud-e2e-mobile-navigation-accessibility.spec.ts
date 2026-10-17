@@ -9,6 +9,8 @@ test.describe("AUD-E2E-VAL-001 · navegación móvil accesible", () => {
       const dock = page.getByRole("navigation", { name: "Navegación móvil" });
       const more = dock.getByRole("button", { name: "Más", exact: true });
       await expect(more).toBeVisible();
+      // Keyboard listeners must be hydrated: no inert pre-hydration actions.
+      await expect(more).toBeEnabled();
       await more.focus();
       await page.keyboard.press("Enter");
 
@@ -20,6 +22,16 @@ test.describe("AUD-E2E-VAL-001 · navegación móvil accesible", () => {
 
       await page.keyboard.press("Tab");
       await expect(panel.getByRole("navigation", { name: "Más secciones" }).getByRole("link").first()).toBeFocused();
+      // Tab from the last focusable stays in the overlay; Shift+Tab loops
+      // back, so the mobile dock and underlying form never steal the focus.
+      const focusable = panel.locator('a[href], button:not([disabled]), select:not([disabled])');
+      const last = focusable.last();
+      await last.focus();
+      await expect(last).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(last).toBeFocused();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
       await page.keyboard.press("Escape");

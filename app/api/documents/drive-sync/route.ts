@@ -17,6 +17,13 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import {
+  DocumentDriveInventoryError,
+  loadDocumentDriveInventory,
+  type DocumentDriveInventoryRow,
+  type DocumentDriveInventoryPage,
+} from "../../../../src/application/document-drive-inventory";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,17 +33,8 @@ const PAGE_SIZE = 100;
 const MAX_IMPORTS_PER_RUN = 200;
 const DOWNLOAD_CONCURRENCY = 4;
 
-type ExistingDocument = {
-  sourceDriveFileId: string | null;
-  sourceModifiedAt: string | null;
-  mimeType: string;
-  sizeBytes: number | null;
-};
-
-type DocumentList = {
-  items: ExistingDocument[];
-  total: number;
-};
+type ExistingDocument = DocumentDriveInventoryRow;
+type DocumentList = DocumentDriveInventoryPage;
 
 type SyncCandidate = DiscoveredDriveDocument & {
   type: "ticket" | "invoice" | "other";
@@ -86,27 +84,16 @@ function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | und
 }
 
 async function existingDriveDocuments() {
-  const result = new Map<string, ExistingDocument>();
-  let offset = 0;
-  let total = 0;
-
-  do {
-    const page = await callPersistenceGateway<DocumentList>("document.list", {
+  return loadDocumentDriveInventory((offset, limit) =>
+    callPersistenceGateway<DocumentList>("document.list", {
       status: null,
       query: null,
-      limit: PAGE_SIZE,
+      limit,
       offset,
       scope: "all",
-    });
-    total = page.total;
-    for (const item of page.items) {
-      if (item.sourceDriveFileId) result.set(item.sourceDriveFileId, item);
-    }
-    offset += page.items.length;
-    if (page.items.length === 0) break;
-  } while (offset < total);
-
-  return result;
+    }),
+    PAGE_SIZE,
+  );
 }
 
 async function verifyCandidates(
@@ -127,12 +114,18 @@ async function verifyCandidates(
         const downloaded = await driveDownloader.download({
           fileId: candidate.fileId,
           expectedMimeType: candidate.mimeType,
+          expectedModifiedTime: candidate.modifiedTime,
+          expectedSizeBytes: candidate.sizeBytes,
         });
+        if (!downloaded.modifiedTime) {
+          throw new Error("drive_verified_modified_time_missing");
+        }
         verified.push({
           ...candidate,
           name: downloaded.fileName ?? candidate.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
+          modifiedTime: downloaded.modifiedTime, // Verified server revision only.
         });
       } catch {
         failed += 1;
@@ -147,6 +140,12 @@ async function verifyCandidates(
 }
 
 function apiError(error: unknown) {
+  if (error instanceof DocumentDriveInventoryError) {
+    return Response.json(
+      { error: "drive_auto_detection_persistence_failed", code: error.message },
+      { status: 503, headers: HEADERS },
+    );
+  }
   if (error instanceof GoogleDriveDocumentDiscoveryError) {
     const status = error.code === "google_drive_document_discovery_access_denied" ? 409 : 503;
     return Response.json(
@@ -161,8 +160,14 @@ function apiError(error: unknown) {
     );
   }
   if (error instanceof PersistenceGatewayError) {
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "drive_auto_detection_persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     return Response.json(
-      { error: "drive_auto_detection_persistence_failed", code: error.code ?? null },
+      { error: "drive_auto_detection_persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
@@ -174,6 +179,15 @@ function apiError(error: unknown) {
 }
 
 export async function POST() {
+  // The canonical gateway deliberately blocks Preview writes to production.
+  // Refuse before contacting Drive or the persistence gateway; reporting the
+  // barrier as an ordinary sync error would invite unsafe retries.
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" },
+      { status: 409, headers: HEADERS },
+    );
+  }
   try {
     const readers = googleReaders();
     const existingPromise = existingDriveDocuments();
@@ -201,6 +215,9 @@ export async function POST() {
           modifiedTime: file.modifiedTime,
         })),
       });
+      if (!Number.isSafeInteger(result.imported) || result.imported !== verified.length) {
+        throw new Error("document_drive_import_count_mismatch");
+      }
       imported = result.imported;
     }
 

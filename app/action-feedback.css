@@ -16,25 +16,25 @@
   gap: .75rem;
   min-height: 3.25rem;
   padding: .85rem .9rem;
-  border: 1px solid rgba(255, 255, 255, .13);
+  border: 1px solid color-mix(in srgb, var(--color-text) 13%, transparent);
   border-radius: 1rem;
-  background: rgba(8, 14, 27, .96);
-  box-shadow: 0 18px 55px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 255, 255, .055);
-  color: #f7f9fc;
+  background: var(--surface-card);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .42), inset 0 1px color-mix(in srgb, var(--color-text) 5.5%, transparent);
+  color: var(--color-text);
   backdrop-filter: blur(18px);
   pointer-events: auto;
 }
 
 .action-feedback--pending {
-  border-color: rgba(106, 170, 255, .38);
+  border-color: color-mix(in srgb, var(--color-primary-bright) 38%, transparent);
 }
 
 .action-feedback--success {
-  border-color: rgba(92, 220, 163, .34);
+  border-color: color-mix(in srgb, var(--color-success) 34%, transparent);
 }
 
 .action-feedback--error {
-  border-color: rgba(255, 103, 130, .45);
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
 }
 
 .action-feedback__icon {
@@ -43,17 +43,17 @@
   width: 1.8rem;
   height: 1.8rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, .075);
+  background: color-mix(in srgb, var(--color-text) 7.5%, transparent);
   font-weight: 850;
   line-height: 1;
 }
 
 .action-feedback--success .action-feedback__icon {
-  color: #70e4b2;
+  color: var(--color-success);
 }
 
 .action-feedback--error .action-feedback__icon {
-  color: #ff8ca1;
+  color: var(--color-danger);
 }
 
 .action-feedback__message {
@@ -71,7 +71,7 @@
   border: 0;
   border-radius: .65rem;
   background: transparent;
-  color: rgba(255, 255, 255, .72);
+  color: var(--color-text-secondary);
   font: inherit;
   font-size: 1.2rem;
   cursor: pointer;
@@ -79,14 +79,14 @@
 
 .action-feedback__close:hover,
 .action-feedback__close:focus-visible {
-  background: rgba(255, 255, 255, .09);
-  color: #fff;
+  background: color-mix(in srgb, var(--color-text) 9%, transparent);
+  color: var(--color-text);
 }
 
 .action-feedback__spinner {
   width: .88rem;
   height: .88rem;
-  border: 2px solid rgba(151, 197, 255, .28);
+  border: 2px solid color-mix(in srgb, var(--color-primary) 28%, transparent);
   border-top-color: #97c5ff;
   border-radius: 50%;
   animation: action-feedback-spin .8s linear infinite;

@@ -23,7 +23,7 @@
 }
 
 .heading span {
-  font-size: 0.72rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.12em;
   color: var(--text-secondary, #65676d);
@@ -31,7 +31,7 @@
 
 .heading h2 {
   margin: 0;
-  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  font-size: var(--font-section-title);
   line-height: 1.08;
 }
 
@@ -61,7 +61,7 @@
 .control > span {
   display: block;
   margin-bottom: 7px;
-  font-size: 0.73rem;
+  font-size: var(--font-helper);
   font-weight: 760;
   color: var(--text-secondary, #65676d);
 }
@@ -95,7 +95,7 @@
   border-radius: 9px;
   padding: 8px 10px;
   font: inherit;
-  font-size: 0.82rem;
+  font-size: var(--font-helper);
   font-weight: 720;
   cursor: pointer;
 }
@@ -103,7 +103,7 @@
 .quickRange,
 .activeQuickRange {
   min-width: 74px;
-  font-size: 0.76rem;
+  font-size: var(--font-helper);
 }
 
 .segment,
@@ -129,7 +129,7 @@
   width: 100%;
   min-height: 44px;
   box-sizing: border-box;
-  border: 1px solid var(--border, #d6d7db);
+  border: 1px solid var(--border-control);
   border-radius: 11px;
   background: var(--surface, #ffffff);
   color: var(--text-primary, #111216);
@@ -163,7 +163,7 @@
   background: var(--text-primary, #111216);
   color: var(--surface, #ffffff);
   font: inherit;
-  font-size: 0.86rem;
+  font-size: var(--font-helper);
   font-weight: 780;
   white-space: nowrap;
   cursor: pointer;

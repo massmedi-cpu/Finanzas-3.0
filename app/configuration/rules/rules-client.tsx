@@ -400,7 +400,7 @@ export default function RulesClient() {
           <h1>Reglas de categorización</h1>
           <p className={styles.copy}>Las reglas se prueban por orden y combinan concepto, cuenta, importe, comercio y categoría. Los cambios manuales que tú confirmas tienen prioridad: por ejemplo, si corriges un comercio, una regla no lo sobrescribe. La fuente bancaria sigue siendo de solo lectura.</p>
         </div>
-        <div className={styles.summary} aria-label="Resumen de reglas">
+        <div className={styles.summary} role="group" aria-label="Resumen de reglas">
           <div><strong>{activeRuleCount}</strong><span>Activas</span></div>
           <div><strong>{data.rules.length}</strong><span>Totales</span></div>
           <button type="button" onClick={() => void load()} disabled={loading || busy}>Actualizar</button>
@@ -522,7 +522,7 @@ export default function RulesClient() {
                 </form>
               </div>
               {explanation && (
-                <div aria-label="Resultado de la simulación">
+                <div role="region" aria-label="Resultado de la simulación">
                   <p className={styles.helper}>Propuesta de la regla, sin modificar el movimiento. La aplicación real es una acción separada.</p>
                   <pre className={styles.explanation}>{JSON.stringify(explanation, null, 2)}</pre>
                 </div>
