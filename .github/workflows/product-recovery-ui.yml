@@ -24,6 +24,7 @@ on:
       - 'src/application/dashboard/dashboard-source-safety.ts'
       - 'src/application/analysis/analysis-contract.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
+      - 'scripts/test-ocr-native-engine-smoke.mjs'
       - 'scripts/test-document-drive-inventory.mjs'
       - 'scripts/test-drive-atomic-batch.mjs'
       - 'scripts/test-drive-discovery-integrity.mjs'
