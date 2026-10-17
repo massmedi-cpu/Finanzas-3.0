@@ -264,7 +264,7 @@ test("REC-SEC-API-006 · códigos históricos exactos y líneas OCR indexadas co
   }
   expect(review).toContain("const indexedCode = error instanceof Error");
   expect(review).toContain("indexedCode ?? publicGatewayErrorCode(error)");
-  const validLine = /^invalid_document_line_(?:0|[1-9]\\d?|1\\d{2})_(?:description|quantity|unit_price|total)$/;
+  const validLine = /^invalid_document_line_(?:0|[1-9]\d?|1\d{2})_(?:description|quantity|unit_price|total)$/;
   for (const code of [
     "invalid_document_line_0_description",
     "invalid_document_line_19_quantity",
