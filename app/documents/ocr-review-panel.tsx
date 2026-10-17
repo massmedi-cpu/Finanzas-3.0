@@ -160,24 +160,46 @@ function parseOcrResult(value: unknown): OcrResult {
   if (row.source !== "pdf_text" && row.source !== "image_ocr" && row.source !== "pdf_ocr" && row.source !== "hybrid") throw new Error("ocr_response_invalid");
   if (typeof row.extractor !== "string" || typeof row.extractedAt !== "string" || typeof row.plainText !== "string") throw new Error("ocr_response_invalid");
   if (row.confidence !== null && (typeof row.confidence !== "number" || !Number.isFinite(row.confidence) || row.confidence < 0 || row.confidence > 1)) throw new Error("ocr_response_invalid");
-  if (!Array.isArray(row.pages) || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
+  if (!Array.isArray(row.pages) || row.pages.length === 0 || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
+  const observedPages = new Set<number>();
   if (!row.warnings.every((warning) => typeof warning === "string")) throw new Error("ocr_response_invalid");
   for (const page of row.pages) {
-    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string" || (page.reviewText !== undefined && typeof page.reviewText !== "string")) {
+    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || observedPages.has(page.pageNumber) || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string" || (page.reviewText !== undefined && typeof page.reviewText !== "string")) {
       throw new Error("ocr_response_invalid");
     }
+    observedPages.add(page.pageNumber);
+    const observedLines = new Set<string>();
     for (const line of page.lines) {
-      if (!line || typeof line !== "object" || typeof line.id !== "string" || !line.id.trim()
-        || typeof line.text !== "string" || typeof line.confidence !== "number"
+      if (!line || typeof line !== "object" || typeof line.id !== "string" || !line.id.trim() || observedLines.has(line.id)
+        || typeof line.text !== "string" || !Array.isArray(line.words)
+        || (line.alignment !== "left" && line.alignment !== "center" && line.alignment !== "right")
+        || typeof line.confidence !== "number"
         || !Number.isFinite(line.confidence) || line.confidence < 0 || line.confidence > 1
         || !line.box || typeof line.box !== "object"
         || !([line.box.x, line.box.y, line.box.width, line.box.height].every(
           (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1
         ))
+        || line.box.width <= 0 || line.box.height <= 0
         || line.box.x + line.box.width > 1.001 || line.box.y + line.box.height > 1.001) {
         // The financial interpreter and the evidence viewer rely on bounded,
         // source-backed geometry. A partial HTTP 200 is not a valid OCR result.
         throw new Error("ocr_response_invalid");
+      }
+      observedLines.add(line.id);
+      // The financial interpreter reads line.words directly. A partial HTTP
+      // 200 cannot be accepted with missing or impossible word geometry.
+      for (const word of line.words) {
+        if (!word || typeof word !== "object" || typeof word.text !== "string" || !word.text.trim()
+          || typeof word.confidence !== "number" || !Number.isFinite(word.confidence)
+          || word.confidence < 0 || word.confidence > 1 || !word.box
+          || typeof word.box !== "object"
+          || !([word.box.x, word.box.y, word.box.width, word.box.height].every(
+            (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1
+          ))
+          || word.box.width <= 0 || word.box.height <= 0
+          || word.box.x + word.box.width > 1.001 || word.box.y + word.box.height > 1.001) {
+          throw new Error("ocr_response_invalid");
+        }
       }
     }
     if (page.receiptIntegrity !== undefined) {

@@ -114,3 +114,85 @@ test("REC-OCR-UX-031 · el panel aclara PDF protegido y corrupto sin guardados i
   expect(requested.some((operation) => operation.startsWith("PATCH ") || operation.startsWith("DELETE "))).toBe(false);
   await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
 });
+
+
+test("REC-OCR-UX-032 · HTTP 200 con páginas repetidas o geometría incompleta no habilita confirmaciones", async ({ page }) => {
+  const id = "94000000-0000-4000-8000-000000000094";
+  const document = {
+    id, type: "invoice", notes: "", status: "pending_review",
+    mimeType: "application/pdf", createdAt: "2026-09-17T06:00:00Z",
+    updatedAt: "2026-09-17T06:00:00Z", sizeBytes: 4096,
+    issuerName: null, totalCents: null, documentDate: null,
+    storageProvider: "supabase", associationCount: 0,
+    originalFileName: "factura-prueba.pdf", sourceModifiedAt: null, sourceDriveFileId: null,
+  };
+  const principles = {
+    bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false,
+    suggestionsPersisted: false, associationsRequireConfirmation: true,
+  };
+  const validLine = () => ({
+    id: "p1-l1", text: "TOTAL 24,50 EUR", confidence: 0.97, alignment: "left",
+    box: { x: 0.1, y: 0.2, width: 0.6, height: 0.04 },
+    words: [{ text: "TOTAL", confidence: 0.99, box: { x: 0.1, y: 0.2, width: 0.2, height: 0.04 } }],
+  });
+  const validPage = () => ({
+    pageNumber: 1, plainText: "TOTAL 24,50 EUR",
+    layoutText: "TOTAL 24,50 EUR", lines: [validLine()],
+  });
+  const malformed = [
+    { pages: [] },
+    { pages: [validPage(), validPage()] },
+    { pages: [{ ...validPage(), lines: [{ ...validLine(), words: undefined }] }] },
+    { pages: [{ ...validPage(), lines: [{ ...validLine(),
+      words: [{ text: "TOTAL", confidence: 0.99, box: { x: 0.9, y: 0.2, width: 0.2, height: 0.04 } }] }] }] },
+    { pages: [{ ...validPage(), lines: [{ ...validLine(), alignment: "arbitrary" }] }] },
+  ];
+  const methods: string[] = [];
+  let reads = 0;
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    methods.push(request.method() + " " + url.pathname);
+    if (request.method() === "POST" && url.pathname === "/api/documents/ocr") {
+      const payload = malformed[reads++];
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 1, documentId: id, status: "needs_review",
+        source: "pdf_text", extractor: "pdfjs", extractedAt: "2026-09-17T06:30:00.000Z",
+        confidence: 0.95, plainText: "TOTAL 24,50 EUR", pages: payload?.pages,
+        warnings: [], principles: {
+          bankSource: "read_only", financialWrites: false,
+          requiresHumanReview: true, preservesGeometry: true,
+        },
+      }) });
+      return;
+    }
+    if (request.method() !== "GET") {
+      await route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"unexpected_write"}' });
+      return;
+    }
+    if (url.pathname === "/api/documents" && url.searchParams.get("id") === id) {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 1, document, associations: [], principles,
+      }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles,
+    }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const analyze = panel.getByRole("button", { name: /Analizar documento|Analizando/ });
+  for (let attempt = 0; attempt < malformed.length; attempt++) {
+    await expect(analyze).toBeEnabled();
+    await analyze.click();
+    await expect(panel.getByRole("alert")).toContainText("respuesta OCR no tiene el formato esperado");
+    await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+  }
+  expect(reads).toBe(malformed.length);
+  expect(methods.filter((method) => method.startsWith("POST "))).toEqual(
+    Array.from({ length: malformed.length }, () => "POST /api/documents/ocr"),
+  );
+  expect(methods.some((method) => /^(PATCH|DELETE|PUT) /.test(method))).toBe(false);
+});
