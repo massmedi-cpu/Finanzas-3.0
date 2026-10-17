@@ -17,6 +17,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import {
   DocumentDriveInventoryError,
   loadDocumentDriveInventory,
@@ -166,7 +167,7 @@ function apiError(error: unknown) {
       );
     }
     return Response.json(
-      { error: "drive_auto_detection_persistence_failed", code: error.code ?? null },
+      { error: "drive_auto_detection_persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }

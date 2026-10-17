@@ -303,3 +303,29 @@ test("REC-CONFIG-SEC-012 · configuración no devuelve claves ni operaciones arb
   expect(contract).not.toContain('unexpected.join(", ")');
   expect(contract).not.toContain("Operación no admitida: " + "$" + "{operation}");
 });
+
+
+test("REC-SEC-DOC-014 · errores remotos de OCR, descarga y Drive Sync pasan por filtro público", () => {
+  const publicCode = "document_not_found";
+  expect(publicRemoteGatewayCode(publicCode)).toBe(publicCode);
+  expect(publicRemoteGatewayCode("unauthorized")).toBe("unauthorized");
+  expect(publicRemoteGatewayCode(undefined)).toBeNull();
+  for (const message of [
+    "SQL: select * from movements WHERE IBAN='ES7620770024003102575766'",
+    "document_not_found: Authorization Bearer secret",
+    "invalid_document_id\nPRIVATE_ACCOUNT=secret",
+    "document_" + "z".repeat(200),
+  ]) expect(publicRemoteGatewayCode(message)).toBe("gateway_error");
+
+  const paths = [
+    "app/api/documents/ocr/route.ts",
+    "app/api/documents/download/route.ts",
+    "app/api/documents/drive-sync/route.ts",
+  ];
+  for (const path of paths) {
+    const route = readFileSync(join(process.cwd(), path), "utf8");
+    expect(route, path).toContain("publicRemoteGatewayCode(error.code)");
+    expect(route, path).not.toMatch(/code:\s*error\.code\s*\?\?\s*null/);
+    expect(route, path).not.toContain("return fail(error.code ??");
+  }
+});

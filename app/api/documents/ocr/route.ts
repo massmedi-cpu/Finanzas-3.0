@@ -23,7 +23,7 @@ import {
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
-import { knownPublicErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -314,7 +314,7 @@ class OcrApiError extends Error {
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
-      { error: error.status === 404 ? "not_found" : "persistence_failed", code: error.code ?? null },
+      { error: error.status === 404 ? "not_found" : "persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }

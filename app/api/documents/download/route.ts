@@ -13,7 +13,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
-import { knownPublicErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
@@ -71,7 +71,7 @@ function fail(code: string, status: number) {
 
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
-    return fail(error.code ?? (error.status === 404 ? "document_not_found" : "persistence_failed"), error.status >= 400 && error.status < 600 ? error.status : 503);
+    return fail(publicRemoteGatewayCode(error.code) ?? (error.status === 404 ? "document_not_found" : "persistence_failed"), error.status >= 400 && error.status < 600 ? error.status : 503);
   }
   if (error instanceof GoogleDriveDocumentError) {
     const statuses: Record<GoogleDriveDocumentError["code"], number> = {
