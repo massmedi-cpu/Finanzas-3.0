@@ -50,3 +50,53 @@ export function sameConfirmedOcrValues(observed: unknown, expected: OcrConfirmed
       && item.totalCents === expectedRow.totalCents;
   });
 }
+
+
+/** Preserve HTTP status: the error code by itself cannot prove that a remote PATCH did not commit. */
+export class OcrReviewHttpError extends Error {
+  readonly status: number;
+  constructor(status: number, code: string) {
+    super(code);
+    this.name = "OcrReviewHttpError";
+    this.status = status;
+  }
+}
+
+const REJECTED_REVIEW_FIELDS = new Set([
+  "invalid_document_review",
+  "invalid_document_id",
+  "invalid_document_ocr_run_id",
+  "invalid_document_type",
+  "invalid_document_notes",
+  "invalid_document_date",
+  "invalid_document_time",
+  "invalid_document_issuer",
+  "invalid_document_issuer_tax_id",
+  "invalid_document_number",
+  "invalid_document_billing_period",
+  "invalid_document_tax_base",
+  "invalid_document_taxes",
+  "invalid_document_total",
+  "invalid_document_payment_method",
+  "invalid_document_line_items",
+]);
+const REJECTED_REVIEW_LINE = /^invalid_document_line_(?:0|[1-9]\d?|1\d{2})_(?:description|quantity|unit_price|total)$/;
+
+/**
+ * A pre-persistence rejection must be unambiguous. A 5xx response, a network
+ * failure, or arbitrary "invalid_" text MUST force an independent history read
+ * before the human is allowed to submit a second confirmation.
+ */
+export function isDefinitelyRejectedOcrReview(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = error.message;
+  if (error instanceof OcrReviewHttpError) {
+    if (error.status === 413 && code === "document_review_too_large") return true;
+    if (error.status !== 400) return false;
+    if (code === "invalid_json") return true;
+  } else if (!/^invalid_document_(?:tax_base|taxes|total|line_(?:0|[1-9]\d?|1\d{2})_(?:quantity|unit_price|total))$/.test(code)) {
+    // Only editor-local format validation, with no HTTP request sent.
+    return false;
+  }
+  return REJECTED_REVIEW_FIELDS.has(code) || REJECTED_REVIEW_LINE.test(code);
+}

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { documentOcrErrorMessage } from "../../src/application/document-ocr-error-messages";
-import { sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
+import { OcrReviewHttpError, isDefinitelyRejectedOcrReview, sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
 import { interpretDocumentOcrFinancially, type DocumentOcrFinancialInterpretation } from "../../src/domain/document-ocr-financial-interpretation";
 import { useActionFeedback } from "../action-feedback";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
@@ -147,7 +147,7 @@ async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const code = typeof body?.code === "string" ? body.code : typeof body?.error === "string" ? body.error : "request_failed";
-    throw new Error(code);
+    throw new OcrReviewHttpError(response.status, code);
   }
   return body;
 }
@@ -559,7 +559,7 @@ export function OcrReviewPanel({
       // HTTP 413 and local validation failures happen before persistence;
       // unlike a lost connection, these must not lock the human review form
       // behind a needless history reconciliation.
-      const safelyRejected = code.startsWith("invalid_") || code === "document_review_too_large";
+      const safelyRejected = isDefinitelyRejectedOcrReview(caught);
       const message = code === "document_review_too_large"
         ? "La revisión contiene demasiados datos para guardarla (límite de 256 KB). Reduce las líneas o las notas y vuelve a confirmar."
         : safelyRejected
