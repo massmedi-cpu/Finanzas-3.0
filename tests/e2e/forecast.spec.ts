@@ -134,6 +134,12 @@ async function mockForecastApi(
         projectionEffectCents: -4250,
         projectedBalanceAfterCents: 18873099,
       };
+      const selectionItems = current.items.filter((item) =>
+        item.recurrenceId !== flowRecurrenceId
+        && (!body.accountId || item.accountId === body.accountId)
+        && item.date >= (body.dateFrom as string)
+        && item.date <= (body.dateTo as string),
+      );
       current = {
         ...current,
         period: {
@@ -142,7 +148,7 @@ async function mockForecastApi(
           accountId: body.accountId as string | null,
         },
         items: [
-          ...current.items.filter((item) => item.recurrenceId !== flowRecurrenceId),
+          ...selectionItems,
           recurringItem,
         ],
       };
@@ -282,7 +288,7 @@ test("forecast gateway validates payloads before SQL", async () => {
 test("forecast UI renders server cash flow and sends manual expense in cents", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
   const summary = page.getByRole("region", { name: "Resumen de previsión" });
@@ -324,12 +330,17 @@ test("una previsión vacía guía a recurrentes o al formulario manual", async (
     },
     items: [],
   };
-  await page.route("**/api/forecast*", (route) => route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(emptySnapshot),
-  }));
-  await page.goto("/forecast");
+  await page.route("**/api/forecast*", (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...emptySnapshot, period: {
+        dateFrom: query.get("dateFrom"), dateTo: query.get("dateTo"), accountId: query.get("accountId"),
+      } }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const empty = page.getByRole("status", { name: "Evaluación de liquidez pendiente" });
   await expect(empty.getByText("Sin datos suficientes para evaluar tensión")).toBeVisible();
@@ -374,7 +385,7 @@ test("la vuelta desde Recurrentes regenera una vez y enfoca solo el impacto conf
 test("el calendario muestra solo fechas consultadas y lleva al detalle del movimiento", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
   await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ })).toBeVisible();
@@ -424,7 +435,7 @@ test("el calendario separa la fecha real y excluye confirmados y descartados del
     contentType: "application/json",
     body: JSON.stringify({ ...baseSnapshot, items: [planned, confirmed, excluded] }),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
   await calendar.getByRole("button", { name: /15 de septiembre de 2026: 3 previsiones/ }).click();
@@ -437,7 +448,7 @@ test("el calendario separa la fecha real y excluye confirmados y descartados del
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   await page.getByRole("button", { name: "Excluir" }).click();
   await expect(page.getByText("Indica el motivo antes de excluir un elemento previsto.", { exact: true })).toBeVisible();
@@ -504,7 +515,7 @@ test("QA-21 · la curva de saldo coloca el cero en su escala real", async ({ pag
     contentType: "application/json",
     body: JSON.stringify(crossingSnapshot),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
   await expect(chart).toBeVisible();
@@ -548,7 +559,7 @@ test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero
     contentType: "application/json",
     body: JSON.stringify(zeroSnapshot),
   }));
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
 
   const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
   await expect(chart).toBeVisible();
@@ -565,3 +576,162 @@ test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero
   await expect(chart.getByRole("combobox", { name: "Consultar un hito de la curva" })).toBeVisible();
 });
 
+
+for (const staleAfterPatch of [true, false] as const) {
+  test(staleAfterPatch
+    ? "REC-FCAST-033 · a stale HTTP 200 cannot mark forecast exclusion as verified"
+    : "REC-FCAST-034 · independently verified forecast exclusion may display success", async ({ page }) => {
+    let patchCount = 0;
+    await page.route("**/api/forecast*", async (route) => {
+      const req = route.request();
+      if (req.method() === "PATCH") {
+        const body = req.postDataJSON();
+        expect(body.action).toBe("exclude");
+        expect(body.id).toBe(forecastItemId);
+        expect(body.excluded).toBe(true);
+        patchCount += 1;
+        await route.fulfill({ status: 200, contentType: "application/json", body: '{"result":{"updated":true}}' });
+        return;
+      }
+      const snapshot = {
+        ...baseSnapshot,
+        items: baseSnapshot.items.map((item) => patchCount > 0 && !staleAfterPatch
+          ? { ...item, excluded: true, excludedReason: "El cargo ya no se espera", status: "excluded", affectsProjection: false }
+          : item),
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+    });
+    await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+    await page.getByRole("button", { name: "Excluir" }).click();
+    await page.getByLabel("Motivo para excluir Seguro mensual").fill("El cargo ya no se espera");
+    await page.getByRole("button", { name: "Excluir" }).click();
+    await expect.poll(() => patchCount).toBe(1);
+
+    const operationAlert = page.locator("main").getByRole("alert").filter({ hasText: "puede haberse aplicado" });
+    if (staleAfterPatch) {
+      await expect(operationAlert).toContainText("puede haberse aplicado");
+      await expect(page.getByText("Elemento excluido del saldo previsto.")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Excluir" })).toBeVisible();
+    } else {
+      await expect(page.getByText("Elemento excluido del saldo previsto.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Restaurar" })).toBeVisible();
+      // An independent chart-balance warning remains visible when appropriate.
+      await expect(operationAlert).toHaveCount(0);
+    }
+    expect(patchCount).toBe(1);
+  });
+}
+
+
+test("REC-FCAST-044 · rechaza candidatos bancarios de otra previsión antes de conciliar", async ({ page }) => {
+  const writes: string[] = [];
+  await mockForecastApi(page, []);
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    if (route.request().method() !== "GET") writes.push(route.request().method());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...candidates, forecastItemId: "81000000-0000-4000-8000-000000000099" }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "no corresponde a esta previsión" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-FCAST-046 · no confunde una búsqueda en curso con ausencia de movimientos reales", async ({ page }) => {
+  await mockForecastApi(page, []);
+  let releaseLookup: () => void = () => {};
+  const lookupGate = new Promise<void>((resolve) => { releaseLookup = resolve; });
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    await lookupGate;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(candidates) });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  try {
+    await expect(page.getByRole("status").filter({ hasText: "Buscando coincidencias bancarias verificables" })).toBeVisible();
+    await expect(page.getByText("No hay movimientos elegibles cercanos con el mismo signo.")).toHaveCount(0);
+  } finally {
+    releaseLookup();
+  }
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toBeVisible();
+  await expect(page.getByText("Buscando coincidencias bancarias verificables")).toHaveCount(0);
+});
+
+
+test("REC-FCAST-047 · candidatos HTTP 502 nunca muestran errores técnicos ni habilitan conciliar", async ({ page }) => {
+  await mockForecastApi(page, []);
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    await route.fulfill({
+      status: 502,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "invalid_forecast_candidates", code: "invalid_forecast_candidates_contract" }),
+    });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  const alert = page.locator("main").getByRole("alert").filter({ hasText: "movimientos no verificados" });
+  await expect(alert).toBeVisible();
+  await expect(alert).not.toContainText("invalid_forecast_candidates_contract");
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+});
+
+
+test("REC-FCAST-052 · closing a pending lookup aborts stale candidates and releases controls", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/forecast?*itemId*", async (route) => {
+    try {
+      await gate;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(candidates) });
+    } catch {
+      // The browser intentionally aborts an obsolete GET; there is no write.
+    }
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Buscando coincidencias bancarias verificables" })).toBeVisible();
+  await page.getByRole("button", { name: "Cerrar" }).click();
+  release();
+  await expect(page.getByRole("button", { name: "Buscar movimiento real" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-FCAST-053 · changing forecast period invalidates even previously verified bank candidates", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await page.getByRole("button", { name: "Buscar movimiento real" }).click();
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toBeVisible();
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-07");
+  await expect(page.getByRole("button", { name: "Conciliar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-FCAST-057 · inconsistent bank snapshot cannot populate a trusted forecast chart", async ({ page }) => {
+  const forged = {
+    ...baseSnapshot,
+    summary: {
+      ...baseSnapshot.summary,
+      // The response keeps well-typed cents but claims a closing balance
+      // one euro too high. That is a source contradiction, not rounding.
+      projectedClosingBalanceCents: baseSnapshot.summary.projectedClosingBalanceCents + 100,
+    },
+  };
+  await page.route("**/api/forecast*", async (route) => {
+    if (route.request().method() !== "GET") throw new Error("Unexpected financial write");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forged) });
+  });
+  await page.goto("/forecast?dateFrom=2026-09-07&dateTo=2026-12-06");
+  await expect(page.locator("main").getByRole("alert")).toContainText("previsión");
+  await expect(page.getByRole("region", { name: "Curva de saldo prevista" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Buscar movimiento real" })).toHaveCount(0);
+});

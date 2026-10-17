@@ -162,6 +162,26 @@
 .chartData td:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .chartData th { color: var(--color-text-secondary); font-weight: 750; }
 .chartData td:first-child { overflow-wrap: anywhere; }
+/* AP5 · Linked bank evidence must be visibly actionable in both themes,
+ * keyboard reachable and comfortable to tap in a scrollable data table. */
+.chartData td a {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  color: var(--color-text);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--color-primary-bright);
+  text-decoration-thickness: 2px;
+  text-underline-offset: .18rem;
+}
+.chartData td a:hover { color: var(--color-primary-bright); }
+.chartData td a:focus-visible {
+  border-radius: .25rem;
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+
 
 .dailyChart,
 .scatterChart,

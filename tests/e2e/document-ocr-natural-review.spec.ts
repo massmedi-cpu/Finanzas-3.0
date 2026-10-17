@@ -65,8 +65,8 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
             basePlusTaxMatchesTotal: true,
           },
           lines: [
-            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center" },
-            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left" },
+            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center", box: { x: 0.3, y: 0.05, width: 0.4, height: 0.04 }, words: [] },
+            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left", box: { x: 0.1, y: 0.12, width: 0.5, height: 0.04 }, words: [] },
           ],
         }],
         warnings: ["low_confidence"],
@@ -125,12 +125,29 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await panel.getByRole("button", { name: /Analizar/ }).click();
   await expect.poll(() => ocrRuns).toBe(1);
   expect(ocrMethod).toBe("POST");
-  await expect(panel.getByText("Revisa primero total con el original", { exact: true }).last()).toBeVisible();
+  // The unlabelled "TIENDA PRUEBA" header cannot prove the issuer, even at
+  // confidence 0.91: the financial total AND issuer need original comparison.
+  await expect(panel.getByText("Revisa primero comercio / emisor y total con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
   await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
   await expect(panel.getByText(/5\/5 filas estructuradas · 5\/5 líneas cuadran · suma de líneas = total/)).toBeVisible();
   await expect(panel.getByText("Corrige y guarda solo lo comprobado en el formulario superior. La lectura OCR original permanece separada y sin sobrescribirse.", { exact: true })).toBeVisible();
+  // REC-OCR-UI-015 · The description input must not remount (lose focus)
+  // on each character, even after adding another product line.
+  const lines = panel.getByTestId("ocr-confirmation-lines");
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const firstDescription = lines.getByRole("textbox", { name: "Descripción" }).first();
+  await firstDescription.click();
+  await firstDescription.pressSequentially("CAFE", { delay: 20 });
+  await expect(firstDescription).toHaveValue("CAFE");
+  await expect(firstDescription).toBeFocused();
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const secondDescription = lines.getByRole("textbox", { name: "Descripción" }).nth(1);
+  await secondDescription.fill("AGUA");
+  await lines.getByRole("button", { name: "Quitar línea" }).first().click();
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveCount(1);
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveValue("AGUA");
   expect(writes).toHaveLength(0);
 });

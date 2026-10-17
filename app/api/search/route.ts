@@ -180,20 +180,86 @@ function facetResults(payload: unknown, normalizedQuery: string): SearchItem[] {
   return results;
 }
 
-function apiError(error: unknown) {
+export type GlobalSearchSource = "transactions" | "documents" | "facets";
+
+/**
+ * HTTP 200 alone does not establish an empty bank/document search. The
+ * gateway must return its documented container shape. Any malformed source
+ * is treated like a failed source, so a partial search never claims that the
+ * missing matches do not exist.
+ */
+export function verifiedGlobalSearchSource(
+  result: PromiseSettledResult<unknown>,
+  source: GlobalSearchSource,
+): PromiseSettledResult<unknown> {
+  if (result.status === "rejected") return result;
+  const root = record(result.value);
+  const rows = source === "transactions" ? root?.rows
+    : source === "documents" ? root?.items : null;
+  const valid = source === "facets"
+    ? Boolean(root && (["merchants", "categories", "accounts"] as const).every((key) =>
+      Array.isArray(root[key]) && root[key].every((value: unknown) => {
+        const row = record(value);
+        return row && text(row.id) !== null && text(row.name) !== null;
+      })))
+    : Array.isArray(rows) && rows.every((value: unknown) => {
+      const row = record(value);
+      return row && text(row.id) !== null
+        && (row.amountCents === undefined || row.amountCents === null || Number.isSafeInteger(row.amountCents))
+        && (row.totalCents === undefined || row.totalCents === null || Number.isSafeInteger(row.totalCents));
+    });
+  return valid ? result : { status: "rejected", reason: new Error("invalid_global_search_source_contract") };
+}
+
+/**
+ * A result page containing only hardcoded section links is not proof that
+ * banking transactions or private documents had zero matches. If every data
+ * source fails, return an error so the UI offers recovery instead of "no
+ * results". Partial failures remain useful with an explicit partial marker.
+ */
+export function allGlobalSearchSourcesFailed(results: readonly PromiseSettledResult<unknown>[]) {
+  return results.length > 0 && results.every((result) => result.status === "rejected");
+}
+
+const SESSION_ERRORS = new Set([
+  "workspace_context_required",
+  "workspace_user_invalid",
+  "workspace_access_denied",
+  "workspace_membership_ambiguous",
+  "workspace_membership_invalid",
+]);
+
+export function globalSearchNeedsSession(results: readonly PromiseSettledResult<unknown>[]) {
+  return allGlobalSearchSourcesFailed(results) && results.every((result) =>
+    result.status === "rejected"
+    && result.reason instanceof PersistenceGatewayError
+    && (result.reason.status === 401 || result.reason.status === 403)
+    && SESSION_ERRORS.has(result.reason.code ?? ""),
+  );
+}
+
+export function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: "search_unavailable", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  console.error("global-search", error instanceof Error ? error.message : String(error));
-  return Response.json({ error: "invalid_search", code: null }, { status: 400, headers: HEADERS });
+  console.error("global-search-internal", error instanceof Error ? error.name : typeof error);
+  return Response.json({ error: "search_unavailable", code: null }, { status: 500, headers: HEADERS });
 }
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // A global search must not claim completeness for an ambiguous query.
+    // Validate even when q is blank, before any private gateway request.
+    if ([...searchParams.keys()].some((key) => key !== "q" || searchParams.getAll(key).length !== 1)) {
+      return Response.json(
+        { error: "invalid_request", code: "invalid_search_query_parameters" },
+        { status: 400, headers: HEADERS },
+      );
+    }
     const rawQuery = searchParams.get("q") ?? "";
     const query = prepareGlobalSearchQuery(rawQuery);
     if (!query) {
@@ -201,11 +267,29 @@ export async function GET(request: Request) {
     }
 
     const normalizedQuery = normalize(query);
-    const [transactions, documents, facets] = await callPersistenceGatewayBatch([
+    const [transactionResponse, documentResponse, facetResponse] = await callPersistenceGatewayBatch([
       { action: "transaction.query", payload: { query, limit: 6 } },
       { action: "document.list", payload: { status: null, query, limit: 6, offset: 0 } },
       { action: "transaction.facets" },
     ]);
+
+    const transactions = verifiedGlobalSearchSource(transactionResponse, "transactions");
+    const documents = verifiedGlobalSearchSource(documentResponse, "documents");
+    const facets = verifiedGlobalSearchSource(facetResponse, "facets");
+    const sourceResults = [transactions, documents, facets];
+    if (allGlobalSearchSourcesFailed(sourceResults)) {
+      const sessionRequired = globalSearchNeedsSession(sourceResults);
+      return Response.json(
+        {
+          error: sessionRequired ? "workspace_session_required" : "search_unavailable",
+          code: sessionRequired ? "workspace_session_required" : "all_search_sources_failed",
+          query,
+          items: [],
+          partial: true,
+        },
+        { status: sessionRequired ? 403 : 503, headers: HEADERS },
+      );
+    }
 
     const items = [
       ...sectionResults(normalizedQuery),

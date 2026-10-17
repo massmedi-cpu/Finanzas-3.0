@@ -33,7 +33,7 @@ requireText(inicio, 'data-financial-sign={financial && currentPeriodObserved ? f
 requireText(inicio, 'data-budget-progress-privacy={revealAmounts ? "visible" : "hidden"}', "Inicio · progreso presupuestario protegido");
 requireText(inicio, 'data-budget-ranking-privacy="hidden"', "Inicio · ranking presupuestario protegido");
 requireText(inicio, '"Ahorro oculto por privacidad"', "Inicio · tasa de ahorro protegida");
-requireText(inicio, 'if (revealAmounts && (financial?.period.operatingNetCents ?? 0) < 0)', "Inicio · alerta de signo condicionada");
+requireText(inicio, 'if (revealAmounts && currentPeriodObserved && (financial?.period.operatingNetCents ?? 0) < 0)', "Inicio · alerta de signo exige privacidad y cobertura bancaria");
 requireText(smartBrief, "valuesVisible: boolean;", "Lectura rápida · contrato de privacidad");
 requireText(smartBrief, '"Balance del mes protegido"', "Lectura rápida · signo textual neutral");
 requireText(smartBrief, 'tone: !movementInMonth ? "warning" : !valuesVisible ? "neutral"', "Lectura rápida · tono neutral");

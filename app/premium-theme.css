@@ -27,15 +27,22 @@ nav[aria-label="Navegación principal"] a[aria-current="page"] {
   color: var(--color-text);
   box-shadow: var(--shadow-primary-inset);
 }
+/* Keep the custom Settings hero/panel gradients and panel-depth shadows.
+   The generic card rule previously flattened both themes on those screens. */
 main[aria-busy] > section[aria-label="Estado de los datos bancarios"],
-main[aria-busy] article,
-.reset-card,
-.configuration-hero,
-.config-panel {
+main[aria-busy] article {
   border-color: var(--color-border);
   background: var(--surface-card);
   color: var(--color-text);
   box-shadow: var(--shadow-card);
+}
+/* ART-010 shared surface contract: both Settings panels inherit semantic
+   foreground and border tokens, while globals.css retains their intentional
+   gradient backgrounds and theme-adaptive elevation. */
+.configuration-hero,
+.config-panel {
+  color: var(--color-text);
+  border-color: var(--color-border);
 }
 main[aria-busy] > section[aria-label="Resumen financiero principal"] > article { min-height: 8rem; }
 .entity-card { background: transparent; }

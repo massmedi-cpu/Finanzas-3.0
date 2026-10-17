@@ -98,6 +98,24 @@ async function mockInicio(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
 
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true,
+        earliestMovementDate: "2026-01-01",
+        latestMovementDate: "2026-09-11",
+        sync: {
+          // The bank can have its latest MOVEMENT on 11 Sept even when the
+          // source was successfully checked on 15 Sept. Both statuses must
+          // agree on the recent import timestamp for a green certification.
+          status: "success", startedAt: "2026-09-15T09:00:00Z",
+          finishedAt: "2026-09-15T09:04:08.000Z",
+          rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      });
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       if (request.method() === "POST") {
         postCount += 1;
@@ -114,6 +132,9 @@ async function mockInicio(page: Page) {
             rowsRevised: 0,
             rowsSkipped: 3172,
             rowsFailed: 0,
+            rowsMissing: 0,
+            duplicatesDetected: 0,
+            warningsCount: 0,
             errorCode: null,
             errorMessage: null,
           },
@@ -193,7 +214,9 @@ test("Inicio no confunde fecha del último movimiento con fallo de sincronizaci�
   await mockInicio(page);
   await page.goto("/");
 
-  await expect(page.getByText("Última sincronización completada", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos bancarios actualizados", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Estado de los datos bancarios" }))
+    .toContainText(/Actualización 15 sept/);
   await expect(page.getByText(/movimientos hasta 11 sept/i)).toBeVisible();
   await expect(page.getByText("Los datos bancarios no están al día")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Reconectar Google" })).toHaveCount(0);
@@ -244,4 +267,155 @@ test("el cash flow de Inicio usa 12 meses y no necesita scroll horizontal", asyn
   const geometry = await chart.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
+
+
+test("Saldo de Inicio no presenta datos vacíos antes de consultar una serie bancaria", async ({ page }) => {
+  await mockInicio(page);
+  let releaseRead: (() => void) | null = null;
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  let reads = 0;
+  await page.route(/\/api\/financial(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") !== "balance_series") return route.fallback();
+    reads += 1;
+    await readGate;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        dateFrom: url.searchParams.get("dateFrom"),
+        dateTo: url.searchParams.get("dateTo"),
+        accountId: null,
+        rows: [],
+        principles: {
+          bankSource: "read_only",
+          balanceSource: "financial_account_balances",
+          cashFlowReconstruction: false,
+          getHasSideEffects: false,
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  const modes = page.getByRole("group", { name: "Vista de evolución financiera" });
+  await modes.getByRole("button", { name: "Saldo", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Cargando evolución del saldo" })).toBeVisible();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toHaveCount(0);
+  releaseRead?.();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
+  expect(reads).toBe(1);
+});
+
+
+test("REC-HOME-BAL-002 · retry clears a stale balance error before any new bank evidence", async ({ page }) => {
+  await mockInicio(page);
+  let reads = 0;
+  let releaseRead: (() => void) | null = null;
+  const readGate = new Promise<void>((resolve) => { releaseRead = resolve; });
+  await page.route(/\/api\/financial(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") !== "balance_series") return route.fallback();
+    reads += 1;
+    if (reads === 1) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "temporarily_unavailable" }),
+      });
+      return;
+    }
+    await readGate;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        dateFrom: url.searchParams.get("dateFrom"),
+        dateTo: url.searchParams.get("dateTo"),
+        accountId: null, rows: [],
+        principles: {
+          bankSource: "read_only",
+          balanceSource: "financial_account_balances",
+          cashFlowReconstruction: false,
+          getHasSideEffects: false,
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("group", { name: "Vista de evolución financiera" })
+    .getByRole("button", { name: "Saldo", exact: true }).click();
+  const failure = page.getByText("No se ha podido cargar la evolución del saldo.", { exact: false });
+  await expect(failure).toBeVisible();
+  await page.getByRole("button", { name: "Reintentar saldo" }).click();
+  await expect(failure).toHaveCount(0);
+  await expect(page.getByRole("status", { name: "Cargando evolución del saldo" })).toBeVisible();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toHaveCount(0);
+  releaseRead?.();
+  await expect(page.getByText("No hay saldos bancarios disponibles para este periodo.")).toBeVisible();
+  expect(reads).toBe(2);
+});
+
+
+test("REC-HOME-AVG-005 · Inicio hides an unverified historical average instead of displaying a plausible number", async ({ page }) => {
+  await mockInicio(page);
+  // Analysis may legitimately return an average while banking data before
+  // August is missing. It is not evidence that June and July were zero.
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-08-01",
+      latestMovementDate: "2026-09-11",
+      sync: {
+        status: "success",
+        startedAt: "2026-09-11T08:00:00Z",
+        finishedAt: "2026-09-11T08:05:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+        duplicatesDetected: 0, warningsCount: 0,
+      },
+    });
+  });
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  const card = summary.locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card.getByText("Media no verificable con la cobertura bancaria disponible")).toBeVisible();
+  await expect(card.getByText("666,67 €")).toHaveCount(0);
+  await expect(card.locator("strong")).toHaveText("—");
+});
+
+test("REC-HOME-AVG-006 · unavailable bank source must not advertise a verified historic expense average", async ({ page }) => {
+  await mockInicio(page);
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: false, earliestMovementDate: null,
+      latestMovementDate: null, sync: null,
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Resumen financiero principal" })
+    .locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card.locator("strong")).toHaveText("—");
+  await expect(card).toContainText("Media no verificable con la cobertura bancaria disponible");
+});
+
+
+test("REC-HOME-AVG-007 · el gasto medio calculado pero no acreditado no se presenta como indisponibilidad", async ({ page }) => {
+  await mockInicio(page);
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-01-01",
+      latestMovementDate: "2026-09-11",
+      sync: {
+        status: "partial",
+        startedAt: "2026-09-11T08:00:00Z",
+        finishedAt: "2026-09-11T08:05:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 3,
+        duplicatesDetected: 0, warningsCount: 1,
+      },
+    });
+  });
+  await page.goto("/");
+  const card = page.getByRole("region", { name: "Resumen financiero principal" })
+    .locator("article").filter({ hasText: "Gasto medio mensual" });
+  await expect(card).toContainText("Media no verificable con la cobertura bancaria disponible");
+  await expect(card).not.toContainText("Análisis no disponible");
+  await expect(card).not.toContainText("666,67 €");
 });

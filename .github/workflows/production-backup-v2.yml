@@ -24,6 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - name: Checkout trusted dispatch main before any secrets are available
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
       - name: Validate immutable backup identity
         env:
           FINANCIAL_APP_SOURCE_COMMIT: ${{ inputs.source_commit }}
@@ -34,6 +40,12 @@ jobs:
           test "${GITHUB_REF_NAME}" = "main"
           [[ "$FINANCIAL_APP_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           [[ "$EXPECTED_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git cat-file -e "$FINANCIAL_APP_SOURCE_COMMIT^{commit}"
+          git merge-base --is-ancestor "$FINANCIAL_APP_SOURCE_COMMIT" "$GITHUB_SHA" || {
+            echo "backup_source_not_on_trusted_main_history" >&2
+            exit 1
+          }
 
   backup-v2:
     needs: validate-dispatch
@@ -49,10 +61,11 @@ jobs:
       FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
     steps:
       - name: Checkout exact stable source commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify exact source version and backup protection secrets
         shell: bash
@@ -72,7 +85,7 @@ jobs:
           if [ -n "$SUPABASE_SECRET_KEY" ]; then echo "::add-mask::$SUPABASE_SECRET_KEY"; fi
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
 
@@ -188,7 +201,7 @@ jobs:
           sha256sum "${archive}.gpg" | tee "${archive}.gpg.sha256"
 
       - name: Upload encrypted backup artifact only
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
           path: |
@@ -219,10 +232,11 @@ jobs:
           --health-retries 12
     steps:
       - name: Checkout exact stable source commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ inputs.source_commit }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Verify source identity and protection secret
         shell: bash
@@ -235,7 +249,7 @@ jobs:
           echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
 
@@ -254,7 +268,7 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
       - name: Download exact encrypted backup artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
           name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
           path: restore-artifact

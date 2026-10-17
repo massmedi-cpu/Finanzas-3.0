@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   hasSourceSyncIncidents,
+  hasCompletedSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
@@ -125,6 +126,11 @@ function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
 }
 
 function statusText(freshness: SourceFreshness) {
+  // A retained sync receipt cannot certify a bank that declares itself
+  // unavailable for the selected account.
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return "Fuente bancaria no disponible para la cuenta consultada";
+  }
   const sync = freshness.sync;
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
@@ -138,6 +144,9 @@ function statusText(freshness: SourceFreshness) {
   const health = syncHealth(sync);
 
   if (sync.status === "success") {
+    if (!hasCompletedSourceSyncEvidence(sync)) {
+      return `Sincronización sin finalización verificable${movement}`;
+    }
     return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
   if (sync.status === "partial") {
@@ -148,6 +157,14 @@ function statusText(freshness: SourceFreshness) {
 }
 
 function userSummary(freshness: SourceFreshness): FreshnessSummary {
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return {
+      label: "Fuente bancaria no disponible",
+      detail: null,
+      incidentDetail: "La fuente no está disponible para esta cuenta. No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores.",
+      tone: "warning",
+    };
+  }
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? `Último movimiento ${movementLabel}` : null;
   const sync = freshness.sync;
@@ -184,6 +201,14 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
   const incidents = normalizeSourceSyncIncidents(sync);
   const incidentParts: string[] = [];
+  if (sync.status === "success" && !hasCompletedSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización sin finalización verificada",
+      detail: movement,
+      incidentDetail: "La fuente indica éxito, pero no consta una fecha de finalización válida o un recuento íntegro de las filas. No se puede confirmar la cobertura bancaria.",
+      tone: "warning",
+    };
+  }
 
   if (incidents.failedRows > 0) {
     incidentParts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
@@ -289,11 +314,15 @@ export default function AnalysisSourceFreshness({
   accountId?: string | null;
 }) {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    // A different bank account must never temporarily reuse another account's coverage.
+    // A different bank account or retry must clear any old coverage/error.
+    setFailed(false);
+    setFreshness(null);
     onChange?.(null);
     const params = new URLSearchParams();
     if (accountId) params.set("accountId", accountId);
@@ -311,7 +340,12 @@ export default function AnalysisSourceFreshness({
       })
       .then((payload) => {
         if (!controller.signal.aborted) {
-          const next = payload?.available ? payload : null;
+          // "available: false" is itself a valid source-health result from
+          // a successful API request. Suppressing it hid the warning added
+          // for an account with no imported movement date or connection.
+          // Invalid/failed HTTP requests are still handled as unknown.
+          const next = payload;
+          setFailed(next === null);
           setFreshness(next);
           onChange?.(next);
         }
@@ -319,15 +353,34 @@ export default function AnalysisSourceFreshness({
       .catch(() => {
         if (!controller.signal.aborted) {
           setFreshness(null);
+          setFailed(true);
           onChange?.(null);
         }
         // La frescura es información auxiliar: nunca bloquea ni degrada Análisis.
       });
 
     return () => controller.abort();
-  }, [accountId, onChange]);
+  }, [accountId, onChange, attempt]);
 
-  if (!freshness) return null;
+  if (!freshness) {
+    if (!failed) return null;
+    // A request error/invalid payload is not proof of an empty account, so
+    // show a retryable warning without inventing a bank date or movement.
+    return (
+      <div className={styles.wrap}>
+        <div className={`${styles.status} ${styles.danger}`}>
+          <span className={styles.dot} aria-hidden="true" />
+          <span className={styles.copy} role="status" aria-live="polite">
+            <strong>No se ha podido comprobar la cobertura bancaria</strong>
+            <small>Sin estado bancario verificado. Puedes volver a consultar sin cambiar tus datos.</small>
+          </span>
+          <button className={`${styles.action} ${styles.retry}`} type="button" onClick={() => setAttempt((value) => value + 1)}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
   const text = statusText(freshness);
   if (!text) return null;
   const summary = userSummary(freshness);
@@ -336,8 +389,12 @@ export default function AnalysisSourceFreshness({
       || freshness.sync.status === "partial"
       || freshness.sync.status === "started"
       || syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
     : false;
-  const actionable = freshness.sync ? syncHasIncidents(freshness.sync) : false;
+  const actionable = !freshness.available || (freshness.sync
+    ? syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
+    : false);
 
   return (
     <div className={styles.wrap}>

@@ -10,6 +10,7 @@ import {
   type AnalysisSnapshot,
 } from "../../src/application/analysis/analysis-engine";
 import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { resolveBudgetSourcePresentation } from "../../src/application/analysis/analysis-presentation";
 import { runAnalysisSnapshotQuery } from "../../supabase/functions/financial-app-db-gateway/analysis-query";
 
@@ -212,6 +213,96 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMov
   await expect.poll(selectedRequestSeen).toBe(true);
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
+
+test.describe("Fechas avanzadas de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-003 · los rangos personalizados se leen en español y se envían en ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?periodMode=custom&dateFrom=2026-09-01&dateTo=2026-09-15&compareMode=custom&compareDateFrom=2026-08-01&compareDateTo=2026-08-15");
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const from = advanced.getByLabel("Desde", { exact: true });
+    const to = advanced.getByLabel("Hasta", { exact: true });
+    await expect(from.first().locator("..")).toContainText("01/09/2026");
+    await expect(to.first().locator("..")).toContainText("15/09/2026");
+    await expect(from.nth(1).locator("..")).toContainText("01/08/2026");
+    await expect(to.nth(1).locator("..")).toContainText("15/08/2026");
+    await from.first().fill("2026-09-02");
+    await expect(from.first().locator("..")).toContainText("02/09/2026");
+    await advanced.getByRole("button", { name: "Aplicar cambios", exact: true }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
+test.describe("Meses de Análisis con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-MONTH-002 · referencia y filtro avanzado muestran español y conservan año-mes ISO", async ({ page }) => {
+    await mockAnalysisApi(page, mockSnapshot());
+    await page.goto("/analysis?month=2026-09&range=1m");
+    const form = page.getByRole("form", { name: "Filtros del análisis" });
+    const month = form.getByLabel("Mes de referencia");
+    await expect(month.locator("..")).toContainText("septiembre de 2026");
+    await month.fill("2026-08");
+    await expect(month.locator("..")).toContainText("agosto de 2026");
+    const selectedRequest = page.waitForRequest((request) => {
+      const url = new URL(request.url());
+      return url.pathname === "/api/analysis" && url.searchParams.get("month") === "2026-08";
+    });
+    await form.getByRole("button", { name: "Aplicar cambios" }).click();
+    await selectedRequest;
+    // This fixture always answers with September; the control reflects the
+    // applied response instead of pretending August was loaded.
+    await expect(month).toHaveValue("2026-09");
+    await expect(page).toHaveURL(/month=2026-09/);
+
+    await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+    const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+    const advancedMonth = advanced.getByLabel("Mes para análisis avanzado");
+    await expect(advancedMonth.locator("..")).toContainText("septiembre de 2026");
+    await advancedMonth.fill("2026-08");
+    await expect(advancedMonth.locator("..")).toContainText("agosto de 2026");
+    await expect(advancedMonth).toHaveValue("2026-08");
+    await advanced.getByRole("button", { name: "Aplicar cambios" }).click();
+    await expect(page).toHaveURL(/month=2026-08/);
+  });
+});
+
+test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await mockAnalysisApi(page, snapshot);
+  let finishedAt: string | null = null;
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2025-01-01",
+        latestMovementDate: "2026-09-15",
+        sync: {
+          status: "success",
+          startedAt: "2026-10-01T09:00:00Z",
+          finishedAt,
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+  await page.goto("/analysis?month=2026-09&range=1m");
+  await expect(page.getByText("Sincronización sin finalización verificada")).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+
+  finishedAt = "2026-10-01T10:00:00Z";
+  await page.reload();
+  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sincronización sin finalización verificada")).toHaveCount(0);
+});
 
 test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
   const snapshot = mockSnapshot();
@@ -544,8 +635,9 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
     ...template,
     id: `merchant-${index + 1}`,
     name: `Comercio de prueba ${index + 1}`,
-    href: `/transactions?merchantId=merchant-${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-${index + 1}`,
   }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-005 mock URL must be accepted by production contract").toBe(true);
   await loadMockAnalysis(page, snapshot);
 
   const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
@@ -556,7 +648,7 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
   await expect(ranking.getByRole("listitem")).toHaveCount(18);
   await expect(ranking.getByRole("link", { name: "Ver movimientos de Comercio de prueba 18" })).toHaveAttribute(
     "href",
-    "/transactions?merchantId=merchant-18",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-18",
   );
   await expect(ranking.getByRole("button", { name: "Ver menos" })).toHaveAttribute("aria-expanded", "true");
   await ranking.getByRole("button", { name: "Ver menos" }).click();
@@ -570,8 +662,9 @@ test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ra
     ...template,
     id: `merchant-limited-${index + 1}`,
     name: `Comercio disponible ${index + 1}`,
-    href: `/transactions?merchantId=merchant-limited-${index + 1}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=merchant-limited-${index + 1}`,
   }));
+  expect(isAnalysisSnapshot(snapshot), "REC-ANA-006 mock URL must be accepted by production contract").toBe(true);
   await loadMockAnalysis(page, snapshot);
   const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
   await expect(ranking).toContainText("como máximo los 30 comercios");
@@ -710,12 +803,27 @@ test("REC-COV-011 · las incidencias de sincronización invalidan la cobertura c
   }
   const clean = resolvePeriodCoverage({ ...period, sync: {
     status: "success",
+    startedAt: "2026-10-03T09:00:00Z",
+    finishedAt: "2026-10-03T09:01:00Z",
+    rowsSeen: 300,
     rowsFailed: 0,
     rowsMissing: 0,
     duplicatesDetected: 0,
     warningsCount: 0,
   } });
   expect(clean.state).toBe("covered");
+
+  // A "success" string without evidence of a completed run must not
+  // silently upgrade date bounds into verified financial coverage.
+  for (const sync of [
+    { status: "success", finishedAt: null, rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "not-a-date", rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "2026-10-03T09:01:00Z", rowsSeen: null, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+  ]) {
+    const partial = resolvePeriodCoverage({ ...period, sync });
+    expect(partial.state).toBe("partial");
+    expect(periodComparisonIsReliable(partial)).toBe(false);
+  }
 });
 
 test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {

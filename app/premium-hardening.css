@@ -35,7 +35,7 @@ nav[aria-label="Más secciones"] button:focus-visible {
   :root {
     --color-border: color-mix(in srgb, var(--color-primary) 38%, transparent);
     --color-border-strong: color-mix(in srgb, var(--color-primary) 62%, transparent);
-    --color-text-muted: #a9b8d2;
+    --color-text-muted: #cbd6e9;
   }
 
   .financial-brand,

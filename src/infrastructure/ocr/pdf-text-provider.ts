@@ -1,6 +1,9 @@
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
-import type { OcrSource, OcrWord } from "../../domain/document-ocr";
+import type { OcrWord } from "../../domain/document-ocr";
+import { resolvePdfOcrSource } from "./pdf-source-provenance";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
+import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "./pdf-native-coverage";
+import { pdfRasterScale } from "./pdf-render-geometry";
 
 const MAX_PAGES = 16;
 const MAX_RENDER_SIDE = 2800;
@@ -48,12 +51,29 @@ function wordsFromContent(
     if (transformed.length < 6 || !transformed.every(Number.isFinite)) continue;
     const fontHeight = Math.max(1, Math.hypot(transformed[2], transformed[3]));
     const rawWidth = Number(item.width);
-    const widthPx = Number.isFinite(rawWidth) && rawWidth > 0 ? rawWidth : Math.max(fontHeight, text.length * fontHeight * 0.45);
-    const left = Math.max(0, transformed[4]);
-    const top = Math.max(0, transformed[5] - fontHeight);
-    const right = Math.min(viewport.width, left + widthPx);
-    const bottom = Math.min(viewport.height, top + Math.max(fontHeight, Number(item.height) || 0));
-    if (right <= left || bottom <= top || viewport.width <= 0 || viewport.height <= 0) continue;
+    // The PDF.js item width is measured along the text baseline, which can
+    // be rotated or skewed. Treating it as horizontal falsely paints a
+    // vertical legal stamp across the full page width, bypassing visual OCR
+    // of an image-only invoice body. Project all four text-rectangle corners.
+    const baselineLength = Math.hypot(transformed[0], transformed[1]);
+    if (baselineLength < 0.000001 || viewport.width <= 0 || viewport.height <= 0) continue;
+    const viewportScale = Math.hypot(viewport.transform[0], viewport.transform[1]) || 1;
+    const runLength = Number.isFinite(rawWidth) && rawWidth > 0
+      ? rawWidth * viewportScale
+      : Math.max(fontHeight, text.length * fontHeight * 0.45);
+    const advanceX = (transformed[0] / baselineLength) * runLength;
+    const advanceY = (transformed[1] / baselineLength) * runLength;
+    const originX = transformed[4];
+    const originY = transformed[5];
+    const xCoordinates = [originX, originX + advanceX,
+      originX + transformed[2], originX + advanceX + transformed[2]];
+    const yCoordinates = [originY, originY + advanceY,
+      originY + transformed[3], originY + advanceY + transformed[3]];
+    const left = Math.max(0, Math.min(...xCoordinates));
+    const top = Math.max(0, Math.min(...yCoordinates));
+    const right = Math.min(viewport.width, Math.max(...xCoordinates));
+    const bottom = Math.min(viewport.height, Math.max(...yCoordinates));
+    if (right <= left || bottom <= top) continue;
 
     const x = unit(left / viewport.width);
     const y = unit(top / viewport.height);
@@ -74,12 +94,18 @@ async function renderPagePng(
   const canvasFactory = pdf.canvasFactory;
   if (!canvasFactory?.create) throw new Error("ocr_pdf_canvas_unavailable");
   const base = page.getViewport({ scale: 1 });
-  const longest = Math.max(base.width, base.height, 1);
-  const scale = Math.max(0.75, Math.min(MAX_RENDER_SCALE, MAX_RENDER_SIDE / longest));
+  const scale = pdfRasterScale(base.width, base.height, MAX_RENDER_SIDE, MAX_RENDER_SCALE);
   const viewport = page.getViewport({ scale });
+  if (!Number.isFinite(viewport.width) || !Number.isFinite(viewport.height)
+    || viewport.width <= 0 || viewport.height <= 0
+    || viewport.width > MAX_RENDER_SIDE + 1 || viewport.height > MAX_RENDER_SIDE + 1) {
+    throw new Error("ocr_pdf_page_dimensions_invalid");
+  }
   const rendered = canvasFactory.create(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
   try {
-    await page.render({ canvasContext: rendered.context, viewport, canvasFactory }).promise;
+    // PDF.js 6.x requires the actual canvas; canvasContext alone is not a
+    // valid substitute for the render target in Node.
+    await page.render({ canvas: rendered.canvas, canvasContext: rendered.context, viewport, canvasFactory }).promise;
     const png = Buffer.from(rendered.canvas.toBuffer("image/png"));
     if (!png.byteLength) throw new Error("ocr_pdf_render_empty");
     return png;
@@ -89,10 +115,35 @@ async function renderPagePng(
 }
 
 export class PdfTextOcrProvider implements DocumentOcrProvider {
-  private readonly imageOcr = new TesseractImageOcrProvider();
+  // Injection is intentionally limited to the visual extractor: a failing
+  // scanned page can be exercised without disabling the real PDF.js parser.
+  constructor(
+    private readonly imageOcr: Pick<DocumentOcrProvider, "extract"> = new TesseractImageOcrProvider(),
+  ) {}
 
   supports(mimeType: string) {
     return mimeType.toLowerCase() === "application/pdf";
+  }
+
+  // Keep native extraction isolatable per page. PDF.js can fail to parse a
+  // damaged text stream even when the page can still be rasterized. One bad
+  // text stream must not erase other pages or suppress visual recovery.
+  protected async readNativeItems(
+    page: { getTextContent(): Promise<{ items: unknown[] }> },
+    _pageNumber: number,
+  ): Promise<unknown[]> {
+    const content = await page.getTextContent();
+    return content.items;
+  }
+
+  // A single corrupt page reference must not discard readable earlier or
+  // later pages. Kept protected so the real PDF.js load path can be fault-
+  // injected in regression tests without mocking the whole document parser.
+  protected async loadPdfPage<T>(
+    pdf: { getPage(pageNumber: number): Promise<T> },
+    pageNumber: number,
+  ): Promise<T> {
+    return pdf.getPage(pageNumber);
   }
 
   async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }) {
@@ -101,59 +152,108 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
       data: new Uint8Array(input.bytes),
       useSystemFonts: true,
     });
-    const pdf = await task.promise;
+    // A malformed PDF may reject while the document is still opening.
+    // Dispose of the loading task even on this early failure path.
+    const pdf = await task.promise.catch(async (error: unknown) => {
+      await task.destroy().catch(() => undefined);
+      throw error;
+    });
     const pageCount = Math.min(pdf.numPages, MAX_PAGES);
     const pages: Array<{ pageNumber: number; words: OcrWord[] }> = [];
     const warnings: string[] = [];
     let nativePageCount = 0;
     let visualOcrPageCount = 0;
+    let visualOcrAttempted = 0;
 
     try {
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
-        const page = await pdf.getPage(pageNumber);
+        let page: Awaited<ReturnType<typeof pdf.getPage>> | null = null;
+        try {
+          page = await this.loadPdfPage(pdf, pageNumber);
+        } catch {
+          // Preserve the explicit hole in page numbering and the healthy
+          // pages. Never infer a total from a page we could not load.
+          pages.push({ pageNumber, words: [] });
+          warnings.push(`pdf_page_load_failed:${pageNumber}`);
+          continue;
+        }
         try {
           const viewport = page.getViewport({ scale: 1 });
-          const content = await page.getTextContent();
-          const nativeWords = wordsFromContent(
-            content.items as unknown[],
-            { width: viewport.width, height: viewport.height, transform: [...viewport.transform] },
-            pdfjs.Util.transform,
-          );
+          let nativeWords: OcrWord[] = [];
+          try {
+            const items = await this.readNativeItems(page, pageNumber);
+            nativeWords = wordsFromContent(
+              items,
+              { width: viewport.width, height: viewport.height, transform: [...viewport.transform] },
+              pdfjs.Util.transform,
+            );
+          } catch {
+            // The text stream is not proof that the raster is unusable.
+            // Preserve the page number, mark native extraction uncertain,
+            // and attempt the same bounded visual OCR used for scanned pages.
+            warnings.push(`pdf_page_native_text_failed:${pageNumber}`);
+          }
 
-          if (nativeWords.length) {
+          if (!pdfNativeTextNeedsVisualOcr(nativeWords)) {
             nativePageCount += 1;
             pages.push({ pageNumber, words: nativeWords });
             continue;
           }
 
-          const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
-          const visual = await this.imageOcr.extract({
-            bytes: new Uint8Array(png),
-            mimeType: "image/png",
-            originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
-          });
-          const visualWords = visual.pages[0]?.words ?? [];
-          if (visualWords.length) {
-            visualOcrPageCount += 1;
-            pages.push({ pageNumber, words: visualWords });
-          } else {
-            pages.push({ pageNumber, words: [] });
-            warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+          visualOcrAttempted += 1;
+          // A PDF with only selectable boilerplate may otherwise bypass OCR
+          // on a fully scanned invoice. Keep the original native words if
+          // the visual pass fails or produces less usable content.
+          try {
+            const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
+            const visual = await this.imageOcr.extract({
+              bytes: new Uint8Array(png),
+              mimeType: "image/png",
+              originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
+            });
+            const visualWords = visual.pages[0]?.words ?? [];
+            const improved = pdfVisualOcrImprovesNative(nativeWords, visualWords);
+            if (improved) {
+              visualOcrPageCount += 1;
+              pages.push({ pageNumber, words: visualWords });
+              if (nativeWords.length) warnings.push(`pdf_page_sparse_native_recovered:${pageNumber}`);
+            } else if (nativeWords.length) {
+              nativePageCount += 1;
+              pages.push({ pageNumber, words: nativeWords });
+              warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+            } else {
+              pages.push({ pageNumber, words: [] });
+              warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+            }
+            for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
+          } catch {
+            // Failure of one visual page must not discard the native content
+            // already recovered from other pages. Never fabricate a word or
+            // call a failed OCR pass successful: mark the page explicitly for
+            // human inspection and preserve its sequential page number.
+            if (!nativeWords.length) {
+              pages.push({ pageNumber, words: [] });
+              warnings.push(`pdf_page_visual_ocr_failed:${pageNumber}`);
+            } else {
+              nativePageCount += 1;
+              pages.push({ pageNumber, words: nativeWords });
+              warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+            }
           }
-          for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
         } finally {
           try { page.cleanup(); } catch { /* best effort */ }
         }
       }
       if (pdf.numPages > MAX_PAGES) warnings.push("pdf_page_limit_reached");
 
-      let source: OcrSource = "pdf_text";
-      if (visualOcrPageCount && nativePageCount) source = "hybrid";
-      else if (visualOcrPageCount) source = "pdf_ocr";
+      // A fully scanned PDF whose visual OCR produced no words is NOT a PDF
+      // with usable native text. Preserve that distinction when displaying
+      // diagnostics; the page warnings still require human review.
+      const source = resolvePdfOcrSource({ nativePageCount, visualOcrPageCount, visualOcrAttempted });
 
       return {
         source,
-        extractor: visualOcrPageCount ? EXTRACTOR_HYBRID : EXTRACTOR_NATIVE,
+        extractor: visualOcrAttempted > 0 ? EXTRACTOR_HYBRID : EXTRACTOR_NATIVE,
         pages,
         warnings,
       };

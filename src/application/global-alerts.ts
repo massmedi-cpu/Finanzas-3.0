@@ -35,6 +35,8 @@ type ForecastSignal = {
 export type GlobalAlertInput = {
   today: string;
   syncState: "failed" | "warning" | "ok" | "unknown";
+  /** Never infer monthly financial/budget completeness from a snapshot alone. */
+  bankCoverageVerified?: boolean;
   syncDetail?: string | null;
   failedSourceCount?: number;
   quality?: {
@@ -107,7 +109,8 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
   }
 
   const projectedClosingBalance = input.forecast?.projectedClosingBalanceCents ?? null;
-  if ((input.forecast?.plannedItems ?? 0) > 0 && projectedClosingBalance !== null && projectedClosingBalance < 0) {
+  if (input.bankCoverageVerified === true && (input.forecast?.plannedItems ?? 0) > 0
+    && projectedClosingBalance !== null && projectedClosingBalance < 0) {
     alerts.push({
       id: "forecast-negative-balance",
       category: "forecast",
@@ -122,7 +125,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
 
   const budgetRows = input.budgets ?? [];
   const overBudgetCount = budgetRows.filter((item) => item.status === "over").length;
-  if (overBudgetCount > 0) {
+  if (input.bankCoverageVerified === true && overBudgetCount > 0) {
     alerts.push({
       id: "budget-over",
       category: "budget",
@@ -141,7 +144,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
     && item.progressBps >= NEAR_BUDGET_LIMIT_BPS
     && item.progressBps < BUDGET_LIMIT_BPS,
   ).length;
-  if (nearBudgetCount > 0) {
+  if (input.bankCoverageVerified === true && nearBudgetCount > 0) {
     alerts.push({
       id: "budget-near-limit",
       category: "budget",
@@ -248,7 +251,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
     });
   }
 
-  if ((input.month?.operatingNetCents ?? 0) < 0) {
+  if (input.bankCoverageVerified === true && (input.month?.operatingNetCents ?? 0) < 0) {
     alerts.push({
       id: "negative-month-result",
       category: "analysis",

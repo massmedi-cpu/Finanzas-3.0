@@ -107,6 +107,15 @@ async function mockInicio(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
 
+    // This legacy fixture has a latest bank movement but no certified start
+    // or completed-import evidence. The month is observed, never complete.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-11", sync: null,
+      });
+      return;
+    }
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {

@@ -2,7 +2,7 @@ name: AUD E2E Financial Disposable DB
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, chat/twenty-one-routes-responsive-shell-20261010]
     paths:
       - 'supabase/migrations/**'
       - 'app/**'

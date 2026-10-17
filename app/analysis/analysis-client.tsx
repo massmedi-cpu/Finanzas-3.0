@@ -30,6 +30,7 @@ import {
 } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+import { SpanishMonthInput } from "../../src/design/spanish-month-input";
 import { CategoryIdentity } from "../category-identity";
 import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
@@ -522,7 +523,7 @@ export default function AnalysisClient({
           </div>
           <label>
             <span>Mes de referencia</span>
-            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} required />
+            <SpanishMonthInput label="Mes de referencia" value={month} onChange={(event) => setMonth(event.target.value)} required />
           </label>
           <label>
             <span>Cuenta</span>
