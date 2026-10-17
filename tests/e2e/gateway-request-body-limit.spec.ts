@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { knownPublicErrorCode, publicGatewayErrorCode, publicRemoteGatewayCode } from "../../src/infrastructure/http/gateway-public-error";
+import { parseConfigurationApiCommand, ConfigurationRequestError } from "../../src/application/configuration-api-contract";
 import {
   MAX_COMPRESSED_GATEWAY_BODY_BYTES,
   MAX_DECOMPRESSED_GATEWAY_BODY_BYTES,
@@ -276,4 +277,29 @@ test("REC-SEC-API-006 · códigos históricos exactos y líneas OCR indexadas co
     "invalid_document_line_01_quantity",
     "invalid_document_line_0_amount123",
   ]) expect(validLine.test(unsafe)).toBe(false);
+});
+
+
+test("REC-CONFIG-SEC-012 · configuración no devuelve claves ni operaciones arbitrarias en errores", () => {
+  const secret = "Bearer_PRIVADO_IBAN_ES0000000000000000000000";
+  const requests: Array<{ payload: Record<string, unknown>; code: string }> = [
+    { payload: { operation: "account.create", draft: {}, [secret]: true }, code: "unexpected_field" },
+    { payload: { operation: "unknown-operation-" + secret }, code: "unsupported_operation" },
+  ];
+  for (const { payload, code } of requests) {
+    let thrown: unknown = null;
+    try {
+      parseConfigurationApiCommand(payload);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(ConfigurationRequestError);
+    const problem = thrown as ConfigurationRequestError;
+    expect(problem.code).toBe(code);
+    expect(problem.message).not.toContain(secret);
+    expect(problem.message.length).toBeLessThan(100);
+  }
+  const contract = readFileSync(join(process.cwd(), "src/application/configuration-api-contract.ts"), "utf8");
+  expect(contract).not.toContain('unexpected.join(", ")');
+  expect(contract).not.toContain("Operación no admitida: " + "$" + "{operation}");
 });

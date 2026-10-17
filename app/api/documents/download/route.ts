@@ -13,6 +13,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
+import { knownPublicErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
@@ -100,7 +101,10 @@ function apiError(error: unknown) {
       document_download_too_large: 413,
       document_download_mime_mismatch: 415,
     };
-    if (statuses[error.message]) return fail(error.message, statuses[error.message]);
+    // Only explicitly declared, own error-map entries may be public codes.
+    // Object.prototype names are not valid HTTP statuses.
+    const publicCode = knownPublicErrorCode(error, statuses);
+    if (publicCode) return fail(publicCode, statuses[publicCode]);
   }
   console.error("document-download-internal", error instanceof Error ? error.name : typeof error);
   return fail("internal_error", 500);

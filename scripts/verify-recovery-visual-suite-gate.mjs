@@ -19,7 +19,7 @@ const cases = [
   ["tests/e2e/cash-flow-theme-contrast.spec.ts", ["REC-VIS-005"]],
   // These backend-integrity regressions must run, not merely exist in Git.
   ["tests/e2e/financial-api-query-guards.spec.ts", ["REC-OBS-001"]],
-  ["tests/e2e/gateway-request-body-limit.spec.ts", ["REC-SEC-GW-002", "REC-SEC-GW-003", "REC-SEC-GW-004", "REC-SEC-API-005", "REC-SEC-API-006", "REC-SEC-OCR-001"]],
+  ["tests/e2e/gateway-request-body-limit.spec.ts", ["REC-SEC-GW-002", "REC-SEC-GW-003", "REC-SEC-GW-004", "REC-SEC-API-005", "REC-SEC-API-006", "REC-CONFIG-SEC-012", "REC-SEC-OCR-001"]],
   ["tests/e2e/document-ocr-financial-interpretation.spec.ts", [
     "REC-OCR-150", "REC-OCR-151", "REC-OCR-152",
     "REC-OCR-153", "REC-OCR-154", "REC-OCR-155",
@@ -38,7 +38,7 @@ const cases = [
   ["tests/e2e/document-drive-authoritative-metadata.spec.ts", ["REC-DRIVE-120", "REC-DRIVE-121", "REC-DRIVE-122", "REC-DRIVE-123", "REC-DRIVE-124", "REC-DRIVE-125", "REC-DRIVE-126", "REC-DRIVE-127", "REC-DRIVE-128", "REC-DRIVE-129", "REC-DRIVE-130", "REC-DRIVE-131", "REC-DRIVE-132", "REC-DRIVE-133", "REC-DRIVE-134", "REC-DRIVE-135", "REC-DRIVE-136", "REC-DRIVE-139"]],
   ["tests/e2e/drive-auto-detection-10.0.72.spec.ts", ["REC-DRIVE-137", "REC-DRIVE-138"]],
   ["tests/e2e/google-service-account.spec.ts", ["REC-DOC-NET-010"]],
-  ["tests/e2e/document-download-byte-limit.spec.ts", ["REC-DOC-MEM-001", "REC-DOC-MEM-002", "REC-DOC-MEM-003", "REC-DOC-MEM-004", "REC-DOC-MEM-005", "REC-DOC-NET-009"]],
+  ["tests/e2e/document-download-byte-limit.spec.ts", ["REC-DOC-MEM-001", "REC-DOC-MEM-002", "REC-DOC-MEM-003", "REC-DOC-MEM-004", "REC-DOC-MEM-005", "REC-DOC-SEC-011", "REC-DOC-NET-009"]],
 ];
 const integrated = workflow.split("name: Integrated module regressions on the same optimized build")[1]?.split("      # Synthetic UI results")[0] ?? "";
 assert.ok(integrated.includes("npx playwright test"), "The real browser test command must exist");

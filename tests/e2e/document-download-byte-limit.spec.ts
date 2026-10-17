@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { knownPublicErrorCode } from "../../src/infrastructure/http/gateway-public-error";
 import {
   LimitedResponseBodyError,
   readLimitedResponseBody,
@@ -120,4 +121,23 @@ test("REC-DOC-NET-009 · signed original and OCR fetches have cancellation deadl
   expect(ocr).toContain("signal: AbortSignal.timeout(OCR_SOURCE_FETCH_TIMEOUT_MS)");
   expect(original).toContain("readLimitedResponseBody(response, MAX_FILE_BYTES)");
   expect(ocr).toContain("readLimitedResponseBody(response, MAX_BYTES)");
+});
+
+
+test("REC-DOC-SEC-011 · los códigos de descarga no aceptan propiedades heredadas de Object", () => {
+  const statuses = {
+    invalid_document_id: 400,
+    document_download_failed: 503,
+  };
+  expect(knownPublicErrorCode(new Error("invalid_document_id"), statuses)).toBe("invalid_document_id");
+  expect(knownPublicErrorCode(new Error("document_download_failed"), statuses)).toBe("document_download_failed");
+  for (const malformed of [
+    new Error("toString"),
+    new Error("constructor"),
+    new Error("__proto__"),
+    new Error("invalid_document_id; IBAN ES7620770024003102575766"),
+  ]) expect(knownPublicErrorCode(malformed, statuses)).toBeNull();
+  const route = readFileSync(join(process.cwd(), "app/api/documents/download/route.ts"), "utf8");
+  expect(route).toContain("knownPublicErrorCode(error, statuses)");
+  expect(route).not.toContain("statuses[error.message]");
 });
