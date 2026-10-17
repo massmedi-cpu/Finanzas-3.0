@@ -188,6 +188,38 @@ try {
   assert.match(sidebandText, /23[,.]45/, "Spanish Tesseract reads exact cents through sideways-stamp PDF");
   console.log("PASS · rotated native legal stamp does not mask actual raster invoice OCR");
 
+  // Independent text/amount oracles for additional genuine Spanish-model
+  // recognitions. Different clear receipt headings and values exercise the
+  // raster -> Tesseract path, not a prefilled DocumentOcrResult mock.
+  // These remain SYNTHETIC examples, never the reserved human holdout set.
+  const financialRasterCases = [
+    { name: "small receipt", heading: "TOTAL", amount: "7,90", printed: "TICKET TOTAL 7,90" },
+    { name: "invoice amount", heading: "IMPORTE", amount: "89,10", printed: "FACTURA IMPORTE 89,10" },
+    { name: "larger receipt", heading: "TOTAL", amount: "124,90", printed: "TOTAL 124,90 EUR" },
+  ];
+  let financialRasterPassed = 0;
+  for (const specimen of financialRasterCases) {
+    const variant = createCanvas(1200, 240);
+    const brush = variant.getContext("2d");
+    brush.fillStyle = "#ffffff";
+    brush.fillRect(0, 0, 1200, 240);
+    brush.fillStyle = "#000000";
+    brush.font = "bold 56px Arial";
+    brush.fillText(specimen.printed, 38, 148);
+    const bytes = variant.toBuffer("image/png");
+    const ocr = await worker.recognize(bytes, { rotateRadians: 0 }, { text: true });
+    const recognized = String(ocr.data?.text ?? "").replace(/\\s+/g, " ").trim();
+    assert.match(recognized, new RegExp(specimen.heading, "i"),
+      "real Spanish OCR should find the heading: " + specimen.name);
+    assert.ok(recognized.includes(specimen.amount)
+      || recognized.includes(specimen.amount.replace(",", ".")),
+    "real Spanish OCR should retain the exact financial cents: " + specimen.name);
+    financialRasterPassed += 1;
+  }
+  assert.equal(financialRasterPassed, financialRasterCases.length);
+  console.log("OCR_NATIVE_FINANCIAL_VARIANTS|passed=" + financialRasterPassed
+    + "|total=" + financialRasterCases.length + "|synthetic=true|holdout_access=false");
+
 } finally {
   await worker?.terminate();
 }
