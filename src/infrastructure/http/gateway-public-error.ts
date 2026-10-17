@@ -28,8 +28,18 @@ export function knownPublicErrorCode(
   return null;
 }
 
+const EDGE_PUBLIC_STATUS_CODES = new Set([
+  "method_not_allowed",
+  "unauthorized",
+  "preview_production_write_forbidden",
+  "database_url_unavailable",
+]);
+
 /** The remote Edge response is untrusted, even if its JSON has an `error` field. */
 export function publicRemoteGatewayCode(rawCode: unknown): string | null {
   if (typeof rawCode !== "string" || rawCode.length === 0) return null;
+  // Preserve only explicitly-known Edge protocol statuses outside domain-code grammar.
+  // Never loosen the general validator to accept arbitrary single tokens.
+  if (EDGE_PUBLIC_STATUS_CODES.has(rawCode)) return rawCode;
   return publicGatewayErrorCode(new Error(rawCode));
 }

@@ -156,6 +156,10 @@ test("REC-SEC-GW-004 · error remoto del gateway nunca expone SQL, tokens ni dat
   expect(publicRemoteGatewayCode("document_not_found")).toBe("document_not_found");
   expect(publicRemoteGatewayCode("invalid_account_id")).toBe("invalid_account_id");
   expect(publicRemoteGatewayCode("gateway_error")).toBe("gateway_error");
+  for (const code of ["method_not_allowed", "unauthorized",
+    "preview_production_write_forbidden", "database_url_unavailable"]) {
+    expect(publicRemoteGatewayCode(code)).toBe(code);
+  }
   for (const unsafe of [
     "PostgresError: duplicate key IBAN ES7620770024003102575766",
     "Bearer eyJhbGciOiJIUzI1NiJ9.private-part",
@@ -170,6 +174,6 @@ test("REC-SEC-GW-004 · error remoto del gateway nunca expone SQL, tokens ni dat
     "src/infrastructure/persistence/vercel-supabase-gateway.ts"), "utf8");
   expect(gateway).toContain("const safeRemoteCode = publicRemoteGatewayCode(body?.error)");
   expect(gateway).toContain("safeRemoteCode ?? undefined");
-  expect(gateway).not.toContain("response.status,\\n      body?.error,");
-  expect(gateway).not.toContain("response.status,\\n      body.error,");
+  expect(gateway).not.toMatch(/response\.status,\s*body\?\.error,/);
+  expect(gateway).not.toMatch(/response\.status,\s*body\.error,/);
 });
