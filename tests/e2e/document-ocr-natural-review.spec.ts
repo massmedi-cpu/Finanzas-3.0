@@ -134,5 +134,20 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
   await expect(panel.getByText(/5\/5 filas estructuradas · 5\/5 líneas cuadran · suma de líneas = total/)).toBeVisible();
   await expect(panel.getByText("Corrige y guarda solo lo comprobado en el formulario superior. La lectura OCR original permanece separada y sin sobrescribirse.", { exact: true })).toBeVisible();
+  // REC-OCR-UI-015 · The description input must not remount (lose focus)
+  // on each character, even after adding another product line.
+  const lines = panel.getByTestId("ocr-confirmation-lines");
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const firstDescription = lines.getByRole("textbox", { name: "Descripción" }).first();
+  await firstDescription.click();
+  await firstDescription.pressSequentially("CAFE", { delay: 20 });
+  await expect(firstDescription).toHaveValue("CAFE");
+  await expect(firstDescription).toBeFocused();
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const secondDescription = lines.getByRole("textbox", { name: "Descripción" }).nth(1);
+  await secondDescription.fill("AGUA");
+  await lines.getByRole("button", { name: "Quitar línea" }).first().click();
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveCount(1);
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveValue("AGUA");
   expect(writes).toHaveLength(0);
 });

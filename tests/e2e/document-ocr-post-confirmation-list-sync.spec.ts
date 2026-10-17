@@ -64,6 +64,7 @@ async ({ page }) => {
     confirmations += 1;
     const posted = route.request().postDataJSON();
     expect(posted.documentId).toBe(id);
+    expect(posted.totalCents).toBe(123456);
     expect(posted.ocrRunId).toBe(ocrRunId);
     savedDocument = {
       ...baseDocument, issuerName: posted.issuerName,
@@ -118,6 +119,8 @@ async ({ page }) => {
   // A paste with surrounding whitespace must persist the same canonical text
   // that the confirmation readback returns, without a false unverified state.
   await issuer.fill("  PROVEEDOR CONFIRMADO  ");
+  // REC-OCR-MONEY-016 · Spanish grouping must survive human confirmation.
+  await panel.getByRole("textbox", { name: "Total (€)", exact: true }).fill("1.234,56");
   const button = panel.getByRole("button", { name: "Confirmar revisión" });
   await expect(button).toBeEnabled();
   await button.click();
