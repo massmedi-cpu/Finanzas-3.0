@@ -63,6 +63,10 @@ assert.ok(workflow.includes("'src/infrastructure/google/google-drive-document-di
 assert.ok(workflow.includes("'src/application/analysis/analysis-contract.ts'"), "Analysis contract changes must retrigger the security browser gate");
 assert.ok(workflow.includes("'src/infrastructure/http/gateway-public-error.ts'"), "Gateway error sanitization changes must retrigger the browser security gate");
 assert.ok(workflow.includes("'scripts/test-drive-discovery-integrity.mjs'"), "Discovery test changes must trigger CI");
+assert.ok(workflow.includes("node scripts/test-ocr-native-engine-smoke.mjs"), "Real Spanish OCR engine must run before browser matrix");
+assert.ok(workflow.includes("'scripts/test-ocr-native-engine-smoke.mjs'"), "Real OCR example changes must retrigger CI");
+const nativeOcr = readFileSync("scripts/test-ocr-native-engine-smoke.mjs", "utf8");
+assert.ok(nativeOcr.includes("OCR_NATIVE_FINANCIAL_VARIANTS|passed="), "Native OCR must exercise and report multiple financial raster patterns");
 // A passing browser job is not independently reviewable unless its screenshots
 // and failure traces survive the ephemeral CI runner. The first Playwright command
 // clears its output on the next run, so preserve both phases separately.
