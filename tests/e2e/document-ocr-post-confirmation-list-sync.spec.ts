@@ -143,3 +143,64 @@ async ({ page }) => {
   expect(savedDocument.issuerName).toBe("PROVEEDOR CONFIRMADO");
 });
 }
+
+
+for (const remoteStatus of [400, 503] as const) {
+  test("REC-OCR-CONF-034 · HTTP " + remoteStatus + " con invalid_document_total " +
+    (remoteStatus === 503 ? "bloquea un segundo guardado" : "permite corregir antes de guardar"), async ({ page }) => {
+    let patchCount = 0;
+    await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
+      expect(route.request().method()).toBe("POST");
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(ocr) });
+    });
+    await page.route(/\/api\/documents\/ocr-review(?:\?.*)?$/, async (route) => {
+      if (route.request().method() === "GET") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+          documentId: id, runs: [{ id: ocrRunId, extractor: ocr.extractor, extractedAt }],
+          reviews: [],
+        }) });
+        return;
+      }
+      expect(route.request().method()).toBe("PATCH");
+      patchCount++;
+      await route.fulfill({ status: remoteStatus, contentType: "application/json",
+        body: JSON.stringify({ error: "invalid_request", code: "invalid_document_total" }) });
+    });
+    await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fulfill({ status: 500, json: { error: "unexpected_write" } });
+        return;
+      }
+      const url = new URL(route.request().url());
+      if (url.searchParams.get("id") === id) {
+        await route.fulfill({ status: 200, json: {
+          contractVersion: 1, document: baseDocument, associations: [], principles,
+        } });
+        return;
+      }
+      await route.fulfill({ status: 200, json: {
+        contractVersion: 1, items: [baseDocument], total: 1,
+        limit: 50, offset: 0, principles,
+      } });
+    });
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-revision-sincronizacion\.pdf/i }).click();
+    const panel = page.getByTestId("ocr-review-panel");
+    await panel.getByRole("button", { name: "Analizar documento" }).click();
+    const button = panel.getByRole("button", { name: "Confirmar revisión" });
+    await expect(button).toBeEnabled();
+    await button.click();
+    await expect.poll(() => patchCount).toBe(1);
+    if (remoteStatus === 503) {
+      await expect(panel.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+      await expect(panel.getByRole("button", { name: "Comprobar revisión sin volver a guardar" })).toBeVisible();
+      await expect(button).toBeDisabled();
+      await expect(panel.getByRole("alert")).toContainText("historial");
+    } else {
+      await expect(panel.locator('[data-ocr-confirmation="unverified"]')).toHaveCount(0);
+      await expect(button).toBeEnabled();
+      await expect(panel.getByRole("alert")).toContainText("formato no válido");
+    }
+    expect(patchCount).toBe(1);
+  });
+}

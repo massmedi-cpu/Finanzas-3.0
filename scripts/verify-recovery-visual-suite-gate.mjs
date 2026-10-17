@@ -24,7 +24,7 @@ const cases = [
   ["tests/e2e/document-ocr-natural-review.spec.ts", ["REC-OCR-UI-015"]],
   ["tests/e2e/document-ocr-error-messages.spec.ts", ["REC-OCR-UX-030", "REC-OCR-UX-031", "REC-OCR-UX-032"]],
   ["tests/e2e/document-ocr-confirmation-integrity.spec.ts", ["REC-OCR-CONF-033"]],
-  ["tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts", ["REC-OCR-MONEY-016"]],
+  ["tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts", ["REC-OCR-MONEY-016", "REC-OCR-CONF-034"]],
   ["tests/e2e/gateway-request-body-limit.spec.ts", ["REC-SEC-GW-002", "REC-SEC-GW-003", "REC-SEC-GW-004", "REC-SEC-API-005", "REC-SEC-API-006", "REC-CONFIG-SEC-012", "REC-SEC-DOC-014", "REC-SEC-OCR-001"]],
   ["tests/e2e/document-ocr-financial-interpretation.spec.ts", [
     "REC-OCR-150", "REC-OCR-151", "REC-OCR-152",
