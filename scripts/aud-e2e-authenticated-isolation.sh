@@ -33,13 +33,29 @@ node - "$workdir/supabase/config.toml" <<'NODE'
 const fs = require('node:fs');
 const file = process.argv[2];
 const config = fs.readFileSync(file, 'utf8');
-const section = /^(\[inbucket\]\r?\n)([\s\S]*?)(?=^\[|$(?![\s\S]))/m;
-const found = config.match(section);
-if (!found || !/^enabled\s*=\s*true\s*$/m.test(found[2])) {
-  throw new Error('expected_enabled_local_inbucket_section');
+// Supabase CLI can leave the default enabled=true implicit in config.toml.
+// Handle explicit true, explicit false and absent [inbucket] without changing
+// Auth, Postgres or Storage. All changes remain inside this disposable workdir.
+const marker = /^(\[inbucket\]\r?\n)/m;
+let updated;
+const found = config.match(marker);
+if (!found) {
+  updated = config.replace(/\s*$/, '\n') + '[inbucket]\nenabled = false\n';
+} else {
+  const start = found.index + found[0].length;
+  const relativeNext = config.slice(start).search(/^\[[^\r\n]+\]/m);
+  const end = relativeNext < 0 ? config.length : start + relativeNext;
+  let body = config.slice(start, end);
+  if (/^enabled\s*=\s*(?:true|false)\s*$/m.test(body)) {
+    body = body.replace(/^enabled\s*=\s*(?:true|false)\s*$/m, 'enabled = false');
+  } else {
+    body = 'enabled = false\n' + body;
+  }
+  updated = config.slice(0, start) + body + config.slice(end);
 }
-const updated = config.replace(section, (_, header, body) =>
-  header + body.replace(/^enabled\s*=\s*true\s*$/m, 'enabled = false'));
+if (!/\[inbucket\]\r?\nenabled = false/.test(updated)) {
+  throw new Error('local_mail_capture_not_disabled');
+}
 fs.writeFileSync(file, updated);
 process.stdout.write('AUD_AUTH|mail_capture_disabled=true|db_auth_storage_intact=true\n');
 NODE
