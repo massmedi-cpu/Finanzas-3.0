@@ -64,3 +64,13 @@ export function hasCompletedSourceSyncEvidence(value: SourceSyncIncidentInput | 
     && [value.rowsSeen, value.rowsFailed, value.rowsMissing, value.duplicatesDetected, value.warningsCount]
       .every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
 }
+
+/** Validates only how recently a completed import checked its input; not bank freshness. */
+export function hasRecentSourceSyncEvidence(
+  value: SourceSyncIncidentInput | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!hasCompletedSourceSyncEvidence(value) || !Number.isFinite(nowMs)) return false;
+  const elapsed = nowMs - Date.parse(value!.finishedAt!);
+  return elapsed >= 0 && elapsed <= 48 * 60 * 60 * 1000;
+}

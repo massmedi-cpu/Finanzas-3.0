@@ -20,6 +20,7 @@ const cases = [
   // These backend-integrity regressions must run, not merely exist in Git.
   ["tests/e2e/financial-api-query-guards.spec.ts", ["REC-OBS-001"]],
   ["tests/e2e/alerts-center.spec.ts", ["REC-UI-ALERT-013"]],
+  ["tests/e2e/inicio-sync-feedback.spec.ts", ["REC-HOME-SYNC-015"]],
   ["tests/e2e/document-ocr-natural-review.spec.ts", ["REC-OCR-UI-015"]],
   ["tests/e2e/document-ocr-error-messages.spec.ts", ["REC-OCR-UX-030", "REC-OCR-UX-031"]],
   ["tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts", ["REC-OCR-MONEY-016"]],

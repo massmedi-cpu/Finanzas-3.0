@@ -19,6 +19,7 @@ import {
 import {
   hasSourceSyncIncidents,
   hasCompletedSourceSyncEvidence,
+  hasRecentSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
@@ -594,10 +595,12 @@ export default function InicioOverview() {
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
   const syncHasWarnings = syncSucceeded && hasSourceSyncIncidents(syncRun);
+  const syncIsOld = syncSucceeded && hasCompletedSourceSyncEvidence(syncRun) && !hasRecentSourceSyncEvidence(syncRun);
   const bankUnavailable = sourceFreshness?.available === false;
   const certifiedSync = syncSucceeded && sourceFreshness?.available === true
     && !bankProvenanceConflict
     && hasCompletedSourceSyncEvidence(sourceFreshness.sync)
+    && hasRecentSourceSyncEvidence(sourceFreshness.sync)
     && !hasSourceSyncIncidents(sourceFreshness.sync);
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
@@ -773,7 +776,7 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : workspaceSessionMissing || syncHasWarnings || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : workspaceSessionMissing || syncHasWarnings || syncIsOld || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
@@ -792,6 +795,8 @@ export default function InicioOverview() {
                       ? "Fechas bancarias discordantes"
                       : bankUnavailable
                       ? "Fuente bancaria no disponible"
+                      : syncIsOld
+                        ? "Actualización bancaria pendiente"
                       : certifiedSync
                         ? "Datos bancarios actualizados"
                         : "Cobertura bancaria sin verificar"}
@@ -803,7 +808,9 @@ export default function InicioOverview() {
                 ? "La fuente y el resumen de movimientos indican distintas fechas de actualización. No se certifican las cifras afectadas."
                 : bankUnavailable
                   ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
-                : certifiedSync && syncRun
+                : syncIsOld && syncRun
+                  ? `Última sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}. ${latestDataDate ? `Movimientos registrados hasta ${formatDate(latestDataDate)}.` : "La fecha de los movimientos aún no está verificada."} Pulsa «Actualizar datos» para comprobar la fuente bancaria.`
+                  : certifiedSync && syncRun
                   ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
                   : syncFailed
                     ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
