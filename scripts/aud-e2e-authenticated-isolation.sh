@@ -6,6 +6,8 @@ set -euo pipefail
 [[ "${GITHUB_ACTIONS:-}" == true ]] || { echo 'AUD_AUTH|ci_runner_required'; exit 1; }
 [[ "${AUD_VALIDATION_SHA:-}" =~ ^[0-9a-f]{40}$ ]] || exit 1
 [[ "$(git rev-parse HEAD)" == "$AUD_VALIDATION_SHA" ]] || exit 1
+suite="${AUD_ISOLATED_SUITE:-acceptance}"
+[[ "$suite" == acceptance || "$suite" == capacity ]] || { echo 'AUD_AUTH|invalid_suite'; exit 1; }
 for forbidden in SUPABASE_ACCESS_TOKEN FINANCIAL_APP_DB_URL VERCEL_OIDC_TOKEN GOOGLE_SERVICE_ACCOUNT_JSON; do
   [[ -z "${!forbidden:-}" ]] || { echo 'AUD_AUTH|external_credentials_forbidden'; exit 1; }
 done
@@ -77,6 +79,22 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 curl -fs --max-time 2 http://127.0.0.1:54330/jwks >/dev/null
+if [[ "$suite" == capacity ]]; then
+  npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
+    --allow-read --allow-write="$workdir" \
+    --config supabase/functions/financial-app-db-gateway/deno.json \
+    supabase/tests/aud_e2e_capacity.ts prepare
+  # Measure the optimized application, never next dev or an external preview.
+  NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run build
+  capacity_status=0
+  npx playwright test --config=playwright.authenticated-capacity.config.ts || capacity_status=$?
+  npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
+    --allow-read --config supabase/functions/financial-app-db-gateway/deno.json \
+    supabase/tests/aud_e2e_capacity.ts verify
+  [[ "$capacity_status" == 0 ]] || exit "$capacity_status"
+  echo "AUD_CAPACITY|status=ok|optimized_next=true|auth_gateway_postgres=true|cloud_access=false|sha=$AUD_VALIDATION_SHA"
+  exit 0
+fi
 npx playwright test --config=playwright.authenticated-isolation.config.ts
 npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
   --allow-read --allow-write="$workdir" \
