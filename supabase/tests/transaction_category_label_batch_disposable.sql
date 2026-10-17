@@ -36,6 +36,13 @@ BEGIN
       CASE WHEN n IN (1,4) THEN 'a0f10000-0000-4000-8000-000000000004'::uuid
         WHEN n=2 THEN 'a0f10000-0000-4000-8000-000000000005'::uuid ELSE null END,
       'confirmed','none') RETURNING id INTO movement_id;
+    -- The real INSERT trigger applies automatic categorization. Restore the
+    -- fixture's explicit original category afterwards without disabling it.
+    -- A category-only update does not run source-change categorization again.
+    UPDATE financial_app.transactions SET category_id=
+      CASE WHEN n IN (1,4) THEN 'a0f10000-0000-4000-8000-000000000004'::uuid
+        WHEN n=2 THEN 'a0f10000-0000-4000-8000-000000000005'::uuid ELSE null END
+    WHERE id=movement_id;
     IF n=4 THEN
       INSERT INTO financial_app.transaction_overrides(transaction_id,category_override_set,category_id_override)
       VALUES (movement_id,true,'a0f10000-0000-4000-8000-000000000005');
@@ -60,7 +67,8 @@ BEGIN
       WHEN '2' THEN 'Label Batch Root B' WHEN '4' THEN 'Label Batch Root B' ELSE null END;
     IF (item->'category'->>'effectiveName') IS DISTINCT FROM expected_label
       OR (item->>'amountCents')::int IS DISTINCT FROM -100*(item->'source'->>'sourceRowKey')::int THEN
-      RAISE EXCEPTION 'LABEL_BATCH_CHANGED_LABEL_OR_AMOUNT';
+      RAISE EXCEPTION 'LABEL_BATCH_CHANGED_LABEL_OR_AMOUNT synthetic_key=% label=% expected=% amount=%',
+        item->'source'->>'sourceRowKey',item->'category'->>'effectiveName',expected_label,item->>'amountCents';
     END IF;
     IF item->'source'->>'sourceRowKey'='4'
       AND item->'category'->>'originalName'<>'Label Batch Root A › Label Batch Leaf A' THEN
@@ -78,6 +86,17 @@ BEGIN
   IF financial_app.category_display_name('a0f10000-0000-4000-8000-000000000009') IS NOT NULL
     OR (financial_app.query_effective_transactions_v4(p_query=>'Foreign Category Secret',p_account_id=>account)->>'totalCount')::int<>0 THEN
     RAISE EXCEPTION 'LABEL_BATCH_CROSS_WORKSPACE_LEAK';
+  END IF;
+  -- The statement-local workspace value must change on the next query in
+  -- this same connection, even when PL/pgSQL reuses its prepared query plan.
+  PERFORM set_config('financial_app.workspace_id','a0f10000-0000-4000-8000-000000000002',true);
+  IF (financial_app.query_effective_transactions_v4(p_account_id=>account)->>'totalCount')::int<>0
+    OR EXISTS(SELECT 1 FROM financial_app.transaction_source_records WHERE source_file_id='__label_batch__') THEN
+    RAISE EXCEPTION 'STATEMENT_WORKSPACE_CONTEXT_STALE_OR_LEAKED';
+  END IF;
+  PERFORM set_config('financial_app.workspace_id','a0f10000-0000-4000-8000-000000000001',true);
+  IF (financial_app.query_effective_transactions_v4(p_account_id=>account)->>'totalCount')::int<>4 THEN
+    RAISE EXCEPTION 'STATEMENT_WORKSPACE_CONTEXT_NOT_RESTORED';
   END IF;
   page_one:=financial_app.query_effective_transactions_v4(p_account_id=>account,p_limit=>2);
   page_two:=financial_app.query_effective_transactions_v4(p_account_id=>account,p_limit=>2,

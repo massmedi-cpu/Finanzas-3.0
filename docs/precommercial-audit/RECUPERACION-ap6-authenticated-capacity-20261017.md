@@ -79,13 +79,15 @@ YAML, colección de Playwright (un recorrido) y `git diff --check`: PASS.
 Los preflights también rechazan un proceso fuera de CI y credenciales externas
 antes de intentar arrancar servicios.
 
-La ejecución autenticada 10k/50k **no se ha realizado**: este entorno no tiene
-Docker y la revisión automática ha rechazado el push. El rechazo reconoce el
+Estado anterior a la autorización de este chat: la ejecución autenticada
+10k/50k no se había realizado porque este entorno no tiene Docker y la
+revisión automática había rechazado el push. El rechazo reconoce el
 repositorio del propietario y el alcance de rama, pero no acepta como permiso
 válido la autorización recuperada mediante contexto de una sesión anterior.
-Se conserva un único commit local revisable, pendiente de aprobación explícita
-en este chat. No se ha eludido el bloqueo con herramientas de escritura GitHub.
-La rama remota y PR #619 permanecen en `f91aab29`, ya certificada.
+Se conservó un único commit local revisable hasta recibir aprobación explícita
+en este chat. La rama remota y PR #619 permanecieron en `f91aab29` durante
+ese bloqueo. Las secciones siguientes registran el envío autorizado y sus
+resultados posteriores.
 
 Siguiente acción concreta: subir el commit local a la misma rama de PR #619,
 sin force push, merge ni producción. Después ejecutar y revisar el nuevo
@@ -152,3 +154,46 @@ conectar: este entorno no tiene Postgres/Docker. No se ha tocado nube.
 No rebajar el umbral ni declarar corregido hasta repetir el ensayo completo.
 La migración anterior permite reconstruir el cuerpo original para una
 reversión de función; no se transforman ni eliminan datos.
+
+## Primera corrección insuficiente y segunda corrección en validación
+
+La primera corrección llegó a `d6f467355cd8c4d217a4b43b92083b481c117bb2`.
+El ensayo [39046897640](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39046897640)
+siguió **FAIL**: a 50.000 movimientos, p95 del histórico fue 1.055,15 ms
+en agregado, 1.884,05 ms en listado y **3.062,25 ms en búsqueda**. Los controles
+financieros y las huellas independientes pasaron. También falló la segunda
+ejecución de capacidad. No se atribuye una mejora a esta corrección.
+
+La regresión de categorías detectó además un error de preparación del propio
+ensayo: el trigger de categorización de INSERT sustituía su categoría
+sintética. Ahora el ensayo asigna esa categoría mediante UPDATE de categoría
+tras INSERT, con todos los triggers activos, y comprueba el resultado esperado.
+
+El plan SQL mostró dos costes adicionales: agregados laterales de reparto por
+movimiento y llamadas repetidas al contexto de espacio de trabajo en las
+políticas de las dos tablas bancarias. Las nuevas migraciones, generadas con
+la misma CLI fijada, corrigen ambos puntos:
+
+- `20261017160009_batch_transaction_split_facts.sql` calcula las asignaciones
+  de reparto en un agregado para la cuenta y fechas solicitadas. Conserva la
+  proyección canónica de importes personales, categorías, transferencias,
+  duplicados, exclusiones y la comprobación de importe original del reparto.
+- `20261017160345_statement_workspace_policy_context.sql` conserva los
+  predicados USING y WITH CHECK existentes y evalúa su función de contexto
+  mediante subconsulta escalar una vez por sentencia. Verifica antes la
+  definición esperada y no cambia roles, grants ni activación de RLS. No hay
+  caché entre sentencias o sesiones.
+
+La regresión independiente nueva comprueba ocho casos con céntimos literales:
+sin reparto, personal/otro, todo ajeno, varias categorías, reparto antiguo,
+duplicado confirmado, exclusión manual y transferencia. Valida también el
+agregado (33.000 céntimos de gasto), fecha y sumas originales sin modificar.
+La prueba de categorías cambia A→B→A en la misma conexión y comprueba el
+aislamiento en cada sentencia.
+
+Diagnóstico local: las 104 migraciones y ambas regresiones pasan en PGlite
+0.5.10/PostgreSQL 18.6 WASM. Es una comprobación SQL auxiliar; no certifica
+PostgreSQL 17 nativo ni el presupuesto API. El plan local orientó la corrección,
+sin sustituir el ensayo autenticado ni aportar una comparación de p95 válida.
+Typecheck, sintaxis Bash y `git diff --check`: PASS. Quedan pendientes el CI
+nativo y el nuevo p95 completo. Se conserva el límite de 2.000 ms.

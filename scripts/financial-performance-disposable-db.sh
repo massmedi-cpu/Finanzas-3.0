@@ -63,6 +63,7 @@ psql_db -f supabase/tests/ap1_drive_atomic_batch_disposable.sql
 
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/transaction_category_label_batch_disposable.sql
+psql_db -f supabase/tests/transaction_split_fact_batch_disposable.sql
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
 leftover="$(psql_db -At -c "SELECT count(*) FROM financial_app.workspaces WHERE id='a0f00000-0000-4000-8000-000000000001';")"
