@@ -92,3 +92,63 @@ sin force push, merge ni producción. Después ejecutar y revisar el nuevo
 workflow, conservar el informe y corregir el primer incumplimiento real sin
 relajar los 2.000 ms. La autorización de publicación final sigue condicionada
 a las puertas del encargo; este permiso de push no las sustituye.
+
+## Autorización recibida y primera medición real
+
+El propietario autorizó el envío en este chat. La terminal carecía de
+credenciales; la conexión GitHub creó `f80be203d45b015b223767dd82ee6d8a55d45412`
+con el árbol `dc0fa3b3a01ee8f875eea36f7cb830635599cf57`, idéntico al commit local
+`ff2d682` aprobado. PR #619 permaneció DRAFT y sin merge.
+
+Ensayo [39046061667](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39046061667),
+job `117434909253`: **FAIL real por rendimiento**, no por cifras. Se conservan
+las 20 mediciones y condiciones del artefacto `12105463211` en
+`evidence/ap6-authenticated-f80be203-baseline.json`.
+
+Condiciones: Ubuntu de GitHub, Intel Xeon 6973P-C, unos 16 GB RAM, Node
+24.21.0, PostgreSQL 17.11 y Chromium 151.0.7922.34; loopback sin limitación
+de CPU/red, SW bloqueado; mismo pipeline auténtico y build optimizada.
+
+| Lectura, 50.000 filas | p95 laboratorio |
+| --- | ---: |
+| Agregado del histórico | 729,63 ms |
+| Listado del histórico | 1.931,26 ms |
+| Búsqueda en el histórico | **2.443,32 ms: supera 2.000 ms** |
+| Agregado de un mes | 105,00 ms |
+| Listado de un mes | 163,04 ms |
+| Búsqueda en un mes | 164,70 ms |
+
+Los controles de céntimos, recuentos, cuenta, periodo y aislamiento de usuario
+pasaron. La relectura en conexión SQL independiente confirmó huellas bancarias
+y de movimientos idénticas. La lista del mes fue interactiva en 1.440 y 390 px;
+estos datos no certifican navegación SPA ni un móvil físico.
+
+## Corrección de la consulta pendiente de acreditar
+
+`query_effective_transactions_v4` invocaba `category_display_name` dos veces
+por movimiento antes de materializar el resultado filtrado y contar filas.
+La migración generada con Supabase CLI 2.120.0,
+`20261017154629_optimize_transaction_category_labels.sql`, conserva la función
+canónica de nombres y la resuelve una vez por categoría accesible en una CTE
+materializada local a la sentencia. Dos joins reutilizan esos nombres.
+También normaliza una vez el término de búsqueda y reutiliza su patrón en
+los tres predicados existentes, conservando los comodines LIKE originales.
+No hay caché compartida entre sesiones ni cambios de RLS, ACL, firmas,
+filtros, cursores, importes o campos del resultado. CREATE OR REPLACE conserva
+propietario y permisos. El cambio se limita a cómo se obtiene el nombre.
+
+La regresión PostgreSQL real `transaction_category_label_batch_disposable.sql`
+comprueba padre/hoja, categoría manual frente a original, nulo, búsqueda por
+nombre, filtro de categoría, paginación e invisibilidad de categorías ajenas.
+Solo puede ejecutarse en la base desechable exacta y termina con ROLLBACK.
+
+La comparación estructural local confirma firma idéntica y las mismas reglas
+de filtrado y paginación; solo se reutilizan nombres y término normalizado.
+Sintaxis Bash, typecheck y
+permisos read-only del workflow se conservan. La aplicación de migraciones y
+el nuevo p95 deben comprobarse en CI. `migration list --local` no pudo
+conectar: este entorno no tiene Postgres/Docker. No se ha tocado nube.
+
+No rebajar el umbral ni declarar corregido hasta repetir el ensayo completo.
+La migración anterior permite reconstruir el cuerpo original para una
+reversión de función; no se transforman ni eliminan datos.

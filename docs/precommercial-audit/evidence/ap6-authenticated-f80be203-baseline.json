@@ -1,0 +1,255 @@
+{
+  "scope": "disposable_local_authenticated_optimized_next",
+  "sha": "f80be203d45b015b223767dd82ee6d8a55d45412",
+  "synthetic": true,
+  "cloudAccess": false,
+  "ingestionCertified": false,
+  "fieldCoreWebVitalsCertified": false,
+  "network": "loopback; no network or CPU throttling; service worker disabled",
+  "browser": "chromium 151.0.7922.34",
+  "node": "v24.21.0",
+  "postgres": "17.11",
+  "cpu": "Intel(R) Xeon(R) 6973P-C",
+  "memoryBytes": 16765370368,
+  "samples": 12,
+  "warmups": 2,
+  "budget": {
+    "api": 2000,
+    "desktopNavigation": 1000,
+    "mobileNavigation": 1500
+  },
+  "percentile": "nearest rank p95 of 12 laboratory samples",
+  "records": [
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "history",
+      "operation": "aggregate",
+      "samples": 12,
+      "medianMs": 211.4603044999999,
+      "p95LabMs": 229.079428,
+      "maxMs": 229.079428,
+      "handler": {
+        "samples": 12,
+        "medianMs": 200.14999999999998,
+        "p95LabMs": 207.7,
+        "maxMs": 207.7
+      },
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "history",
+      "operation": "list",
+      "samples": 12,
+      "medianMs": 429.6890905,
+      "p95LabMs": 442.22472300000027,
+      "maxMs": 442.22472300000027,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "history",
+      "operation": "search",
+      "samples": 12,
+      "medianMs": 528.794588499999,
+      "p95LabMs": 542.7700860000004,
+      "maxMs": 542.7700860000004,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "month",
+      "operation": "aggregate",
+      "samples": 12,
+      "medianMs": 85.17213449999872,
+      "p95LabMs": 93.74361599999975,
+      "maxMs": 93.74361599999975,
+      "handler": {
+        "samples": 12,
+        "medianMs": 74.85,
+        "p95LabMs": 84.4,
+        "maxMs": 84.4
+      },
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "month",
+      "operation": "list",
+      "samples": 12,
+      "medianMs": 111.84230449999995,
+      "p95LabMs": 118.12304099999892,
+      "maxMs": 118.12304099999892,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 10000,
+      "period": "month",
+      "operation": "search",
+      "samples": 12,
+      "medianMs": 107.65933250000126,
+      "p95LabMs": 117.47213700000066,
+      "maxMs": 117.47213700000066,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "browser_cache_cold",
+      "volume": 10000,
+      "width": 1440,
+      "elapsedMs": 573.8410179999992
+    },
+    {
+      "stage": "browser_document_navigation_warm_cache",
+      "volume": 10000,
+      "width": 1440,
+      "samples": 12,
+      "medianMs": 413.05902699999933,
+      "p95LabMs": 452.17181899999923,
+      "maxMs": 452.17181899999923
+    },
+    {
+      "stage": "browser_cache_cold",
+      "volume": 10000,
+      "width": 390,
+      "elapsedMs": 504.09421400000065
+    },
+    {
+      "stage": "browser_document_navigation_warm_cache",
+      "volume": 10000,
+      "width": 390,
+      "samples": 12,
+      "medianMs": 419.3587264999951,
+      "p95LabMs": 488.31188699999984,
+      "maxMs": 488.31188699999984
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "history",
+      "operation": "aggregate",
+      "samples": 12,
+      "medianMs": 698.8630720000001,
+      "p95LabMs": 729.6339990000051,
+      "maxMs": 729.6339990000051,
+      "handler": {
+        "samples": 12,
+        "medianMs": 687.4,
+        "p95LabMs": 719.1,
+        "maxMs": 719.1
+      },
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "history",
+      "operation": "list",
+      "samples": 12,
+      "medianMs": 1897.1955824999968,
+      "p95LabMs": 1931.2640170000013,
+      "maxMs": 1931.2640170000013,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "history",
+      "operation": "search",
+      "samples": 12,
+      "medianMs": 2389.446551000001,
+      "p95LabMs": 2443.315388999996,
+      "maxMs": 2443.315388999996,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "month",
+      "operation": "aggregate",
+      "samples": 12,
+      "medianMs": 96.42858450000494,
+      "p95LabMs": 105.00418699999864,
+      "maxMs": 105.00418699999864,
+      "handler": {
+        "samples": 12,
+        "medianMs": 85,
+        "p95LabMs": 93.1,
+        "maxMs": 93.1
+      },
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "month",
+      "operation": "list",
+      "samples": 12,
+      "medianMs": 141.7697754999972,
+      "p95LabMs": 163.0371540000051,
+      "maxMs": 163.0371540000051,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "api",
+      "volume": 50000,
+      "period": "month",
+      "operation": "search",
+      "samples": 12,
+      "medianMs": 153.43017249999684,
+      "p95LabMs": 164.703125,
+      "maxMs": 164.703125,
+      "handler": null,
+      "budgetMs": 2000
+    },
+    {
+      "stage": "browser_cache_cold",
+      "volume": 50000,
+      "width": 1440,
+      "elapsedMs": 550.6184800000046
+    },
+    {
+      "stage": "browser_document_navigation_warm_cache",
+      "volume": 50000,
+      "width": 1440,
+      "samples": 12,
+      "medianMs": 463.38508300000103,
+      "p95LabMs": 504.1824729999935,
+      "maxMs": 504.1824729999935
+    },
+    {
+      "stage": "browser_cache_cold",
+      "volume": 50000,
+      "width": 390,
+      "elapsedMs": 502.8153109999985
+    },
+    {
+      "stage": "browser_document_navigation_warm_cache",
+      "volume": 50000,
+      "width": 390,
+      "samples": 12,
+      "medianMs": 458.8223644999962,
+      "p95LabMs": 491.37558900000295,
+      "maxMs": 491.37558900000295
+    }
+  ],
+  "provenance": {
+    "runId": 39046061667,
+    "jobId": 117434909253,
+    "artifactId": 12105463211,
+    "result": "FAILED: history search 50k p95 exceeds fixed API budget",
+    "bankSourceUnchangedVerified": true
+  }
+}
