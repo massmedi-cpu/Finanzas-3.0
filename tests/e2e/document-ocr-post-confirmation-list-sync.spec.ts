@@ -26,8 +26,10 @@ const ocr = {
     plainText: "FACTURA DE PRUEBA\nTOTAL 20,00",
     layoutText: "FACTURA DE PRUEBA\nTOTAL 20,00",
     lines: [
-      { id: "p1-l1", text: "FACTURA DE PRUEBA", confidence: 0.95, alignment: "left" },
-      { id: "p1-l2", text: "TOTAL 20,00", confidence: 0.95, alignment: "right" },
+      { id: "p1-l1", text: "FACTURA DE PRUEBA", confidence: 0.95, alignment: "left",
+        box: { x: 0.1, y: 0.1, width: 0.5, height: 0.04 }, words: [] },
+      { id: "p1-l2", text: "TOTAL 20,00", confidence: 0.95, alignment: "right",
+        box: { x: 0.6, y: 0.2, width: 0.3, height: 0.04 }, words: [] },
     ],
   }],
   warnings: [],
