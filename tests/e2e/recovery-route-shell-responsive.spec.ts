@@ -1,18 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect, test } from "@playwright/test";
-import { navigationItems } from "../../app/navigation-items";
+import { configurationRoutes, navigationItems } from "../../app/navigation-items";
 
 // Shell-only smoke: isolates live APIs, never certifies banking data or backend behavior.
-const configurationRoutes = [
-  "/configuration/appearance",
-  "/configuration/data",
-  "/configuration/merchants",
-  "/configuration/preferences",
-  "/configuration/rules",
-  "/configuration/source",
-  "/configuration/source/diagnostics",
-];
 // These legacy deep links redirect to an existing editor tab. They are not
 // additional functional product destinations, but must exist and stay tested.
 const compatibilityRedirects = new Map([

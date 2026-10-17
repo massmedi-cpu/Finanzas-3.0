@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { navigationItems } from "../../app/navigation-items";
+import { configurationRoutes, navigationItems } from "../../app/navigation-items";
 import { mockRecoveryHome } from "./helpers/recovery-home";
 
 // Native date inputs use the browser locale even when the document has lang="es".
@@ -8,7 +8,7 @@ import { mockRecoveryHome } from "./helpers/recovery-home";
 test.use({ locale: "es-ES" });
 
 const widths = [360, 390, 430, 600, 768, 820, 1024, 1100, 1366, 1440, 1920];
-const routes = [...navigationItems.map((item) => item.href), "/configuration/accounts", "/configuration/categories", "/configuration/merchants", "/configuration/rules", "/configuration/source", "/configuration/data", "/configuration/appearance"];
+const routes = [...navigationItems.map((item) => item.href), ...configurationRoutes];
 
 async function noOverflow(page: Page, width: number) {
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
@@ -26,6 +26,15 @@ async function noOverflow(page: Page, width: number) {
   }).toBeLessThanOrEqual(1);
 }
 
+test("REC-VIS-007 · los 21 destinos canónicos tienen matriz visual; los alias se verifican como redirecciones", () => {
+  expect(routes).toHaveLength(21);
+  expect(new Set(routes).size).toBe(21);
+  expect(routes).toContain("/configuration/preferences");
+  expect(routes).toContain("/configuration/source/diagnostics");
+  expect(routes).not.toContain("/configuration/accounts");
+  expect(routes).not.toContain("/configuration/categories");
+});
+
 // This matrix verifies browser rendering with synthetic data and unavailable states.
 // Real persistence is evaluated separately by authenticated isolation, without mocks.
 for (const theme of ["light", "dark"] as const) {
@@ -38,12 +47,6 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       // A 404 has an H1 too: prevent broken routes passing the visual matrix.
       await expect(page.getByText("Esta página no existe", { exact: true })).toHaveCount(0);
-      if (route === "/configuration/accounts" || route === "/configuration/categories") {
-        const selected = route.endsWith("/categories") ? "categories" : "accounts";
-        await expect(page).toHaveURL(new RegExp("/configuration\\?tab=" + selected + "$"));
-        const tabs = page.getByRole("navigation", { name: "Secciones de configuración" });
-        await expect(tabs.getByRole("button", { name: selected === "categories" ? /Categorías/ : /Cuentas/ })).toHaveClass(/active/);
-      }
       await page.waitForTimeout(150);
       for (const width of widths) {
         await page.setViewportSize({ width, height: width < 768 ? 900 : 1024 });

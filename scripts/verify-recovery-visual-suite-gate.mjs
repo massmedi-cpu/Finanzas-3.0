@@ -57,7 +57,7 @@ for (const [file, casesInFile] of cases) {
 const visual = workflow.split("name: Browser coverage, theme, keyboard and layout checks")[1]?.split("name: Retain isolated visual screenshots")[0] ?? "";
 assert.ok(visual.includes("tests/e2e/product-recovery-visual.spec.ts"), "Product visual regressions must execute");
 const visualTests = readFileSync("tests/e2e/product-recovery-visual.spec.ts", "utf8");
-for (const id of ["REC-UI-DOC-006", "REC-UI-DOC-007", "REC-UI-DOC-008", "REC-UI-DOC-009"]) {
+for (const id of ["REC-UI-DOC-006", "REC-UI-DOC-007", "REC-UI-DOC-008", "REC-UI-DOC-009", "REC-VIS-007"]) {
   assert.ok(visualTests.includes(id), "Mandatory Document visual regression missing: " + id);
 }
 assert.ok(workflow.includes("'scripts/verify-recovery-visual-suite-gate.mjs'"), "Changes to guard must trigger CI");

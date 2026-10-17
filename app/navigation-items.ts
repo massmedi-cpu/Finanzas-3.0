@@ -24,6 +24,17 @@ export const navigationItems = [
   { href: "/configuration", label: "Configuración", icon: "settings" },
 ] satisfies ReadonlyArray<NavigationItem>;
 
+// Canonical configuration destinations; compatibility aliases remain redirects.
+export const configurationRoutes = [
+  "/configuration/appearance",
+  "/configuration/data",
+  "/configuration/merchants",
+  "/configuration/preferences",
+  "/configuration/rules",
+  "/configuration/source",
+  "/configuration/source/diagnostics",
+] as const;
+
 export function isNavigationActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
