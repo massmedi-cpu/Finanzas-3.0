@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { OcrReviewHttpError, isDefinitelyRejectedOcrReview } from "../../src/application/document-ocr-confirmation-integrity";
 import { sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
 
@@ -85,9 +87,7 @@ test("REC-OCR-CONF-033 · un 5xx con código invalid_ nunca autoriza confirmar d
     null,
   ];
   for (const error of ambiguous) expect(isDefinitelyRejectedOcrReview(error)).toBe(false);
-  const fs = require("node:fs") as typeof import("node:fs");
-  const path = require("node:path") as typeof import("node:path");
-  const panel = fs.readFileSync(path.join(process.cwd(), "app/documents/ocr-review-panel.tsx"), "utf8");
+  const panel = readFileSync(join(process.cwd(), "app/documents/ocr-review-panel.tsx"), "utf8");
   expect(panel).toContain("isDefinitelyRejectedOcrReview(caught)");
   expect(panel).not.toContain('code.startsWith("invalid_")');
   expect(panel).toContain("new OcrReviewHttpError(response.status, code)");
