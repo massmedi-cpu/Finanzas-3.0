@@ -1,4 +1,4 @@
-import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -147,7 +147,13 @@ function apiError(error: unknown) {
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  const publicCode = publicGatewayErrorCode(error);
+  // SHA-256 is an exact, public validation field; do not loosen the shared
+  // error grammar to accept unbounded numeric fragments from arbitrary errors.
+  const explicitCode = knownPublicErrorCode(error, {
+    invalid_document_content_sha256: 400,
+    invalid_document_expected_sha256: 400,
+  });
+  const publicCode = explicitCode ?? publicGatewayErrorCode(error);
   if (publicCode.startsWith("invalid_document_") || publicCode.startsWith("unsupported_document_")) {
     return Response.json({ error: "invalid_request", code: publicCode }, { status: 400, headers: HEADERS });
   }

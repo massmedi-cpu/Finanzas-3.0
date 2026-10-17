@@ -36,7 +36,13 @@ export function errorResponse(error: unknown) {
       { status: 400, headers: HEADERS },
     );
   }
-  const code = publicGatewayErrorCode(error);
+  // Line-item validation encodes the actual source line index (0..199).
+  // Its bounded format is a public error code; arbitrary numeric error text
+  // must not bypass the shared response sanitizer.
+  const indexedCode = error instanceof Error
+    && /^invalid_document_line_(?:0|[1-9]\\d?|1\\d{2})_(?:description|quantity|unit_price|total)$/.test(error.message)
+    ? error.message : null;
+  const code = indexedCode ?? publicGatewayErrorCode(error);
   if (/^invalid_document_[a-z0-9_]+$/.test(code)) {
     return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
   }

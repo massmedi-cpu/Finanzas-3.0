@@ -226,3 +226,54 @@ test("REC-SEC-API-005 · las rutas financieras no convierten errores arbitrarios
     }
   }
 });
+
+
+test("REC-SEC-API-006 · códigos históricos exactos y líneas OCR indexadas conservan HTTP 400", () => {
+  const explicit = {
+    invalid_document_content_sha256: 400,
+    invalid_document_expected_sha256: 400,
+    invalid_transactionId: 400,
+    invalid_dateFrom: 400,
+    invalid_dateTo: 400,
+    invalid_amountFromCents: 400,
+    invalid_amountToCents: 400,
+    invalid_cursorBankDate: 400,
+    invalid_cursorId: 400,
+    invalid_signMismatch: 400,
+    invalid_categoryId: 400,
+    invalid_accountId: 400,
+    invalid_merchantId: 400,
+    invalid_reviewState: 400,
+    invalid_duplicateState: 400,
+    invalid_internalTransfer: 400,
+    invalid_hasDocument: 400,
+    invalid_documentQuery: 400,
+    invalid_splitLabel: 400,
+    invalid_ocrQuery: 400,
+  };
+  for (const name of Object.keys(explicit)) {
+    expect(knownPublicErrorCode(new Error(name), explicit)).toBe(name);
+    expect(knownPublicErrorCode(new Error(name + ": bearer secret"), explicit)).toBeNull();
+  }
+  const doc = readFileSync(join(process.cwd(), "app/api/documents/route.ts"), "utf8");
+  const tx = readFileSync(join(process.cwd(), "app/api/transactions/route.ts"), "utf8");
+  const review = readFileSync(join(process.cwd(), "app/api/documents/ocr-review/route.ts"), "utf8");
+  for (const route of [doc, tx]) {
+    expect(route).toContain("knownPublicErrorCode(error, {");
+    expect(route).toContain("?? publicGatewayErrorCode(error)");
+  }
+  expect(review).toContain("const indexedCode = error instanceof Error");
+  expect(review).toContain("indexedCode ?? publicGatewayErrorCode(error)");
+  const validLine = /^invalid_document_line_(?:0|[1-9]\\d?|1\\d{2})_(?:description|quantity|unit_price|total)$/;
+  for (const code of [
+    "invalid_document_line_0_description",
+    "invalid_document_line_19_quantity",
+    "invalid_document_line_199_unit_price",
+  ]) expect(validLine.test(code)).toBe(true);
+  for (const unsafe of [
+    "invalid_document_line_200_description",
+    "invalid_document_line_0_description: token",
+    "invalid_document_line_01_quantity",
+    "invalid_document_line_0_amount123",
+  ]) expect(validLine.test(unsafe)).toBe(false);
+});
