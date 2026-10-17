@@ -177,3 +177,40 @@ test("REC-SEC-GW-004 · error remoto del gateway nunca expone SQL, tokens ni dat
   expect(gateway).not.toMatch(/response\.status,\s*body\?\.error,/);
   expect(gateway).not.toMatch(/response\.status,\s*body\.error,/);
 });
+
+
+test("REC-SEC-API-005 · las rutas financieras no convierten errores arbitrarios en códigos públicos", () => {
+  const allowed = [
+    "invalid_document_body", "unsupported_document_mime_type",
+    "invalid_budget_month", "invalid_forecast_action",
+    "invalid_recurrence_candidate_key", "invalid_transaction_tag",
+    "invalid_comparison_period", "invalid_analysis_account",
+  ];
+  for (const code of allowed) expect(publicGatewayErrorCode(new Error(code))).toBe(code);
+  for (const privateMessage of [
+    "invalid_document_body: IBAN ES7620770024003102575766",
+    "invalid_budget_month: SQL violation account_secret",
+    "invalid_forecast_action\\nAuthorization: Bearer secret",
+    "invalid_recurrence_candidate_key (SELECT * FROM movements)",
+    "invalid_transaction_12345678901234567890",
+    "invalid_document_" + "x".repeat(100),
+  ]) expect(publicGatewayErrorCode(new Error(privateMessage))).toBe("gateway_error");
+
+  const paths = [
+    "app/api/documents/route.ts",
+    "app/api/budgets/route.ts",
+    "app/api/forecast/route.ts",
+    "app/api/recurrences/route.ts",
+    "app/api/transactions/route.ts",
+    "app/api/financial/route.ts",
+    "app/api/analysis/route.ts",
+    "app/api/compare/route.ts",
+    "app/api/documents/ocr-review/route.ts",
+  ];
+  for (const path of paths) {
+    const route = readFileSync(join(process.cwd(), path), "utf8");
+    expect(route, path).toContain("publicGatewayErrorCode(error)");
+    expect(route, path).not.toMatch(/error\.message\.startsWith\("invalid_/);
+    expect(route, path).not.toMatch(/code:\s*error\.message/);
+  }
+});

@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   loadComparisonSnapshot,
 } from "../../../src/application/comparison/comparison-loader";
@@ -37,7 +38,7 @@ export function apiError(error: unknown, started: number) {
     );
   }
 
-  const code = error instanceof Error ? error.message : "";
+  const code = publicGatewayErrorCode(error);
   const invalid = /^invalid_comparison_[a-z0-9_]+$/.test(code) || code === "comparison_period_too_large";
   const unavailable = code === "comparison_reconciliation_failed" || code === "comparison_gateway_period_mismatch";
   const status = invalid ? 400 : unavailable ? 503 : 500;

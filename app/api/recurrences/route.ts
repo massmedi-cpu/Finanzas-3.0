@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -110,9 +111,10 @@ function apiError(error: unknown) {
     );
   }
 
-  if (error instanceof Error && error.message.startsWith("invalid_recurrence_")) {
+  const publicCode = publicGatewayErrorCode(error);
+  if (publicCode.startsWith("invalid_recurrence_")) {
     return Response.json(
-      { error: "invalid_request", code: error.message },
+      { error: "invalid_request", code: publicCode },
       { status: 400, headers: HEADERS },
     );
   }

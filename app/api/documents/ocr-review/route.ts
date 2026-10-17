@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -35,7 +36,7 @@ export function errorResponse(error: unknown) {
       { status: 400, headers: HEADERS },
     );
   }
-  const code = error instanceof Error ? error.message : "";
+  const code = publicGatewayErrorCode(error);
   if (/^invalid_document_[a-z0-9_]+$/.test(code)) {
     return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
   }

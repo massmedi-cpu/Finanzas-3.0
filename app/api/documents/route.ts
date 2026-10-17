@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -146,8 +147,9 @@ function apiError(error: unknown) {
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  if (error instanceof Error && (error.message.startsWith("invalid_document_") || error.message.startsWith("unsupported_document_"))) {
-    return Response.json({ error: "invalid_request", code: error.message }, { status: 400, headers: HEADERS });
+  const publicCode = publicGatewayErrorCode(error);
+  if (publicCode.startsWith("invalid_document_") || publicCode.startsWith("unsupported_document_")) {
+    return Response.json({ error: "invalid_request", code: publicCode }, { status: 400, headers: HEADERS });
   }
   console.error("documents-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });

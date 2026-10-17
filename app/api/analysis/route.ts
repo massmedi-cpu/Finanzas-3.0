@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   loadAnalysisSnapshot,
   type AnalysisSelectionInput,
@@ -43,7 +44,7 @@ export function apiError(error: unknown, started: number) {
     );
   }
 
-  const code = error instanceof Error ? error.message : "";
+  const code = publicGatewayErrorCode(error);
   const invalid = /^invalid_(?:analysis|financial_analysis)_[a-z0-9_]+$/.test(code);
   const unavailable = code === "analysis_reconciliation_failed";
   const status = invalid ? 400 : unavailable ? 503 : 500;
