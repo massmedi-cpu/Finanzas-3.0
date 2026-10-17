@@ -208,7 +208,7 @@ try {
     brush.fillText(specimen.printed, 38, 148);
     const bytes = variant.toBuffer("image/png");
     const ocr = await worker.recognize(bytes, { rotateRadians: 0 }, { text: true });
-    const recognized = String(ocr.data?.text ?? "").replace(/\\s+/g, " ").trim();
+    const recognized = String(ocr.data?.text ?? "").replace(/\s+/g, " ").trim();
     assert.match(recognized, new RegExp(specimen.heading, "i"),
       "real Spanish OCR should find the heading: " + specimen.name);
     assert.ok(recognized.includes(specimen.amount)
