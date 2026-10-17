@@ -1,4 +1,4 @@
-import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -72,7 +72,16 @@ function apiError(error: unknown, started: number) {
     );
   }
 
-  const publicCode = publicGatewayErrorCode(error);
+  // Some original query parameter names intentionally use camelCase.
+  // Keep exactly these documented validation codes without permitting an
+  // arbitrary invalid_* error message (which could contain private details).
+  const legacyParameterCode = knownPublicErrorCode(error, {
+    invalid_dateFrom: 400,
+    invalid_dateTo: 400,
+    invalid_accountId: 400,
+    invalid_includeArchived: 400,
+  });
+  const publicCode = legacyParameterCode ?? publicGatewayErrorCode(error);
   if (REQUEST_ERROR_CODE.test(publicCode)) {
     return Response.json(
       { error: "invalid_request", code: publicCode },

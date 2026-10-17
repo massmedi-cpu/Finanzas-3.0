@@ -5,6 +5,9 @@ import { GET } from "../../app/api/financial/route";
 for (const scenario of [
   { name: "unknown mode", url: "https://test.local/api/financial?mode=not_a_mode", code: "invalid_mode" },
   { name: "invalid date", url: "https://test.local/api/financial?mode=period&dateFrom=2026-02-30", code: "invalid_dateFrom" },
+  { name: "invalid end date", url: "https://test.local/api/financial?mode=period&dateTo=2026-02-30", code: "invalid_dateTo" },
+  { name: "invalid account", url: "https://test.local/api/financial?accountId=invalid", code: "invalid_accountId" },
+  { name: "invalid archived flag", url: "https://test.local/api/financial?includeArchived=maybe", code: "invalid_includeArchived" },
   { name: "reverse range", url: "https://test.local/api/financial?mode=monthly&dateFrom=2026-10-09&dateTo=2026-10-01", code: "invalid_financial_date_range" },
 ]) {
   test("CAP-002 · financial API timing is present for safe " + scenario.name + " validation errors", async () => {
