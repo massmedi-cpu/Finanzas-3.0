@@ -104,8 +104,11 @@ async function mockInicio(page: Page) {
         earliestMovementDate: "2026-01-01",
         latestMovementDate: "2026-09-11",
         sync: {
-          status: "success", startedAt: "2026-09-11T08:00:00Z",
-          finishedAt: "2026-09-11T08:05:00Z",
+          // The bank can have its latest MOVEMENT on 11 Sept even when the
+          // source was successfully checked on 15 Sept. Both statuses must
+          // agree on the recent import timestamp for a green certification.
+          status: "success", startedAt: "2026-09-15T09:00:00Z",
+          finishedAt: "2026-09-15T09:04:08.000Z",
           rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
           duplicatesDetected: 0, warningsCount: 0,
         },
