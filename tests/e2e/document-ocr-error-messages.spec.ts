@@ -45,3 +45,70 @@ test("REC-OCR-UX-030 · OCR muestra diagnósticos concretos sin exponer errores 
   expect(client).toContain("documentOcrErrorMessage(code)");
   expect(client).not.toMatch(/labels\[code\]/);
 });
+
+
+test("REC-OCR-UX-031 · el panel aclara PDF protegido y corrupto sin guardados involuntarios", async ({ page }) => {
+  const id = "94000000-0000-4000-8000-000000000094";
+  const document = {
+    id, type: "invoice", notes: "", status: "pending_review",
+    mimeType: "application/pdf", createdAt: "2026-09-17T06:00:00Z",
+    updatedAt: "2026-09-17T06:00:00Z", sizeBytes: 4096,
+    issuerName: null, totalCents: null, documentDate: null,
+    storageProvider: "supabase", associationCount: 0,
+    originalFileName: "factura-prueba.pdf", sourceModifiedAt: null,
+    sourceDriveFileId: null,
+  };
+  const principles = {
+    bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false,
+    suggestionsPersisted: false, associationsRequireConfirmation: true,
+  };
+  const requested: string[] = [];
+  let runCount = 0;
+  await page.route("**/api/documents*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+    requested.push(method + " " + url.pathname);
+    if (url.pathname === "/api/documents/ocr" && method === "POST") {
+      runCount++;
+      const code = runCount === 1 ? "PasswordException" : "InvalidPDFException";
+      await route.fulfill({
+        status: 422, contentType: "application/json",
+        body: JSON.stringify({ error: "ocr_failed", code }),
+      });
+      return;
+    }
+    if (method !== "GET") {
+      await route.fulfill({ status: 500, contentType: "application/json", body: '{"error":"unexpected_write"}' });
+      return;
+    }
+    if (url.pathname === "/api/documents" && url.searchParams.get("id") === id) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ contractVersion: 1, document, associations: [], principles }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles }),
+    });
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const analyze = panel.getByRole("button", { name: /Analizar documento|Analizando/ });
+  await expect(analyze).toBeEnabled();
+  await analyze.click();
+  await expect(panel.getByRole("alert")).toContainText("PDF está protegido con contraseña");
+  await expect(analyze).toBeEnabled();
+  await analyze.click();
+  await expect(panel.getByRole("alert")).toContainText("PDF está dañado");
+  await expect(analyze).toBeEnabled();
+  expect(runCount).toBe(2);
+  expect(requested.filter((operation) => operation.startsWith("POST ")))
+    .toEqual(["POST /api/documents/ocr", "POST /api/documents/ocr"]);
+  expect(requested.some((operation) => operation.startsWith("PATCH ") || operation.startsWith("DELETE "))).toBe(false);
+  await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+});
