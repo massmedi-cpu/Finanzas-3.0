@@ -43,5 +43,5 @@ test("REC-OCR-UX-030 · OCR muestra diagnósticos concretos sin exponer errores 
   }
   const client = readFileSync(join(process.cwd(), "app/documents/ocr-review-panel.tsx"), "utf8");
   expect(client).toContain("documentOcrErrorMessage(code)");
-  expect(client).not.toMatch(/labels\\[code\\]/);
+  expect(client).not.toMatch(/labels\[code\]/);
 });
