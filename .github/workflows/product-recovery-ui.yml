@@ -20,6 +20,7 @@ on:
       - 'src/application/document-drive-inventory.ts'
       - 'src/application/private-document-original-detail.ts'
       - 'src/application/document-ocr-confirmation-integrity.ts'
+      - 'src/application/document-ocr-error-messages.ts'
       - 'src/application/dashboard/dashboard-envelope-integrity.ts'
       - 'src/application/dashboard/dashboard-source-safety.ts'
       - 'src/application/analysis/analysis-contract.ts'
@@ -122,6 +123,7 @@ jobs:
           tests/e2e/document-original-mime-evidence.spec.ts
           tests/e2e/document-ocr-confirmation-integrity.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/document-ocr-error-messages.spec.ts
           tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts
           tests/e2e/document-ocr-financial-interpretation.spec.ts
           tests/e2e/document-ocr-pdf-native-coverage.spec.ts
