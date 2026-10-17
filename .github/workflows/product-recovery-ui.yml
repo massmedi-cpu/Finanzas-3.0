@@ -121,6 +121,8 @@ jobs:
           tests/e2e/document-ocr-json-byte-limit.spec.ts
           tests/e2e/document-original-mime-evidence.spec.ts
           tests/e2e/document-ocr-confirmation-integrity.spec.ts
+          tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts
           tests/e2e/document-ocr-financial-interpretation.spec.ts
           tests/e2e/document-ocr-pdf-native-coverage.spec.ts
           tests/e2e/gateway-request-body-limit.spec.ts
