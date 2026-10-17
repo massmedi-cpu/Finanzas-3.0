@@ -459,6 +459,13 @@ export default function AlertsClient() {
 
   const alerts = useMemo(() => snapshot ? deriveGlobalAlerts(snapshot.input) : [], [snapshot]);
   const summary = useMemo(() => summarizeGlobalAlerts(alerts), [alerts]);
+  const checkedAt = snapshot
+    ? new Intl.DateTimeFormat("es-ES", {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: "Europe/Madrid",
+      }).format(new Date(snapshot.generatedAt))
+    : null;
 
   return (
     <main className={styles.shell} aria-busy={loading}>
@@ -467,6 +474,9 @@ export default function AlertsClient() {
           <p className={styles.eyebrow}>Control financiero</p>
           <h1>Alertas</h1>
           <p className={styles.lead}>Señales agrupadas para decidir qué revisar primero, sin modificar la fuente bancaria ni actuar por ti.</p>
+          {snapshot && checkedAt ? (
+            <p className={styles.checkedAt}>Última comprobación: <time dateTime={snapshot.generatedAt}>{checkedAt}</time></p>
+          ) : null}
         </div>
         <button className={styles.refreshButton} type="button" onClick={() => void load()} disabled={loading}>
           {loading ? "Actualizando…" : "Actualizar alertas"}
@@ -491,7 +501,7 @@ export default function AlertsClient() {
 
       <section className={styles.alertSection} aria-labelledby="active-alerts-title">
         <div className={styles.sectionHeading}>
-          <div><span>PRIORIDAD</span><h2 id="active-alerts-title">Alertas activas</h2></div>
+          <div><span>POR IMPORTANCIA</span><h2 id="active-alerts-title">Alertas activas</h2></div>
           <strong>{snapshot ? summary.total : "—"}</strong>
         </div>
 
@@ -512,13 +522,13 @@ export default function AlertsClient() {
                 <div className={styles.alertMeta}>
                   <span>{CATEGORY_LABELS[alert.category]}</span>
                   <span>{alertPriorityLabel(alert.tone)}</span>
-                  <details className={styles.priorityDetail}>
-                    <summary>Orden técnico</summary>
-                    <span>Índice de prioridad {alert.priority}; determina el orden de presentación, no es una puntuación de riesgo financiero.</span>
-                  </details>
                 </div>
                 <h3>{alert.title}</h3>
                 <p>{alert.detail}</p>
+                <details className={styles.priorityDetail}>
+                  <summary>Orden técnico</summary>
+                  <span>Índice de prioridad {alert.priority}; determina el orden de presentación, no es una puntuación de riesgo financiero.</span>
+                </details>
               </div>
               <Link prefetch={false} className={styles.alertAction} href={alert.href}>{alert.action}</Link>
             </article>

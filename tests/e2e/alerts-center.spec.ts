@@ -669,3 +669,42 @@ test("REC-ALT-027 · solo solicita tres fuentes, sin escaneos mensuales ni activ
   expect(called.length).toBeGreaterThan(0);
   expect(called.every((scope) => scope === "alerts")).toBe(true);
 });
+
+
+test("REC-UI-ALERT-013 · señales legibles en claro/oscuro y accesibles en móvil/escritorio", async ({ page }) => {
+  await mockAlerts(page);
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await page.goto("/alerts");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const list = page.locator('section[aria-labelledby="active-alerts-title"]');
+    const alert = list.locator("article").filter({ hasText: "1 documento sin asociar" });
+    await expect(alert).toBeVisible();
+    const checkedAt = page.getByText("Última comprobación:", { exact: false });
+    await expect(checkedAt).toBeVisible();
+    await expect(checkedAt.locator("time")).toHaveAttribute("datetime", /T/);
+    const details = alert.locator("details");
+    await expect(details).not.toHaveAttribute("open");
+    await details.locator("summary").click();
+    await expect(details).toContainText("Índice de prioridad 68");
+    await details.locator("summary").click();
+    for (const width of [360, 1366]) {
+      await page.setViewportSize({ width, height: 900 });
+      const values = await alert.evaluate((node) => {
+        const paragraph = node.querySelector("p");
+        const action = node.querySelector("a");
+        if (!paragraph || !action) throw new Error("incomplete_alert_card");
+        return {
+          paragraphColor: getComputedStyle(paragraph).color,
+          secondaryColor: getComputedStyle(document.documentElement).getPropertyValue("--color-text-secondary").trim(),
+          actionHeight: action.getBoundingClientRect().height,
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      });
+      expect(values.paragraphColor).toMatch(/^rgb\(/);
+      expect(values.secondaryColor).not.toBe("");
+      expect(values.actionHeight).toBeGreaterThanOrEqual(44);
+      expect(values.overflow).toBeLessThanOrEqual(1);
+    }
+  }
+});
