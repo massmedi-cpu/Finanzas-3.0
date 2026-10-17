@@ -64,7 +64,9 @@ test("REC-OCR-UX-031 · el panel aclara PDF protegido y corrupto sin guardados i
   };
   const requested: string[] = [];
   let runCount = 0;
-  await page.route("**/api/documents*", async (route) => {
+  // The glob **/api/documents* does not match nested /api/documents/ocr:
+  // a regular expression must cover both document list and nested OCR routes.
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();

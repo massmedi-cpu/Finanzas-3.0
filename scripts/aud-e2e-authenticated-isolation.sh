@@ -25,6 +25,24 @@ cleanup() {
 trap cleanup EXIT
 
 npx --yes supabase@2.120.0 init --workdir "$workdir" >/dev/null
+# Auth accounts are provisioned directly via admin.createUser({ email_confirm: true }).
+# Mail testing is not part of this isolated Auth/RLS/Storage/capacity suite.
+# Disable the optional Inbucket container: port 54324 can be occupied on a
+# GitHub runner and must not prevent genuine PostgreSQL from being measured.
+node - "$workdir/supabase/config.toml" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+const config = fs.readFileSync(file, 'utf8');
+const section = /^(\[inbucket\]\r?\n)([\s\S]*?)(?=^\[|$(?![\s\S]))/m;
+const found = config.match(section);
+if (!found || !/^enabled\s*=\s*true\s*$/m.test(found[2])) {
+  throw new Error('expected_enabled_local_inbucket_section');
+}
+const updated = config.replace(section, (_, header, body) =>
+  header + body.replace(/^enabled\s*=\s*true\s*$/m, 'enabled = false'));
+fs.writeFileSync(file, updated);
+process.stdout.write('AUD_AUTH|mail_capture_disabled=true|db_auth_storage_intact=true\n');
+NODE
 # Start Auth, REST and Storage against the genuine managed schemas, not stubs.
 # Migrations are copied verbatim before start; no production bootstrap data.
 cp -a supabase/migrations "$workdir/supabase/migrations"
