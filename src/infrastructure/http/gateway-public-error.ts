@@ -27,3 +27,9 @@ export function knownPublicErrorCode(
   if (Object.prototype.hasOwnProperty.call(statuses, error.name)) return error.name;
   return null;
 }
+
+/** The remote Edge response is untrusted, even if its JSON has an `error` field. */
+export function publicRemoteGatewayCode(rawCode: unknown): string | null {
+  if (typeof rawCode !== "string" || rawCode.length === 0) return null;
+  return publicGatewayErrorCode(new Error(rawCode));
+}

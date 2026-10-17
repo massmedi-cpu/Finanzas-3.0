@@ -2,7 +2,7 @@ import { gzipSync } from "node:zlib";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { knownPublicErrorCode, publicGatewayErrorCode } from "../../src/infrastructure/http/gateway-public-error";
+import { knownPublicErrorCode, publicGatewayErrorCode, publicRemoteGatewayCode } from "../../src/infrastructure/http/gateway-public-error";
 import {
   MAX_COMPRESSED_GATEWAY_BODY_BYTES,
   MAX_DECOMPRESSED_GATEWAY_BODY_BYTES,
@@ -149,4 +149,27 @@ test("REC-SEC-OCR-001 · errores PDF conocidos nunca revelan mensajes del docume
   expect(api).toContain("const code = knownPublicErrorCode(error, known)");
   expect(api).toContain("code }, { status: known[code], headers: HEADERS }");
   expect(api).not.toContain("code: error.message || error.name");
+});
+
+
+test("REC-SEC-GW-004 · error remoto del gateway nunca expone SQL, tokens ni datos bancarios", () => {
+  expect(publicRemoteGatewayCode("document_not_found")).toBe("document_not_found");
+  expect(publicRemoteGatewayCode("invalid_account_id")).toBe("invalid_account_id");
+  expect(publicRemoteGatewayCode("gateway_error")).toBe("gateway_error");
+  for (const unsafe of [
+    "PostgresError: duplicate key IBAN ES7620770024003102575766",
+    "Bearer eyJhbGciOiJIUzI1NiJ9.private-part",
+    "invalid_account_id; SELECT * FROM financial_app.transactions",
+    "document_storage_unavailable: token=secret",
+    "workspace_1234567890123456789012",
+  ]) expect(publicRemoteGatewayCode(unsafe)).toBe("gateway_error");
+  for (const absent of [null, undefined, "", 5, { error: "invalid_account_id" }]) {
+    expect(publicRemoteGatewayCode(absent)).toBeNull();
+  }
+  const gateway = readFileSync(join(process.cwd(),
+    "src/infrastructure/persistence/vercel-supabase-gateway.ts"), "utf8");
+  expect(gateway).toContain("const safeRemoteCode = publicRemoteGatewayCode(body?.error)");
+  expect(gateway).toContain("safeRemoteCode ?? undefined");
+  expect(gateway).not.toContain("response.status,\\n      body?.error,");
+  expect(gateway).not.toContain("response.status,\\n      body.error,");
 });
