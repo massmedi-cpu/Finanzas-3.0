@@ -125,6 +125,19 @@ for (const theme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
       await expect(page.getByRole("heading", { name: "12 documentos" })).toBeVisible();
+      // REC-UI-DOC-009: the import form must not squeeze four labels into a
+      // single unreadable desktop row. The actual container width, not the
+      // outer viewport, determines the grid; mobile remains one column.
+      const uploadForm = page.locator("form").filter({ has: page.locator("#document-file") });
+      await expect(uploadForm).toBeVisible();
+      const uploadColumns = await uploadForm.evaluate(node =>
+        getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+      expect(uploadColumns, `document import controls at ${width}px`)
+        .toBe(width === 360 ? 1 : 2);
+      const uploadLabelWidth = await uploadForm.getByText("Galería o archivo").evaluate(node =>
+        node.closest("label")?.getBoundingClientRect().width ?? 0);
+      expect(uploadLabelWidth).toBeGreaterThanOrEqual(width === 360 ? 120 : 180);
+
       // REC-UI-DOC-008: prioritize the usable archive on 360px screens
       // instead of repeating desktop trust badges above the import form.
       const archiveLink = page.getByRole("link", { name: "Ir al archivo documental ↓" });
