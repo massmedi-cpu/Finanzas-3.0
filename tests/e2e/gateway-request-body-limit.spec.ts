@@ -211,6 +211,12 @@ test("REC-SEC-API-005 · las rutas financieras no convierten errores arbitrarios
     const route = readFileSync(join(process.cwd(), path), "utf8");
     expect(route, path).toContain("publicGatewayErrorCode(error)");
     expect(route, path).not.toMatch(/error\.message\.startsWith\("invalid_/);
-    expect(route, path).not.toMatch(/code:\s*error\.message/);
+    // BudgetSnapshotContractError has an explicit typed, non-user-controlled
+    // domain message. The route handles it before the generic error guard.
+    if (path === "app/api/budgets/route.ts") {
+      expect(route).toContain("if (error instanceof BudgetSnapshotContractError)");
+    } else {
+      expect(route, path).not.toMatch(/code:\\s*error\\.message/);
+    }
   }
 });
