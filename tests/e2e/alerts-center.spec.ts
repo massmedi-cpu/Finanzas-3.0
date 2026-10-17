@@ -690,6 +690,15 @@ test("REC-UI-ALERT-013 · señales legibles en claro/oscuro y accesibles en móv
     await details.locator("summary").click();
     for (const width of [360, 1366]) {
       await page.setViewportSize({ width, height: 900 });
+      // React recalculates the responsive shell after matchMedia changes.
+      // Measure only a settled layout, as the route-wide REC-UI matrix does.
+      await page.evaluate(() => new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await expect.poll(async () => page.evaluate(() =>
+        document.documentElement.scrollWidth - document.documentElement.clientWidth), {
+        timeout: 3_000,
+        message: `REC-UI-ALERT-013 viewport ${width}px must settle without horizontal overflow`,
+      }).toBeLessThanOrEqual(1);
       const values = await alert.evaluate((node) => {
         const paragraph = node.querySelector("p");
         const action = node.querySelector("a");
