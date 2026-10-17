@@ -131,11 +131,11 @@ for (const theme of ["light", "dark"] as const) {
       const uploadForm = page.locator("form").filter({ has: page.locator("#document-file") });
       await expect(uploadForm).toBeVisible();
       const uploadColumns = await uploadForm.evaluate(node =>
-        getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+        getComputedStyle(node).gridTemplateColumns.split(/\s+/).filter(Boolean).length);
       expect(uploadColumns, `document import controls at ${width}px`)
         .toBe(width === 360 ? 1 : 2);
-      const uploadLabelWidth = await uploadForm.getByText("Galería o archivo").evaluate(node =>
-        node.closest("label")?.getBoundingClientRect().width ?? 0);
+      const uploadLabelWidth = await uploadForm.locator("label:has(#document-file)").evaluate(node =>
+        node.getBoundingClientRect().width);
       expect(uploadLabelWidth).toBeGreaterThanOrEqual(width === 360 ? 120 : 180);
 
       // REC-UI-DOC-008: prioritize the usable archive on 360px screens
