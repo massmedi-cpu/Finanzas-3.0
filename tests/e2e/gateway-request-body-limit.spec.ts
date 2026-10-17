@@ -216,7 +216,7 @@ test("REC-SEC-API-005 · las rutas financieras no convierten errores arbitrarios
     if (path === "app/api/budgets/route.ts") {
       expect(route).toContain("if (error instanceof BudgetSnapshotContractError)");
     } else {
-      expect(route, path).not.toMatch(/code:\\s*error\\.message/);
+      expect(route, path).not.toMatch(/code:\s*error\.message/);
     }
   }
 });
