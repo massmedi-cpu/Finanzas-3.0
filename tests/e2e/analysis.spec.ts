@@ -294,7 +294,19 @@ test("REC-ANA-184 · la gráfica no certifica meses ni compara netos tras sincro
     });
   });
 
+  async function applyAnalysis() {
+    // The SSR gateway is deliberately unavailable in synthetic browser tests.
+    // Load the fixture via the real AnalysisClient request before inspecting
+    // charts; merely mocking /api/analysis does not populate initialSnapshot.
+    const form = page.getByRole("form", { name: "Filtros del análisis" });
+    await form.getByLabel("Mes de referencia").fill("2026-09");
+    await form.getByRole("button", { name: "1 mes" }).click();
+    await form.getByRole("button", { name: "Aplicar" }).click();
+    await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
+  }
+
   await page.goto("/analysis?month=2026-09&range=1m");
+  await applyAnalysis();
   const chart = page.getByRole("region", { name: "Comparativa financiera visual" });
   const august = chart.getByRole("button", { name: /Neto agosto de 2026/i });
   await expect(august).toHaveAttribute("data-month-coverage", "partial");
@@ -305,6 +317,7 @@ test("REC-ANA-184 · la gráfica no certifica meses ni compara netos tras sincro
   // A completed, clean source check restores normal comparable historic months.
   syncStatus = "success";
   await page.reload();
+  await applyAnalysis();
   const restoredChart = page.getByRole("region", { name: "Comparativa financiera visual" });
   const restoredAugust = restoredChart.getByRole("button", { name: /Neto agosto de 2026/i });
   await expect(restoredAugust).toHaveAttribute("data-month-coverage", "covered");
