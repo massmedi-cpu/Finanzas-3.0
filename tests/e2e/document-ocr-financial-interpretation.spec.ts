@@ -819,6 +819,38 @@ test("REC-OCR-118 · invoice reference shaped as a calendar date is always doubt
 });
 
 
+test("REC-OCR-185 · tarjetas de puntos y fidelidad no son pagos bancarios", () => {
+  for (const text of [
+    "Tarjeta de fidelidad 02891",
+    "Tarjeta cliente: 12345",
+    "Tarjeta socio 9876",
+    "Tarjeta club 142",
+    "Puntos de la tarjeta: 300",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("loyalty", text, 0.99)]));
+    expect(parsed.paymentMethod.value, text).toBeNull();
+    expect(parsed.paymentMethod.trust, text).toBe("not_detected");
+  }
+});
+
+test("REC-OCR-186 · la tarjeta de fidelidad no desplaza el efectivo posterior", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("loyalty", "Tarjeta de puntos: 014201 | Puntos acumulados 8", 0.99, 0.1),
+    line("tender", "Efectivo 12,50 €", 0.95, 0.5),
+  ]));
+  expect(parsed.paymentMethod.value).toBe("Efectivo");
+  expect(parsed.paymentMethod.trust).toBe("reliable");
+  expect(parsed.paymentMethod.evidence[0]?.lineId).toBe("tender");
+});
+
+test("REC-OCR-187 · un pago explícito sí prevalece en una fila mixta de fidelidad", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("mixed", "Tarjeta cliente: 12345 · Forma de pago: VISA", 0.97),
+  ]));
+  expect(parsed.paymentMethod.value).toBe("Tarjeta");
+  expect(parsed.paymentMethod.trust).toBe("reliable");
+});
+
 test("REC-OCR-119 · rejected card and pending transfers cannot become paid methods", () => {
   for (const raw of [
     "Tarjeta rechazada", "Tarjeta denegada", "No se acepta efectivo",

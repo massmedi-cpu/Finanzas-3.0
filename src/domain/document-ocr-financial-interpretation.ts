@@ -675,6 +675,13 @@ function extractPaymentMethod(lines: LocatedLine[]) {
     // A rejected payment, a future intention to pay and a payment-method
     // restriction are not proof of a completed charge.
     if (/\b(?:pago\s+pendiente|pendiente\s+de\s+pago|sin\s+pagar|no\s+pagad[oa]|operacion\s+denegada|transaccion\s+rechazada)\b/.test(normalized)) continue;
+    // A loyalty / points / membership card identifies a customer, not how
+    // this purchase was paid. An unlabeled loyalty row can otherwise win
+    // over a later cash tender row simply because it appears first.
+    // Keep an explicit payment label on the same OCR line authoritative.
+    const loyaltyCard = /\btarjeta\s+(?:de\s+)?(?:fidelidad|puntos|cliente|socio|club)\b|\b(?:puntos|saldo)\s+(?:de\s+)?(?:la\s+)?tarjeta\b/.test(normalized);
+    const explicitTender = /\b(?:forma|medio|metodo)\s+de\s+pago\b|\bpago\s+(?:con|mediante|en)\s+(?:tarjeta|visa|mastercard)\b|\btotal\s+tarjeta\b/.test(normalized);
+    if (loyaltyCard && !explicitTender) continue;
     const rejectedCard = /\b(?:tarjeta|visa|mastercard)\s+(?:rechazad[ao]s?|denegad[ao]s?)\b|\b(?:no\s+se\s+acepta|sin)\s+(?:pagos?\s+(?:en|con)\s+)?(?:tarjeta|visa|mastercard)\b/.test(normalized);
     const rejectedCash = /\b(?:no\s+se\s+acepta|sin)\s+(?:pago\s+en\s+)?efectivo\b/.test(normalized);
     const rejectedDebit = /\b(?:no|sin)\s+domiciliad[oa]s?\b/.test(normalized);
