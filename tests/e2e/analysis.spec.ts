@@ -269,6 +269,49 @@ test.describe("Meses de Análisis con navegador en inglés", () => {
   });
 });
 
+test("REC-ANA-184 · la gráfica no certifica meses ni compara netos tras sincronización fallida", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await mockAnalysisApi(page, snapshot);
+  let syncStatus: "success" | "failed" = "failed";
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2025-01-01",
+        latestMovementDate: "2026-09-15",
+        sync: {
+          status: syncStatus,
+          startedAt: "2026-10-18T12:00:00Z",
+          finishedAt: "2026-10-18T12:05:00Z",
+          rowsSeen: 3208,
+          rowsFailed: syncStatus === "failed" ? 1 : 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+
+  await page.goto("/analysis?month=2026-09&range=1m");
+  const chart = page.getByRole("region", { name: "Comparativa financiera visual" });
+  const august = chart.getByRole("button", { name: /Neto agosto de 2026/i });
+  await expect(august).toHaveAttribute("data-month-coverage", "partial");
+  await august.click();
+  await expect(chart.getByRole("tooltip")).toContainText("Parcial");
+  await expect(chart.getByRole("tooltip")).not.toContainText("frente al mes anterior");
+
+  // A completed, clean source check restores normal comparable historic months.
+  syncStatus = "success";
+  await page.reload();
+  const restoredChart = page.getByRole("region", { name: "Comparativa financiera visual" });
+  const restoredAugust = restoredChart.getByRole("button", { name: /Neto agosto de 2026/i });
+  await expect(restoredAugust).toHaveAttribute("data-month-coverage", "covered");
+  await restoredAugust.click();
+  await expect(restoredChart.getByRole("tooltip")).toContainText("frente al mes anterior");
+});
+
 test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
   const snapshot = mockSnapshot();
   await mockAnalysisApi(page, snapshot);

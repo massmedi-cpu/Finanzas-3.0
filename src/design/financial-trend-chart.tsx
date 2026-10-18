@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { resolvePeriodCoverage } from "../application/data-coverage";
+import type { SourceSyncIncidentInput } from "../application/source-sync-incidents";
 import styles from "./financial-trend-chart.module.css";
 
 export type FinancialTrendPoint = {
@@ -21,6 +22,7 @@ type Props = {
   partialMonthStart?: string | null;
   latestMovementDate?: string | null;
   earliestMovementDate?: string | null;
+  sourceSync?: SourceSyncIncidentInput | null;
 };
 
 type TrendView = "all" | "flow" | "net";
@@ -49,6 +51,7 @@ export function FinancialTrendChart({
   partialMonthStart = null,
   latestMovementDate = null,
   earliestMovementDate = null,
+  sourceSync = null,
 }: Props) {
   const assessed = useMemo(() => rows.map((row) => {
     const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
@@ -58,13 +61,14 @@ export function FinancialTrendChart({
       dateTo: monthEnd.toISOString().slice(0, 10),
       latestMovementDate,
       earliestMovementDate,
+      sync: sourceSync,
     });
     // A populated history is still useful when the freshness request fails,
     // but its coverage must never be described as confirmed.
     const observed = coverage.state === "covered" || coverage.state === "partial"
       || (coverage.state === "unknown" && (row.rows ?? 0) > 0);
     return { ...row, coverage, observed };
-  }), [earliestMovementDate, latestMovementDate, rows]);
+  }), [earliestMovementDate, latestMovementDate, rows, sourceSync]);
   const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
   const [view, setView] = useState<TrendView>("all");

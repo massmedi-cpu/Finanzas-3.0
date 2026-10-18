@@ -634,6 +634,7 @@ export default function AnalysisClient({
               partialMonthStart={snapshot.selection.partialMonthStart}
               latestMovementDate={latestMovementDate}
               earliestMovementDate={earliestMovementDate}
+              sourceSync={sourceSync}
               hrefForMonth={(monthStart) => monthHref(snapshot, monthStart)}
             />
           </section>
