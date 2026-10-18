@@ -191,7 +191,9 @@ test("REC-HOME-SYNC-015 · Inicio no certifica como actuales datos importados ha
   const section = page.locator('section[aria-label="Estado de los datos bancarios"]');
   await expect(section.getByText("Actualización bancaria pendiente", { exact: true })).toBeVisible();
   await expect(section).toContainText("Última sincronización");
-  await expect(section).toContainText("Movimientos registrados hasta");
+  // A stale source check does not verify the date of bank movements.
+  await expect(section).toContainText("La fecha de los movimientos aún no está verificada");
+  await expect(section).not.toContainText("Movimientos registrados hasta");
   await expect(section).not.toContainText("Datos bancarios actualizados");
   await expect(section.getByRole("button", { name: "Actualizar datos" })).toBeEnabled();
   expect(postCount()).toBe(0); // Merely displaying a warning never mutates the official source.

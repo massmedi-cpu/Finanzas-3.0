@@ -71,6 +71,13 @@ test("REC-OCR-UX-031 · el panel aclara PDF protegido y corrupto sin guardados i
     const url = new URL(request.url());
     const method = request.method();
     requested.push(method + " " + url.pathname);
+    // DriveAutoSync performs one background POST when Documents mounts.
+    // Intercept it with the same 409 read-only contract as a protected preview:
+    // this OCR test must never reach a document-import backend.
+    if (url.pathname === "/api/documents/drive-sync" && method === "POST") {
+      await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+      return;
+    }
     if (url.pathname === "/api/documents/ocr" && method === "POST") {
       runCount++;
       const code = runCount === 1 ? "PasswordException" : "InvalidPDFException";
@@ -109,9 +116,10 @@ test("REC-OCR-UX-031 · el panel aclara PDF protegido y corrupto sin guardados i
   await expect(panel.getByRole("alert")).toContainText("PDF está dañado");
   await expect(analyze).toBeEnabled();
   expect(runCount).toBe(2);
-  expect(requested.filter((operation) => operation.startsWith("POST ")))
-    .toEqual(["POST /api/documents/ocr", "POST /api/documents/ocr"]);
-  expect(requested.some((operation) => operation.startsWith("PATCH ") || operation.startsWith("DELETE "))).toBe(false);
+  // The only additional POST is a blocked background Drive check, not an OCR revision.
+  expect(requested.filter((operation) => operation.startsWith("POST ")).sort())
+    .toEqual(["POST /api/documents/drive-sync", "POST /api/documents/ocr", "POST /api/documents/ocr"].sort());
+  expect(requested.some((operation) => /^(PATCH|DELETE|PUT) /.test(operation))).toBe(false);
   await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
 });
 
@@ -153,6 +161,12 @@ test("REC-OCR-UX-032 · HTTP 200 con páginas repetidas o geometría incompleta 
     const request = route.request();
     const url = new URL(request.url());
     methods.push(request.method() + " " + url.pathname);
+    // Page-level incremental Drive detection is separate from OCR and is
+    // intentionally rejected inside this isolated test; no backend is reached.
+    if (request.method() === "POST" && url.pathname === "/api/documents/drive-sync") {
+      await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+      return;
+    }
     if (request.method() === "POST" && url.pathname === "/api/documents/ocr") {
       const payload = malformed[reads++];
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
@@ -191,8 +205,8 @@ test("REC-OCR-UX-032 · HTTP 200 con páginas repetidas o geometría incompleta 
     await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
   }
   expect(reads).toBe(malformed.length);
-  expect(methods.filter((method) => method.startsWith("POST "))).toEqual(
-    Array.from({ length: malformed.length }, () => "POST /api/documents/ocr"),
+  expect(methods.filter((method) => method.startsWith("POST ")).sort()).toEqual(
+    ["POST /api/documents/drive-sync", ...Array.from({ length: malformed.length }, () => "POST /api/documents/ocr")].sort(),
   );
   expect(methods.some((method) => /^(PATCH|DELETE|PUT) /.test(method))).toBe(false);
 });

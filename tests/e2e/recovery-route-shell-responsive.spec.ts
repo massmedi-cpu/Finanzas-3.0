@@ -146,6 +146,14 @@ for (const bankingState of ["available", "unavailable", "conflict"] as const) {
     previousDate.setUTCDate(previousDate.getUTCDate() - 1);
     const lastActivityDate = bankingState === "conflict"
       ? previousDate.toISOString().slice(0, 10) : today;
+    // Only the verified-source browser case uses a fresh completed check.
+    // The last bank movement is a different timestamp and must not be rewritten
+    // to manufacture recency; keep all genuine stale-source scenarios elsewhere.
+    const recentSync = {
+      ...completeHomeSync,
+      startedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      finishedAt: new Date().toISOString(),
+    };
     const financial = {
       period: {
         dateFrom: monthStart, dateTo: today, incomeCents: 5000,
@@ -173,7 +181,7 @@ for (const bankingState of ["available", "unavailable", "conflict"] as const) {
     await page.route("**/api/source/google/sync", route => route.fulfill({ json: {
       run: {
         id: "aa000000-0000-4000-8000-000000000003",
-        ...completeHomeSync,
+        ...recentSync,
         rowsInserted: 5, rowsRevised: 0, rowsSkipped: 0,
         rowsMissing: 0, rowsFailed: 0, duplicatesDetected: 0,
         warningsCount: 0, errorCode: null, errorMessage: null,
@@ -184,7 +192,7 @@ for (const bankingState of ["available", "unavailable", "conflict"] as const) {
       json: {
         available: !bankUnavailable,
         earliestMovementDate: monthStart, latestMovementDate: today,
-        sync: completeHomeSync,
+        sync: recentSync,
       },
     }));
     await page.route("**/api/dashboard?*", route => {
