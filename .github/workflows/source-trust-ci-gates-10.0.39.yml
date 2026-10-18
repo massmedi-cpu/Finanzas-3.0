@@ -13,10 +13,12 @@ on:
       - '.github/workflows/source-trust-ci-gates-10.0.39.yml'
       - 'scripts/verify-source-trust-ci-gates-10.0.39.mjs'
       - 'src/application/source-sync-incidents.ts'
+      - 'src/infrastructure/google/official-bank-source-reader.ts'
       - 'app/source-trust-cache.ts'
       - 'app/source-trust-status.tsx'
       - 'tests/e2e/sync-missing-persistence-contract.spec.ts'
       - 'tests/e2e/source-incident-trace.spec.ts'
+      - 'tests/e2e/source-reader-revision.spec.ts'
       - 'tests/e2e/source-health-consistency.spec.ts'
       - 'tests/e2e/source-trust-app-shell.spec.ts'
       - 'tests/e2e/source-trust-cache-10.0.31.spec.ts'
@@ -51,6 +53,7 @@ jobs:
         run: >-
           npx playwright test
           tests/e2e/source-incident-trace.spec.ts
+          tests/e2e/source-reader-revision.spec.ts
           tests/e2e/source-health-consistency.spec.ts
           tests/e2e/source-trust-app-shell.spec.ts
           tests/e2e/source-trust-cache-10.0.31.spec.ts
