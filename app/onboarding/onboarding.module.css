@@ -3,9 +3,8 @@
   min-width: 0;
   padding: clamp(1rem, 2.5vw, 2.5rem);
   color: var(--color-text);
-  background:
-    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--color-primary-bright) 14%, transparent), transparent 32rem),
-    linear-gradient(145deg, #07101f 0%, #0b1324 48%, #10182a 100%);
+  /* El lienzo de página se define una única vez en app-background.css. */
+  background: transparent;
 }
 
 .hero,
@@ -26,7 +25,11 @@
   gap: 1.25rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(21, 33, 56, 0.94), var(--surface-card));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--surface-card) 87%, var(--color-primary-bright) 13%),
+    var(--surface-card)
+  );
   box-shadow: 0 22px 55px rgba(0, 0, 0, 0.22);
 }
 
@@ -92,7 +95,11 @@
   border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--color-cyan) 10%, transparent), transparent 18rem),
-    linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 42%, transparent), var(--surface-card));
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--surface-card) 75%, var(--color-primary-bright) 25%),
+      var(--surface-card)
+    );
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
 }
 
@@ -218,7 +225,11 @@
   gap: 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: 1rem;
-  background: linear-gradient(145deg, rgba(21, 33, 56, 0.94), var(--surface-card));
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--surface-card) 94%, var(--color-primary-bright) 6%),
+    var(--surface-card)
+  );
 }
 
 .card[data-step-status="Siguiente"] {
@@ -241,7 +252,7 @@
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 38%, transparent);
   border-radius: 0.8rem;
-  background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent);
+  background: var(--color-primary);
   color: var(--color-on-primary);
   font-size: 0.95rem;
   font-weight: 800;

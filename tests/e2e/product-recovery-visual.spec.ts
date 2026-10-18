@@ -35,6 +35,47 @@ test("REC-VIS-007 · los 21 destinos canónicos tienen matriz visual; los alias 
   expect(routes).not.toContain("/configuration/categories");
 });
 
+test("REC-UI-ONBOARD-188 · Primeros pasos usa superficies y contraste accesibles en ambos temas", async ({ page }) => {
+  await mockRecoveryHome(page, "covered");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await page.goto("/onboarding");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(page.getByRole("heading", { name: "De tus movimientos a una visión clara de tu dinero" })).toBeVisible();
+    const colors = await page.evaluate(() => {
+      const heading = document.querySelector("main header h1") as HTMLElement;
+      const shell = heading.closest("main")!;
+      const hero = heading.closest("header")!;
+      const action = shell.querySelector("section[aria-labelledby='next-action-heading']")!;
+      const firstStep = shell.querySelector("li[data-step-status]")!;
+      const number = firstStep.querySelector("span")!;
+      const styles = (node: Element) => getComputedStyle(node);
+      return {
+        shellBackground: styles(shell).backgroundImage,
+        heroBackground: styles(hero).backgroundImage,
+        actionBackground: styles(action).backgroundImage,
+        cardBackground: styles(firstStep).backgroundImage,
+        numberForeground: styles(number).color,
+        numberBackground: styles(number).backgroundColor,
+      };
+    });
+    expect(colors.shellBackground).toBe("none");
+    for (const surface of [colors.heroBackground, colors.actionBackground, colors.cardBackground]) {
+      expect(surface).toContain("gradient");
+      expect(surface).not.toContain("21, 33, 56");
+    }
+    const rgb = (value: string) => (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+    const luminance = (values: number[]) => {
+      const linear = values.map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+      return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+    };
+    const foreground = luminance(rgb(colors.numberForeground));
+    const background = luminance(rgb(colors.numberBackground));
+    const ratio = (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
+    expect(ratio, `Contraste insuficiente del número de paso en ${theme}`).toBeGreaterThanOrEqual(4.5);
+  }
+});
+
 // This matrix verifies browser rendering with synthetic data and unavailable states.
 // Real persistence is evaluated separately by authenticated isolation, without mocks.
 for (const theme of ["light", "dark"] as const) {
