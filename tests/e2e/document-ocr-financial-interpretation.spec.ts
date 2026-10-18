@@ -851,6 +851,37 @@ test("REC-OCR-187 · un pago explícito sí prevalece en una fila mixta de fidel
   expect(parsed.paymentMethod.trust).toBe("reliable");
 });
 
+
+test("REC-OCR-189 · el método de pago expresamente usado prevalece sobre opciones y menciones previas", () => {
+  const samples = [
+    { lines: ["Medios de pago aceptados: efectivo y tarjeta", "Pago con Bizum"], expected: "Bizum", lineId: "pay-1" },
+    { lines: ["Información sobre tarjeta bancaria", "Pago con tarjeta VISA"], expected: "Tarjeta", lineId: "pay-1" },
+    { lines: ["Tarjeta cliente: 777 · Pago con Bizum"], expected: "Bizum", lineId: "pay-0" },
+    { lines: ["Formas de pago disponibles: efectivo y tarjeta", "Medio de pago: Transferencia"], expected: "Transferencia", lineId: "pay-1" },
+  ] as const;
+  for (const sample of samples) {
+    const parsed = interpretDocumentOcrFinancially(result(sample.lines.map((text, index) =>
+      line(`pay-${index}`, text, 0.98, 0.1 + index * 0.06))));
+    expect(parsed.paymentMethod.value, sample.lines.join(" | ")).toBe(sample.expected);
+    expect(parsed.paymentMethod.trust, sample.lines.join(" | ")).toBe("reliable");
+    expect(parsed.paymentMethod.evidence[0]?.lineId).toBe(sample.lineId);
+  }
+});
+
+test("REC-OCR-190 · pago pendiente o métodos simplemente aceptados no certifican un cargo", () => {
+  for (const raw of [
+    "Pago con Bizum pendiente",
+    "Pago mediante transferencia sin confirmar",
+    "Transferencia no realizada",
+    "Medios de pago aceptados: tarjeta o efectivo",
+    "Se acepta efectivo",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([line("not-settled", raw, 0.99)]));
+    expect(parsed.paymentMethod.value, raw).toBeNull();
+    expect(parsed.paymentMethod.trust, raw).toBe("not_detected");
+  }
+});
+
 test("REC-OCR-119 · rejected card and pending transfers cannot become paid methods", () => {
   for (const raw of [
     "Tarjeta rechazada", "Tarjeta denegada", "No se acepta efectivo",

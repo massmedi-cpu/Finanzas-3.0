@@ -672,26 +672,31 @@ function extractPaymentMethod(lines: LocatedLine[]) {
   let unlabelled: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
-    // A rejected payment, a future intention to pay and a payment-method
-    // restriction are not proof of a completed charge.
-    if (/\b(?:pago\s+pendiente|pendiente\s+de\s+pago|sin\s+pagar|no\s+pagad[oa]|operacion\s+denegada|transaccion\s+rechazada)\b/.test(normalized)) continue;
+    // A rejected, still-pending or merely accepted payment method is not
+    // evidence that this transaction was actually paid by that method.
+    if (/\b(?:pago\s+pendiente|pendiente\s+de\s+pago|sin\s+pagar|no\s+pagad[oa]|operacion\s+denegada|transaccion\s+rechazada|(?:pago|cobro)\s+(?:por|mediante|con|en)\s+(?:tarjeta|visa|mastercard|efectivo|cash|transferencia|bizum|domiciliacion|recibo)\s+(?:pendiente|sin\s+confirmar)|(?:bizum|transferencia)\s+(?:pendiente|no\s+realizad[ao]))\b/.test(normalized)) continue;
+    if (/\b(?:formas?|medios?|metodos?)\s+de\s+pago\s+(?:aceptad[oa]s?|admitid[oa]s?|disponibles?)\b|\b(?:se\s+)?(?:acepta|aceptan|aceptamos|admite|admiten)\s+(?:pagos?\s+(?:en|con)\s+)?(?:tarjeta|visa|mastercard|efectivo|cash|transferencia|bizum)\b/.test(normalized)) continue;
+    // Prefer the method following an explicit payment label, rather than a
+    // preceding mention of a loyalty card or an available payment method.
+    const paymentLabel = /\b(?:forma|medio|metodo)\s+de\s+pago\s*[:=-]?\s*|\bpago\s*[:=-]\s*|\bpago\s+(?:con|mediante|en|por)\s+/.exec(normalized);
+    const paymentText = paymentLabel ? normalized.slice(paymentLabel.index + paymentLabel[0].length) : normalized;
     // A loyalty / points / membership card identifies a customer, not how
     // this purchase was paid. An unlabeled loyalty row can otherwise win
     // over a later cash tender row simply because it appears first.
     // Keep an explicit payment label on the same OCR line authoritative.
     const loyaltyCard = /\btarjeta\s+(?:de\s+)?(?:fidelidad|puntos|cliente|socio|club)\b|\b(?:puntos|saldo)\s+(?:de\s+)?(?:la\s+)?tarjeta\b/.test(normalized);
-    const explicitTender = /\b(?:forma|medio|metodo)\s+de\s+pago\b|\bpago\s+(?:con|mediante|en)\s+(?:tarjeta|visa|mastercard)\b|\btotal\s+tarjeta\b/.test(normalized);
+    const explicitTender = paymentLabel !== null || /\btotal\s+tarjeta\b/.test(normalized);
     if (loyaltyCard && !explicitTender) continue;
     const rejectedCard = /\b(?:tarjeta|visa|mastercard)\s+(?:rechazad[ao]s?|denegad[ao]s?)\b|\b(?:no\s+se\s+acepta|sin)\s+(?:pagos?\s+(?:en|con)\s+)?(?:tarjeta|visa|mastercard)\b/.test(normalized);
     const rejectedCash = /\b(?:no\s+se\s+acepta|sin)\s+(?:pago\s+en\s+)?efectivo\b/.test(normalized);
     const rejectedDebit = /\b(?:no|sin)\s+domiciliad[oa]s?\b/.test(normalized);
-    const hit = keywords.find((entry) => entry.pattern.test(normalized)
+    const hit = keywords.find((entry) => entry.pattern.test(paymentText)
       && !(rejectedCard && entry.value === "Tarjeta")
       && !(rejectedCash && entry.value === "Efectivo")
       && !(rejectedDebit && entry.value === "Domiciliación"));
     if (!hit) continue;
     const field = fieldFrom(item, item.line.text.trim(), hit.value);
-    const explicitlyLabelled = /\b(?:forma|medio|metodo)\s+de\s+pago\b|\bpago\s*[:=-]/.test(normalized);
+    const explicitlyLabelled = paymentLabel !== null;
     if (explicitlyLabelled) return field;
     // A merchant may mention a card or direct debit outside the payment
     // summary. Preserve the first candidate, but do not override a later
