@@ -460,6 +460,36 @@ test("REC-OCR-017 · date within a legal or billing period does not override exp
 });
 
 
+test("REC-OCR-191 · fecha de factura en otra línea prevalece sobre fecha de pedido, pero exige revisión", () => {
+  const parsed = interpretDocumentOcrFinancially(result([
+    line("order-label", "Fecha de Pedido:", 0.99, 0.05),
+    line("order-value", "2026.09.18", 0.99, 0.10),
+    line("issue-label", "Fecha de Factura:", 0.99, 0.22),
+    line("issue-value", "2026.10.11", 0.99, 0.27),
+  ]));
+  expect(parsed.date.value).toBe("2026-10-11");
+  expect(parsed.date.trust).toBe("doubtful");
+  expect(parsed.date.rawValue).toBe("2026.10.11");
+  expect(parsed.date.evidence.map((item) => item.lineId)).toEqual(["issue-label", "issue-value"]);
+});
+
+test("REC-OCR-192 · una fecha lejana o detrás de etiqueta ajena no hereda falsa atribución", () => {
+  const far = interpretDocumentOcrFinancially(result([
+    line("far-label", "Fecha de Factura:", 0.99, 0.05),
+    line("far-value", "2026.10.11", 0.99, 0.40),
+  ]));
+  expect(far.date.value).toBe("2026-10-11");
+  expect(far.date.trust).toBe("doubtful");
+  expect(far.date.evidence.map((item) => item.lineId)).toEqual(["far-value"]);
+
+  const expiry = interpretDocumentOcrFinancially(result([
+    line("expiry-label", "Fecha de vencimiento:", 0.99, 0.05),
+    line("expiry-value", "2026.10.11", 0.99, 0.10),
+  ]));
+  expect(expiry.date.trust).toBe("doubtful");
+  expect(expiry.date.evidence.map((item) => item.lineId)).toEqual(["expiry-value"]);
+});
+
 test("REC-OCR-018 · domiciliada is a payment method only with credible source context", () => {
   const cases = [
     { lines: ["Forma de pago: Domiciliada"], expected: "Domiciliación", trust: "reliable" },

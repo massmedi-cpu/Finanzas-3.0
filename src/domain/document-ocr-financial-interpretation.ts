@@ -520,7 +520,7 @@ function extractDate(lines: LocatedLine[]) {
   let issueDate: OcrInterpretedField<string> | null = null;
   let contradictoryIssueDates = false;
 
-  for (const item of lines) {
+  for (const [lineIndex, item] of lines.entries()) {
     const normalized = normalizeToken(item.line.text);
     // A separately printed expiry or billing-period date must not erase an
     // explicitly labelled issue/purchase timestamp on the SAME OCR line.
@@ -545,6 +545,28 @@ function extractDate(lines: LocatedLine[]) {
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
     const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
     const field = fieldFrom(item, isoDate?.[0] ?? numeric?.[0] ?? written?.[0] ?? "", iso);
+    // Some real digital invoices split "Fecha de Factura:" and a YYYY.MM.DD
+    // value into separate PDF/OCR rows. Prefer only a standalone calendar date
+    // immediately adjacent to an explicit ISSUE label on the SAME page.
+    // Proximity is useful evidence, not proof: always require human review.
+    const previous = lineIndex > 0 ? lines[lineIndex - 1] : null;
+    const precedingLabel = previous ? normalizeToken(previous.line.text) : "";
+    const issueLabelOnly = /^(?:fecha(?: de (?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora)\s*[:\-]?\s*$/.test(precedingLabel);
+    const dateToken = isoDate?.[0] ?? numeric?.[0] ?? written?.[0] ?? "";
+    const standaloneValue = item.line.text.trim() === dateToken;
+    const samePageAndNear = previous !== null
+      && previous.pageNumber === item.pageNumber
+      && item.line.box.y >= previous.line.box.y - 0.01
+      && item.line.box.y - (previous.line.box.y + previous.line.box.height) <= 0.07;
+    if (issueLabelOnly && standaloneValue && samePageAndNear) {
+      const attributed = {
+        ...fieldRequiringReview(field),
+        evidence: [evidenceOf(previous!), evidenceOf(item)],
+      };
+      if (issueDate && issueDate.value !== attributed.value) contradictoryIssueDates = true;
+      else issueDate ??= attributed;
+      continue;
+    }
     if (labelledNumeric || labelledWritten || labelledIso) {
       // Two competing labelled dates on one OCR row cannot both be trusted.
       // Dates on continuation pages may be annex/legal dates. A perfect OCR
