@@ -189,7 +189,11 @@ test("REC-SYNC-006 · fallo HTTP de frescura muestra reintento y recupera sin es
   await expect(retry).toHaveCSS("min-height", "44px");
   recoveryRequested = true;
   await retry.click();
-  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  // Recovery of the HTTP request is not proof the September bank receipt is current.
+  // Preserve the historical successful run and demand a stale-source warning.
+  await expect(page.getByText("Sincronización pendiente de comprobar")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveAttribute("href", "/configuration/source");
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
   await expect(failure).toHaveCount(0);
   expect(calls).toBeGreaterThanOrEqual(2);
   expect(recoveredReads).toBe(1);
