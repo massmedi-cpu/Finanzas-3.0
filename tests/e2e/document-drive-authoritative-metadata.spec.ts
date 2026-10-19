@@ -418,3 +418,21 @@ test("REC-DOC-AUTH-224 · archivo autorizado pasa y batch manual transmite carpe
   expect(readFileSync("app/api/documents/route.ts", "utf8"))
     .toContain("expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID");
 });
+
+
+test("REC-DOC-AUTH-228 · re-opening Drive originals requires authorized folder in download and OCR", () => {
+  const readers = [
+    "app/api/documents/download/route.ts",
+    "app/api/documents/ocr/route.ts",
+  ];
+  for (const file of readers) {
+    const source = readFileSync(join(process.cwd(), file), "utf8");
+    expect(source, file).toContain('import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID }');
+    const downloadStart = source.indexOf("driveDownloader().download({");
+    expect(downloadStart, file).toBeGreaterThan(0);
+    const downloadEnd = source.indexOf("});", downloadStart);
+    expect(downloadEnd, file).toBeGreaterThan(downloadStart);
+    const options = source.slice(downloadStart, downloadEnd);
+    expect(options, file).toContain("expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID");
+  }
+});
