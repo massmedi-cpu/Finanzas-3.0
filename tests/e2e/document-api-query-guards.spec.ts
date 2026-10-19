@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { GET as getDocuments } from "../../app/api/documents/route";
 import {
   PATCH as reviewOcr,
@@ -47,4 +48,17 @@ test("REC-OCR-REVIEW-056 · unexpected errors do not disclose document content",
   const validation = ocrReviewError(new Error("invalid_document_line_items"));
   expect(validation.status).toBe(400);
   await expect(validation.json()).resolves.toMatchObject({ code: "invalid_document_line_items" });
+});
+
+
+test("REC-DOC-AUTH-225 · el historial OCR exige workspace antes de consultar documento", () => {
+  const source = readFileSync("app/api/documents/ocr-review/route.ts", "utf8");
+  const get = source.slice(source.indexOf("export async function GET("), source.indexOf("export async function PATCH("));
+  const verifyMembership = get.indexOf("await requireVerifiedSourceWorkspace()");
+  const firstDocumentSelector = get.indexOf("url.searchParams.getAll");
+  const gatewayHistory = get.indexOf('callPersistenceGateway("document.ocr_history"');
+  expect(verifyMembership).toBeGreaterThan(0);
+  expect(get).toContain("if (denied) return denied;");
+  expect(firstDocumentSelector).toBeGreaterThan(verifyMembership);
+  expect(gatewayHistory).toBeGreaterThan(firstDocumentSelector);
 });
