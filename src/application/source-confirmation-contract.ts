@@ -59,6 +59,9 @@ export function isConfirmedSourceSyncResult(value: unknown): value is SourceSync
     value.rowsSeen, value.rowsInserted, value.rowsRevised, value.rowsSkipped,
     value.rowsMissing, value.duplicatesDetected, value.warningsCount, value.cursorsAdvanced,
   ];
-  if (!fields.every(count) || value.rowsSeen === 0) return false;
-  return value.rowsSeen === value.rowsInserted + value.rowsRevised + value.rowsSkipped;
+  if (!fields.every(count)) return false;
+  // Array.every narrows the validated local tuple, not the original record's
+  // unknown properties; only the validated numbers are used in arithmetic.
+  const [rowsSeen, rowsInserted, rowsRevised, rowsSkipped] = fields as number[];
+  return rowsSeen > 0 && rowsSeen === rowsInserted + rowsRevised + rowsSkipped;
 }
