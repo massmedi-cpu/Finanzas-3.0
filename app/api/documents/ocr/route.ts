@@ -6,6 +6,7 @@ import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
 } from "../../../../src/infrastructure/google/google-drive-document-downloader";
+import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../../../src/infrastructure/google/google-drive-document-discovery";
 import {
   GOOGLE_DOCUMENT_READONLY_SCOPES,
   GoogleServiceAccountAccessTokenProvider,
@@ -419,6 +420,7 @@ async function documentBytes(detail: DocumentDetail) {
     const downloaded = await driveDownloader().download({
       fileId,
       expectedMimeType: detail.document.mimeType.toLowerCase(),
+      expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
     });
     return downloaded.bytes;
   }
