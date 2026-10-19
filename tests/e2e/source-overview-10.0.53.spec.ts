@@ -228,14 +228,17 @@ test("REC-SYNC-199 · un POST sin respuesta concluyente no se reintenta ni prome
   const syncGetRequests: string[] = [];
   await mockSourceOverview(page, { syncPosts, syncGetRequests, syncPostError: true });
   await page.goto("/configuration/source");
-  await expect.poll(() => syncGetRequests.length).toBe(1);
-
-  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  const updateButton = page.getByRole("button", { name: "Actualizar desde Google" });
+  await expect(updateButton).toBeEnabled();
+  // React may issue two identical mount-time GETs in dev/StrictMode.
+  // Verify exactly one EXTRA persisted-status GET after the failed POST.
+  const initialStatusReads = syncGetRequests.length;
+  await updateButton.click();
   const error = page.locator(".config-message.error");
   await expect(error).toContainText("No se ha podido confirmar el resultado de la actualización");
   await expect(error).toContainText("antes de repetirla");
   await expect(error).not.toContainText("datos existentes siguen intactos");
-  await expect.poll(() => syncGetRequests.length).toBe(2);
+  await expect.poll(() => syncGetRequests.length).toBe(initialStatusReads + 1);
   expect(syncPosts).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
 });
@@ -258,10 +261,12 @@ test("REC-SYNC-201 · la respuesta de sync HTTP 200 con contadores inválidos no
   const syncGetRequests: string[] = [];
   await mockSourceOverview(page, { malformedSyncSuccess: true, syncPosts, syncGetRequests });
   await page.goto("/configuration/source");
-  await expect.poll(() => syncGetRequests.length).toBe(1);
-  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  const updateButton = page.getByRole("button", { name: "Actualizar desde Google" });
+  await expect(updateButton).toBeEnabled();
+  const initialStatusReads = syncGetRequests.length;
+  await updateButton.click();
   await expect(page.locator(".config-message.error")).toContainText("No se puede confirmar la actualización");
-  await expect.poll(() => syncGetRequests.length).toBe(2);
+  await expect.poll(() => syncGetRequests.length).toBe(initialStatusReads + 1);
   expect(syncPosts).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
 });
@@ -270,7 +275,7 @@ test("REC-SYNC-201 · la respuesta de sync HTTP 200 con contadores inválidos no
 test("REC-AUTH-204 · la fuente bancaria ofrece acceso sin revelar metadatos al usuario anónimo", async ({ page }) => {
   await mockSourceOverview(page, { authRequired: true });
   await page.goto("/configuration/source");
-  await expect(page.getByRole("alert")).toContainText("Inicia sesión para consultar la fuente bancaria.");
+  await expect(page.locator(".config-message.error[role=alert]")).toContainText("Inicia sesión para consultar la fuente bancaria.");
   await expect(page.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login?next=%2Fconfiguration%2Fsource");
   await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
