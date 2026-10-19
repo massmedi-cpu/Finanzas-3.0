@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   hasSourceSyncIncidents,
   hasCompletedSourceSyncEvidence,
+  hasRecentSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
@@ -298,8 +299,19 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
+  // A historical successful run only proves what was known at that time.
+  // It cannot certify that the external source is current now.
+  if (!hasRecentSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización pendiente de comprobar",
+      detail,
+      incidentDetail: "La última comprobación de la fuente tiene más de 48 horas o una fecha futura. Revisa si hay movimientos pendientes antes de dar los datos por actualizados.",
+      tone: "warning",
+    };
+  }
+
   return {
-    label: "Datos al día",
+    label: "Sincronización reciente",
     detail,
     incidentDetail: null,
     tone: "ok",
@@ -389,11 +401,11 @@ export default function AnalysisSourceFreshness({
       || freshness.sync.status === "partial"
       || freshness.sync.status === "started"
       || syncHasIncidents(freshness.sync)
-      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
+      || (freshness.sync.status === "success" && !hasRecentSourceSyncEvidence(freshness.sync))
     : false;
   const actionable = !freshness.available || (freshness.sync
     ? syncHasIncidents(freshness.sync)
-      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
+      || (freshness.sync.status === "success" && !hasRecentSourceSyncEvidence(freshness.sync))
     : false);
 
   return (

@@ -12,8 +12,9 @@ const ACCOUNT_ID = "10000000-0000-4000-8000-000000000028";
 
 const BASE_SYNC = {
   status: "success",
-  finishedAt: "2026-09-28T04:30:00.000Z",
-  startedAt: "2026-09-28T04:29:00.000Z",
+  // Clean synthetic sync stays recent; historical evidence has a separate test.
+  finishedAt: new Date().toISOString(),
+  startedAt: new Date(Date.now() - 60_000).toISOString(),
   rowsSeen: 10,
   rowsFailed: 0,
   rowsMissing: 0,
@@ -154,10 +155,33 @@ test("Comparador separa movimientos ausentes de los avisos adicionales", async (
 test("Comparador mantiene el estado limpio cuando todos los contadores están a cero", async ({ page }) => {
   await openComparison(page, BASE_SYNC);
 
-  await expect(page.getByRole("status", { name: /Fuente sincronizada/ })).toContainText("Datos al día");
+  await expect(page.getByRole("status", { name: /Fuente sincronizada/ })).toContainText("Sincronización reciente");
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveCount(0);
 });
 
+
+test("REC-SYNC-193 · an old successful sync cannot claim that bank data is current", async ({ page }) => {
+  await openComparison(page, {
+    ...BASE_SYNC,
+    startedAt: "2026-09-28T04:29:00.000Z",
+    finishedAt: "2026-09-28T04:30:00.000Z",
+  });
+  const status = page.getByRole("status", { name: /Fuente sincronizada/ });
+  await expect(status).toContainText("Sincronización pendiente de comprobar");
+  await expect(status).toContainText("más de 48 horas");
+  await expect(status).not.toContainText("Datos al día");
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveAttribute("href", "/configuration/source");
+});
+
+test("REC-SYNC-194 · a future-dated sync is not recently verified", async ({ page }) => {
+  await openComparison(page, {
+    ...BASE_SYNC,
+    finishedAt: new Date(Date.now() + 3_600_000).toISOString(),
+  });
+  const status = page.getByRole("status", { name: /Fuente sincronizada/ });
+  await expect(status).toContainText("Sincronización pendiente de comprobar");
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+});
 
 test("REC-SOURCE-141 · a clean sync cannot certify complete banking history without a first movement date", async ({ page }) => {
   await openComparison(page, BASE_SYNC, null);

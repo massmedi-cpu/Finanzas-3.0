@@ -356,7 +356,14 @@ test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre ver
 
   finishedAt = "2026-10-01T10:00:00Z";
   await page.reload();
-  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sincronización pendiente de comprobar")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+
+  finishedAt = new Date().toISOString();
+  await page.reload();
+  await expect(page.getByText("Sincronización reciente")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toHaveCount(0);
   await expect(page.getByText("Sincronización sin finalización verificada")).toHaveCount(0);
 });
 
