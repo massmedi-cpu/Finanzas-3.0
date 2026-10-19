@@ -20,8 +20,11 @@ const successPayload: SourcePayload = {
   latestMovementDate: "2026-09-28",
   sync: {
     status: "success",
-    finishedAt: "2026-09-28T14:00:00.000Z",
-    startedAt: "2026-09-28T13:59:00.000Z",
+    // REC-SYNC-195/198: this fixture tests cache semantics, not stale evidence.
+    // Keep successful import timestamp recent, preserving the historical date
+    // of the last financial movement for coverage checks.
+    finishedAt: new Date(Date.now() - 60_000).toISOString(),
+    startedAt: new Date(Date.now() - 120_000).toISOString(),
     rowsSeen: 1248,
     rowsFailed: 0,
     rowsMissing: 0,
