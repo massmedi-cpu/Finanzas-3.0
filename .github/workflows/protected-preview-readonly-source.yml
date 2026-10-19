@@ -79,17 +79,23 @@ jobs:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           node <<'NODE'
           const url = process.env.PREVIEW_URL || '';
           const sha = process.env.EXPECTED_SHA || '';
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+          const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
           if (!/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(url) ||
               !/^[0-9a-f]{40}$/.test(sha) || !token) {
             throw new Error('preview_or_oidc_missing');
           }
+          // Use the pre-existing preview automation secret when configured;
+          // fall back to the ephemeral Github OIDC identity otherwise.
+          // Never print either value or copy it into a request URL.
           const headers = {
-            'x-vercel-trusted-oidc-idp-token': token,
+            ...(bypass ? { 'x-vercel-protection-bypass': bypass }
+              : { 'x-vercel-trusted-oidc-idp-token': token }),
             'accept': 'application/json',
             'cache-control': 'no-store',
           };
@@ -109,7 +115,13 @@ jobs:
           }
           (async () => {
             const build = await jsonGet('/api/build');
-            if (build.response.status !== 200 || build.body.commit !== sha) {
+            // Log status and equality only, never response bodies, tokens or bank metadata.
+            console.log('SOURCE_BOUNDARY|build_http=' + build.response.status +
+              '|sha_matches=' + (build.body.commit === sha) +
+              '|is_preview=' + (build.body.environment === 'preview') +
+              '|auth_method=' + (bypass ? 'configured_bypass' : 'github_oidc'));
+            if (build.response.status !== 200 || build.body.commit !== sha ||
+                build.body.environment !== 'preview') {
               throw new Error('preview_commit_mismatch_or_protection_not_bypassed');
             }
             console.log('SOURCE_BOUNDARY|build=exact_sha|environment=preview');
