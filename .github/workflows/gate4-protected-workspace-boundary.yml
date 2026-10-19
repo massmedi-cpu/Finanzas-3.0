@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - 'commercial-readiness/**'
+      # GitHub does not start the new PR trigger from this non-default
+      # base branch until the workflow is merged; exercise this candidate
+      # directly on pushes and verify the immutable pushed SHA.
+      - 'chat/integrated-b-e-c-visual-20261010'
   pull_request:
     branches:
       - main
