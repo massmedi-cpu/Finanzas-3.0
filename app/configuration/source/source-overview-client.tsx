@@ -98,7 +98,9 @@ function actionError(code: string | undefined) {
   if (code === "google_source_changed_during_read") return "La fuente cambió mientras se estaba leyendo. Vuelve a intentarlo.";
   if (code === "google_source_historical_regression") return "La fuente ha cambiado de forma incompatible con el histórico validado. No se ha guardado ningún cambio.";
   if (code === "google_source_contract_invalid") return "La fuente no tiene el formato esperado. No se ha importado ningún movimiento.";
-  return "No se ha podido completar la actualización. Tus datos existentes siguen intactos.";
+  // A gateway timeout/503 can happen after the database committed the batch.
+  // An unconfirmed HTTP response does not prove that its transaction rolled back.
+  return "No se ha podido confirmar el resultado de la actualización. Comprueba el último estado de la fuente antes de repetirla.";
 }
 
 export default function SourceOverviewClient() {
@@ -157,6 +159,7 @@ export default function SourceOverviewClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    let syncWasRequested = false;
     try {
       if (firstImport) {
         const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST" });
@@ -164,6 +167,7 @@ export default function SourceOverviewClient() {
         if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
       }
 
+      syncWasRequested = true;
       const response = await fetch("/api/source/google/sync", { method: "POST", cache: "no-store" });
       const payload = await readJson<SyncResult>(response);
       if (!response.ok) throw new Error(actionError(payload.error));
@@ -180,7 +184,10 @@ export default function SourceOverviewClient() {
       });
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se ha podido completar la actualización.");
+      // Only a status GET may follow an ambiguous mutation response. Never
+      // automatically repeat the POST: a first attempt could have committed.
+      if (syncWasRequested) await load();
+      setError(cause instanceof Error ? cause.message : "No se ha podido confirmar el resultado de la actualización. Consulta el estado antes de repetirla.");
     } finally {
       setBusy(false);
     }

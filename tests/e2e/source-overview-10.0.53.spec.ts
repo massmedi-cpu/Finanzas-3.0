@@ -10,6 +10,8 @@ type MockOptions = {
   syncPosts?: string[];
   preflightPosts?: string[];
   finishedAt?: string;
+  syncPostError?: boolean;
+  syncGetRequests?: string[];
 };
 
 async function mockSourceOverview(page: Page, options: MockOptions = {}) {
@@ -62,6 +64,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   await page.route(SYNC_ROUTE, async (route) => {
     if (route.request().method() === "POST") {
       syncPosts.push(route.request().url());
+      if (options.syncPostError) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "gateway_unavailable" }) });
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -78,6 +84,7 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
       return;
     }
 
+    options.syncGetRequests?.push(route.request().url());
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -180,4 +187,22 @@ test("REC-SYNC-196 · Fuente bancaria distingue una comprobación reciente", asy
   await page.goto("/configuration/source");
   await expect(page.getByRole("group", { name: "Resumen de la fuente bancaria" })).toContainText("Comprobación reciente");
   await expect(page.getByRole("status").filter({ hasText: "Comprueba la actualización" })).toHaveCount(0);
+});
+
+
+test("REC-SYNC-199 · un POST sin respuesta concluyente no se reintenta ni promete rollback", async ({ page }) => {
+  const syncPosts: string[] = [];
+  const syncGetRequests: string[] = [];
+  await mockSourceOverview(page, { syncPosts, syncGetRequests, syncPostError: true });
+  await page.goto("/configuration/source");
+  await expect.poll(() => syncGetRequests.length).toBe(1);
+
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  const error = page.locator(".config-message.error");
+  await expect(error).toContainText("No se ha podido confirmar el resultado de la actualización");
+  await expect(error).toContainText("antes de repetirla");
+  await expect(error).not.toContainText("datos existentes siguen intactos");
+  await expect.poll(() => syncGetRequests.length).toBe(2);
+  expect(syncPosts).toHaveLength(1);
+  await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
 });
