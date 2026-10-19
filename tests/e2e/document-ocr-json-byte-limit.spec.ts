@@ -1,3 +1,4 @@
+import { errorResponse as ocrReviewError } from "../../app/api/documents/ocr-review/route";
 import { expect, test } from "@playwright/test";
 import {
   LimitedJsonRequestError,
@@ -69,7 +70,7 @@ test("REC-OCR-MEM-005 · malformed or non-UTF8 input never produces a partial re
   }
 });
 
-test("REC-OCR-MEM-006 · oversized review route returns HTTP 413 without gateway write", async ({ request }) => {
+test("REC-OCR-MEM-006 · oversized anonymous review is blocked before parsing", async ({ request }) => {
   const response = await request.patch("/api/documents/ocr-review", {
     headers: { "content-type": "application/json" },
     data: JSON.stringify({
@@ -78,8 +79,15 @@ test("REC-OCR-MEM-006 · oversized review route returns HTTP 413 without gateway
       notes: "n".repeat(262145),
     }),
   });
-  expect(response.status()).toBe(413);
-  await expect(response.json()).resolves.toEqual({
+  expect(response.status()).toBe(401);
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  await expect(response.json()).resolves.toEqual({ error: "authentication_required" });
+});
+
+test("REC-OCR-MEM-007 · authorized oversized-body error remains mapped to HTTP 413", async () => {
+  const response = ocrReviewError(new LimitedJsonRequestError("too_large"));
+  expect(response.status).toBe(413);
+  expect(await response.json()).toEqual({
     error: "invalid_request", code: "document_review_too_large",
   });
 });
