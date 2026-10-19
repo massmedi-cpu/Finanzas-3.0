@@ -22,6 +22,7 @@ import {
   PersistenceGatewayError,
   callPersistenceGateway,
 } from "../../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { requireSourceSession, sourceWorkspaceAuthError } from "../../../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +78,9 @@ export async function resolveSourceStatusFileId(
 }
 
 export async function GET() {
+  const missing = await requireSourceSession();
+  if (missing) return missing;
+
   try {
     const sourceFileId = await resolveSourceStatusFileId();
     const status = await callPersistenceGateway<GatewaySourceStatus>("source.status", {
@@ -117,6 +121,9 @@ export async function GET() {
       { headers: HEADERS },
     );
   } catch (error) {
+    const denied = sourceWorkspaceAuthError(error);
+    if (denied) return denied;
+
     console.error(
       "google-source-status",
       error instanceof PersistenceGatewayError

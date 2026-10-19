@@ -242,7 +242,11 @@ export default function SourceClient() {
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
 
-      if (!googleResponse.ok && googlePayload.configured) {
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
+        setError("Inicia sesión para consultar la fuente bancaria.");
+      } else if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 403)) {
+        setError("Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+      } else if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se han podido comprobar las condiciones para sincronizar de forma segura.");
@@ -404,7 +408,12 @@ export default function SourceClient() {
         </div>
       </header>
 
-      {error && <div className="config-message error" role="alert">{error}</div>}
+      {error && <div className="config-message error" role="alert">
+        {error}
+        {error === "Inicia sesión para consultar la fuente bancaria." && (
+          <> <a href="/login?next=%2Fconfiguration%2Fsource">Iniciar sesión</a></>
+        )}
+      </div>}
       {notice && <div className={`config-message ${notice.tone}`} role="status">{notice.message}</div>}
 
       {loading ? (

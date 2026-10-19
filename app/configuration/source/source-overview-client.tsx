@@ -130,7 +130,11 @@ export default function SourceOverviewClient() {
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
 
-      if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
+        setError("Inicia sesión para consultar la fuente bancaria.");
+      } else if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 403)) {
+        setError("Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+      } else if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
       else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido comprobar si la actualización está disponible.");
       } else if (!syncResponse.ok) setError("No se ha podido consultar la última actualización.");
@@ -228,7 +232,12 @@ export default function SourceOverviewClient() {
         </div>
       </header>
 
-      {error && <div className="config-message error" role="alert">{error}</div>}
+      {error && <div className="config-message error" role="alert">
+        {error}
+        {error === "Inicia sesión para consultar la fuente bancaria." && (
+          <> <Link prefetch={false} href="/login?next=%2Fconfiguration%2Fsource">Iniciar sesión</Link></>
+        )}
+      </div>}
       {notice && <div className={`config-message ${notice.tone}`} role="status">{notice.message}</div>}
 
       {loading ? (

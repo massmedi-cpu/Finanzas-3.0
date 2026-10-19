@@ -11,6 +11,7 @@ type MockOptions = {
   preflightPosts?: string[];
   finishedAt?: string;
   syncPostError?: boolean;
+  authRequired?: boolean;
   malformedSyncSuccess?: boolean;
   malformedPreflightSuccess?: boolean;
   syncGetRequests?: string[];
@@ -21,6 +22,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   const preflightPosts = options.preflightPosts ?? [];
 
   await page.route(STATUS_ROUTE, async (route) => {
+    if (options.authRequired) {
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "authentication_required" }) });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -40,6 +45,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   });
 
   await page.route(RUNTIME_ROUTE, async (route) => {
+    if (options.authRequired) {
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "authentication_required" }) });
+      return;
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -79,6 +88,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   });
 
   await page.route(SYNC_ROUTE, async (route) => {
+    if (options.authRequired) {
+      await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "authentication_required" }) });
+      return;
+    }
     if (route.request().method() === "POST") {
       syncPosts.push(route.request().url());
       if (options.syncPostError) {
@@ -251,4 +264,14 @@ test("REC-SYNC-201 · la respuesta de sync HTTP 200 con contadores inválidos no
   await expect.poll(() => syncGetRequests.length).toBe(2);
   expect(syncPosts).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
+});
+
+
+test("REC-AUTH-204 · la fuente bancaria ofrece acceso sin revelar metadatos al usuario anónimo", async ({ page }) => {
+  await mockSourceOverview(page, { authRequired: true });
+  await page.goto("/configuration/source");
+  await expect(page.getByRole("alert")).toContainText("Inicia sesión para consultar la fuente bancaria.");
+  await expect(page.getByRole("link", { name: "Iniciar sesión" })).toHaveAttribute("href", "/login?next=%2Fconfiguration%2Fsource");
+  await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
 });
