@@ -161,7 +161,14 @@ jobs:
             ];
             for (const path of privateDocuments) {
               const { response, body } = await jsonGet(path);
-              if (response.status !== 403 || body.code !== 'workspace_context_required') {
+              const privateHistory = path.startsWith('/api/documents/ocr-review?');
+              const denied = privateHistory
+                ? response.status === 401 && body.error === 'authentication_required'
+                : response.status === 403 && body.code === 'workspace_context_required';
+              if (!denied) {
+                // Diagnostic metadata only: never log a response body.
+                console.log('DOCUMENT_BOUNDARY|unexpected_http=' + response.status +
+                  '|expected_history_auth=' + privateHistory + '|path=' + path);
                 throw new Error('anonymous_document_access_not_denied_' + path);
               }
               if (['document', 'documents', 'connection', 'url', 'bytes',
