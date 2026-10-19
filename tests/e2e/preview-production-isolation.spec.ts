@@ -88,7 +88,7 @@ test("PRE-003 Vercel postbuild valida la frontera de workspace sin abrir lectura
 test("PRE-003 el test remoto de la preview no puede intentar ninguna mutación", () => {
   // This is a production-backed preview. Never use remote write requests
   // to prove a broken write guard: such a test would mutate real data.
-  expect(livePreviewTestSource).not.toMatch(/\\brequest\\.(?:post|put|patch|delete)\\s*\\(/i);
-  expect(livePreviewTestSource).not.toMatch(/\\bmethod\\s*:\\s*["'`](?:POST|PUT|PATCH|DELETE)["'`]/i);
+  expect(livePreviewTestSource).not.toMatch(/\brequest\.(?:post|put|patch|delete)\s*\(/i);
+  expect(livePreviewTestSource).not.toMatch(/\bmethod\s*:\s*["'`](?:POST|PUT|PATCH|DELETE)["'`]/i);
   expect(livePreviewTestSource).toContain('request.get("/api/configuration")');
 });
