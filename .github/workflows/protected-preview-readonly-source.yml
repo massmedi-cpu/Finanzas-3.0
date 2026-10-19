@@ -1,0 +1,145 @@
+name: Protected Preview Readonly Source Boundary
+
+on:
+  pull_request:
+    branches:
+      - main
+      - chat/twenty-one-routes-responsive-shell-20261010
+    paths:
+      - '.github/workflows/protected-preview-readonly-source.yml'
+      - 'src/infrastructure/auth/**'
+      - 'app/api/source/google/**'
+      - 'app/api/health/source-runtime/route.ts'
+      - 'app/api/build/route.ts'
+      - 'proxy.ts'
+
+permissions:
+  contents: read
+  deployments: read
+  id-token: write
+
+concurrency:
+  group: source-preview-readonly-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  anonymous-source-boundary:
+    # Never give a forked PR an ID token; don't run mutations or use DB secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Mint ephemeral OIDC token (never print it)
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Find successful Vercel preview for exact candidate SHA
+        id: preview
+        uses: actions/github-script@v8
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const wanted = process.env.EXPECTED_SHA;
+            if (!/^[0-9a-f]{40}$/.test(wanted)) throw new Error('invalid_candidate_sha');
+            for (let attempt = 0; attempt < 36; attempt++) {
+              const list = await github.rest.repos.listDeployments({
+                owner, repo, sha: wanted, per_page: 50,
+              });
+              for (const dep of list.data) {
+                if (dep.environment?.toLowerCase().includes('production')) continue;
+                const states = await github.rest.repos.listDeploymentStatuses({
+                  owner, repo, deployment_id: dep.id, per_page: 30,
+                });
+                const match = states.data.find((s) => {
+                  const url = s.environment_url || s.target_url || '';
+                  return s.state === 'success' &&
+                    /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/i.test(url) &&
+                    !/financialapp-home\.vercel\.app/i.test(url);
+                });
+                if (match) {
+                  const url = (match.environment_url || match.target_url).replace(/\/$/, '');
+                  core.setOutput('url', url);
+                  core.info('Located SHA-bound non-production Vercel preview');
+                  return;
+                }
+              }
+              if (attempt < 35) await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+            core.setFailed('No successful Vercel preview deployment for the exact PR commit');
+
+      - name: Prove exact deployed SHA and anonymous GET-only restrictions
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: |
+          node <<'NODE'
+          const url = process.env.PREVIEW_URL || '';
+          const sha = process.env.EXPECTED_SHA || '';
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+          if (!/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(url) ||
+              !/^[0-9a-f]{40}$/.test(sha) || !token) {
+            throw new Error('preview_or_oidc_missing');
+          }
+          const headers = {
+            'x-vercel-trusted-oidc-idp-token': token,
+            'accept': 'application/json',
+            'cache-control': 'no-store',
+          };
+          async function jsonGet(path) {
+            const response = await fetch(url + path, {
+              method: 'GET', redirect: 'manual', headers,
+              signal: AbortSignal.timeout(20000),
+            });
+            if (response.status >= 300 && response.status < 400) {
+              throw new Error('unexpected_redirect_' + path);
+            }
+            const body = await response.json().catch(() => null);
+            if (!body || typeof body !== 'object') {
+              throw new Error('non_json_response_' + path);
+            }
+            return { response, body };
+          }
+          (async () => {
+            const build = await jsonGet('/api/build');
+            if (build.response.status !== 200 || build.body.commit !== sha) {
+              throw new Error('preview_commit_mismatch_or_protection_not_bypassed');
+            }
+            console.log('SOURCE_BOUNDARY|build=exact_sha|environment=preview');
+            const paths = [
+              '/api/source/google/status',
+              '/api/source/google/sync',
+              '/api/health/source-runtime',
+              '/api/source/google/connect',
+            ];
+            for (const path of paths) {
+              const { response, body } = await jsonGet(path);
+              if (response.status !== 401 || body.error !== 'authentication_required') {
+                throw new Error('anonymous_access_not_denied_' + path);
+              }
+              if (['connection', 'accountEmail', 'authMode',
+                  'capabilities', 'run', 'cursors', 'sourceFileId',
+                  'sourceFileName', 'configured'].some((key) => key in body)) {
+                throw new Error('anonymous_metadata_disclosed_' + path);
+              }
+              const cache = response.headers.get('cache-control') ?? '';
+              if (!cache.toLowerCase().includes('no-store')) {
+                throw new Error('anonymous_response_cacheable_' + path);
+              }
+              console.log('SOURCE_BOUNDARY|anonymous_get_denied|' + path);
+            }
+          })().catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+          });
+          NODE
+
+      # All checks are HTTP GET, without any Google preflight, mutation,
+      # OAuth token exchange, bank sync or private financial data in logs.
