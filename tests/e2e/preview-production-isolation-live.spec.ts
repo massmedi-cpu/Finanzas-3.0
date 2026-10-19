@@ -2,42 +2,22 @@ import { expect, test } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
-test("PRE-003 protected preview fails closed without workspace session for reads and writes", async ({ request }) => {
+test("PRE-003 protected preview denies workspace reads without session (GET-only)", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
 
-  const before = await request.get("/api/configuration");
-  expect(before.status()).toBe(403);
-  await expect(before.json()).resolves.toEqual({
-    error: "persistence_failed",
-    code: "workspace_context_required",
-  });
-
-  const blocked = await request.post("/api/configuration", {
-    data: {
-      operation: "account.create",
-      draft: {
-        name: `PRE003-PREVIEW-BLOCK-${Date.now()}`,
-        institution: "PRE-003 isolation probe",
-        type: "checking",
-        openingBalanceCents: 12345,
-        lifecycle: "active",
-        sortOrder: 9999,
-      },
-    },
-  });
-
-  expect(blocked.status()).toBe(403);
-  await expect(blocked.json()).resolves.toEqual({
-    error: "persistence_failed",
-    code: "workspace_context_required",
-  });
-
-  const after = await request.get("/api/configuration");
-  expect(after.status()).toBe(403);
-  await expect(after.json()).resolves.toEqual({
-    error: "persistence_failed",
-    code: "workspace_context_required",
-  });
+  // PRE-003 must NEVER issue account.create or any other live POST here:
+  // the preview points to the production database and a regression in its
+  // security boundary must not turn a safety test into an unintended write.
+  // Separate PRE-003 gateway source checks prove the preview's write deny
+  // occurs before obtaining the PostgreSQL connection.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const response = await request.get("/api/configuration");
+    expect(response.status()).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "persistence_failed",
+      code: "workspace_context_required",
+    });
+  }
 });
 
 
