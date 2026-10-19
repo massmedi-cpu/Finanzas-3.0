@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - 'commercial-readiness/**'
+  pull_request:
+    branches:
+      - main
+      - chat/twenty-one-routes-responsive-shell-20261010
+    paths:
+      - 'src/infrastructure/auth/**'
+      - 'app/api/source/google/**'
+      - 'app/api/health/source-runtime/**'
+      - 'tests/e2e/preview-production-isolation-live.spec.ts'
+      - '.github/workflows/gate4-protected-workspace-boundary.yml'
 
 permissions:
   contents: read
@@ -12,6 +22,9 @@ jobs:
   protected-workspace-boundary:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     permissions:
       contents: read
       deployments: read
@@ -39,7 +52,7 @@ jobs:
               const deployments = await github.rest.repos.listDeployments({
                 owner,
                 repo,
-                sha: context.sha,
+                sha: process.env.CANDIDATE_SHA,
                 per_page: 30,
               });
               for (const deployment of deployments.data) {
@@ -62,7 +75,7 @@ jobs:
               }
               await sleep(5000);
             }
-            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+            core.setFailed(`No successful Vercel deployment was found for ${process.env.CANDIDATE_SHA}.`);
 
       - name: Verify exact deployed SHA
         env:
@@ -79,10 +92,13 @@ jobs:
           code=$(curl --silent --show-error --output /tmp/build.json --write-out "%{http_code}" -H "$auth_header" "$VERCEL_PREVIEW_URL/api/build")
           test "$code" = "200"
           deployed_sha=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/build.json','utf8'));process.stdout.write(j.commit||'')")
-          test "$deployed_sha" = "$GITHUB_SHA"
+          test "$deployed_sha" = "$CANDIDATE_SHA"
 
       - name: Checkout exact commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -100,7 +116,7 @@ jobs:
           npm run release:manifest -- \
             --build-info /tmp/build.json \
             --output /tmp/gate4-release-manifest.json \
-            --expected-sha "$GITHUB_SHA" \
+            --expected-sha "$CANDIDATE_SHA" \
             --tag "$tag" \
             --expected-environment preview
 

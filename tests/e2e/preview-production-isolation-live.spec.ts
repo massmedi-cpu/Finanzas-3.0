@@ -39,3 +39,27 @@ test("PRE-003 protected preview fails closed without workspace session for reads
     code: "workspace_context_required",
   });
 });
+
+
+test("REC-AUTH-209 · preview protegida no expone conexión de Google sin sesión de Financial App", async ({ request }) => {
+  test.skip(!isProtectedPreview, "requires exact protected preview and trusted bypass");
+  // Safe GETs only. Never invoke a real source preflight, sync, DELETE or mutation.
+  const result = await request.get("/api/source/google/status");
+  expect(result.status()).toBe(401);
+  expect(result.headers()["cache-control"]).toContain("no-store");
+  const body = await result.json();
+  expect(body).toEqual({ error: "authentication_required" });
+  expect(body).not.toHaveProperty("connection");
+  expect(body).not.toHaveProperty("accountEmail");
+  expect(body).not.toHaveProperty("authMode");
+});
+
+test("REC-AUTH-210 · preview protegida rechaza lectura de estado financiero sin sesión", async ({ request }) => {
+  test.skip(!isProtectedPreview, "requires exact protected preview and trusted bypass");
+  for (const path of ["/api/health/source-runtime", "/api/source/google/sync"]) {
+    const result = await request.get(path);
+    expect(result.status()).toBe(401);
+    const body = await result.json();
+    expect(body).toEqual({ error: "authentication_required" });
+  }
+});
