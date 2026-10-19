@@ -4,11 +4,19 @@ on:
   pull_request:
     branches:
       - main
+      - chat/twenty-one-routes-responsive-shell-20261010
     paths:
       - "proxy.ts"
       - "src/infrastructure/auth/**"
       - "tests/e2e/production-auth.spec.ts"
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - "tests/e2e/source-metadata-auth-boundary.spec.ts"
+      - "tests/e2e/source-overview-10.0.53.spec.ts"
+      - "app/api/source/google/status/route.ts"
+      - "app/api/source/google/sync/route.ts"
+      - "app/api/health/source-runtime/route.ts"
+      - "app/configuration/source/source-client.tsx"
+      - "app/configuration/source/source-overview-client.tsx"
       - ".github/workflows/auth-session-regression.yml"
   push:
     branches:
@@ -18,6 +26,13 @@ on:
       - "src/infrastructure/auth/**"
       - "tests/e2e/production-auth.spec.ts"
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - "tests/e2e/source-metadata-auth-boundary.spec.ts"
+      - "tests/e2e/source-overview-10.0.53.spec.ts"
+      - "app/api/source/google/status/route.ts"
+      - "app/api/source/google/sync/route.ts"
+      - "app/api/health/source-runtime/route.ts"
+      - "app/configuration/source/source-client.tsx"
+      - "app/configuration/source/source-overview-client.tsx"
       - ".github/workflows/auth-session-regression.yml"
   workflow_dispatch:
 
@@ -55,6 +70,8 @@ jobs:
           npm run test:e2e --
           tests/e2e/production-auth.spec.ts
           tests/e2e/auth-refresh-request-propagation.spec.ts
+          tests/e2e/source-metadata-auth-boundary.spec.ts
+          tests/e2e/source-overview-10.0.53.spec.ts
           --project=chromium-desktop
 
       - name: Upload Playwright report on failure
