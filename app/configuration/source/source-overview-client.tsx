@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import styles from "./source-overview.module.css";
 
 type GoogleConnection = {
@@ -147,7 +147,10 @@ export default function SourceOverviewClient() {
   const firstImport = connected && syncStatus.cursors.length === 0;
   const run = syncStatus.run;
   const incidents = useMemo(() => incidentSummary(run), [run]);
-  const hasProblem = run?.status === "failed" || (run?.rowsFailed ?? 0) > 0 || Boolean(incidents);
+  const hasProblem = run?.status === "failed" || run?.status === "partial"
+    || (run?.rowsFailed ?? 0) > 0 || Boolean(incidents);
+  const staleSuccess = run?.status === "success" && !hasProblem
+    && !hasRecentSourceSyncEvidence(run);
 
   async function updateFromGoogle() {
     if (!connected || !runtimeReady || busy) return;
@@ -189,9 +192,11 @@ export default function SourceOverviewClient() {
       ? "Requiere atención"
       : hasProblem
         ? "Requiere revisión"
-        : run?.status === "success"
-          ? "Al día"
-          : "Preparada";
+        : run?.status === "started"
+          ? "Actualizando"
+          : run?.status === "success"
+            ? staleSuccess ? "Pendiente de comprobar" : "Comprobación reciente"
+            : "Preparada";
 
   return (
     <main className="configuration-shell">
@@ -252,6 +257,13 @@ export default function SourceOverviewClient() {
                     ? "La última actualización no terminó correctamente. Los datos anteriores siguen disponibles."
                     : incidents ?? "La actualización contiene avisos."}
                 </p>
+              </div>
+            )}
+
+            {staleSuccess && (
+              <div className={styles.warning} role="status">
+                <strong>Comprueba la actualización</strong>
+                <p>La última sincronización correcta tiene más de 48 horas o una fecha futura. No demuestra que los movimientos de Google estén actualizados.</p>
               </div>
             )}
 

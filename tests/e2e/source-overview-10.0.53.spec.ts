@@ -9,6 +9,7 @@ type MockOptions = {
   firstImport?: boolean;
   syncPosts?: string[];
   preflightPosts?: string[];
+  finishedAt?: string;
 };
 
 async function mockSourceOverview(page: Page, options: MockOptions = {}) {
@@ -86,8 +87,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
           sourceFileId: "source-file",
           sourceRevision: "rev-1",
           status: "success",
-          startedAt: "2026-10-02T07:55:00.000Z",
-          finishedAt: "2026-10-02T08:00:00.000Z",
+          startedAt: options.finishedAt
+            ? new Date(Date.parse(options.finishedAt) - 60_000).toISOString()
+            : "2026-10-02T07:55:00.000Z",
+          finishedAt: options.finishedAt ?? "2026-10-02T08:00:00.000Z",
           rowsSeen: 120,
           rowsInserted: 0,
           rowsRevised: 0,
@@ -159,4 +162,22 @@ test("Detalles técnicos conserva la superficie de diagnóstico avanzada", async
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByText("TRAZABILIDAD", { exact: true })).toBeVisible();
   await expect(page.getByText("Pestañas físicas", { exact: true })).toBeVisible();
+});
+
+
+test("REC-SYNC-195 · Fuente bancaria no acredita actualidad con un recibo antiguo", async ({ page }) => {
+  await mockSourceOverview(page);
+  await page.goto("/configuration/source");
+  const state = page.getByRole("group", { name: "Resumen de la fuente bancaria" });
+  await expect(state).toContainText("Pendiente de comprobar");
+  await expect(state).not.toContainText("Al día");
+  await expect(page.getByRole("status").filter({ hasText: "Comprueba la actualización" })).toContainText("más de 48 horas");
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeVisible();
+});
+
+test("REC-SYNC-196 · Fuente bancaria distingue una comprobación reciente", async ({ page }) => {
+  await mockSourceOverview(page, { finishedAt: new Date(Date.now() - 60_000).toISOString() });
+  await page.goto("/configuration/source");
+  await expect(page.getByRole("group", { name: "Resumen de la fuente bancaria" })).toContainText("Comprobación reciente");
+  await expect(page.getByRole("status").filter({ hasText: "Comprueba la actualización" })).toHaveCount(0);
 });

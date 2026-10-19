@@ -20,8 +20,8 @@ const successPayload: SourcePayload = {
   latestMovementDate: "2026-09-27",
   sync: {
     status: "success",
-    finishedAt: "2026-09-28T10:15:00.000Z",
-    startedAt: "2026-09-28T10:14:00.000Z",
+    finishedAt: new Date(Date.now() - 60_000).toISOString(),
+    startedAt: new Date(Date.now() - 120_000).toISOString(),
     rowsSeen: 1248,
     rowsFailed: 0,
     rowsMissing: 0,
@@ -216,4 +216,33 @@ test("10.0.29 · el estado es usable a 320 px, sin overflow y con acciones táct
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+});
+
+
+test("REC-SYNC-197 · la banda transversal no certifica un sync antiguo aunque figure como success", async ({ page }) => {
+  await isolateData(page, {
+    ...successPayload,
+    sync: {
+      ...successPayload.sync!,
+      finishedAt: "2026-09-28T10:15:00.000Z",
+      startedAt: "2026-09-28T10:14:00.000Z",
+    },
+  });
+  await page.goto("/transactions");
+  const region = sourceRegion(page);
+  await expect(region.getByRole("status")).toContainText("Sincronización pendiente de comprobar");
+  await expect(region.getByRole("status")).toContainText("48 horas");
+  await expect(region.getByRole("status")).not.toContainText("Fuente comprobada");
+  await expect(region.getByRole("link", { name: "Revisar fuente" })).toHaveAttribute("href", "/configuration/source");
+});
+
+test("REC-SYNC-198 · un sello de fecha futura no es una comprobación bancaria reciente", async ({ page }) => {
+  await isolateData(page, {
+    ...successPayload,
+    sync: { ...successPayload.sync!, finishedAt: new Date(Date.now() + 3_600_000).toISOString() },
+  });
+  await page.goto("/accounts");
+  const region = sourceRegion(page);
+  await expect(region.getByRole("status")).toContainText("Sincronización pendiente de comprobar");
+  await expect(region.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
 });
