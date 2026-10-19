@@ -256,12 +256,17 @@ function retailVatCells(text: string) {
   // Four cells: rate, base, quota, row total. Six add recargo rate and
   // quota before the row total. Reject partial/misaligned OCR tokens.
   if (cells.length !== 4 && cells.length !== 6) return null;
-  if (!cells.every((cell) => exactFinancialAmountMatches(cell).some((match) => match[0] === cell))) return null;
-  const values = cells.map(parseMoneyCents);
+  // A heading "TIPO %" may print rates as 10, 10% or 10,00.
+  // Rates are percentages rather than amounts; validate them separately so
+  // integer rates do not loosen the monetary cell acceptance contract.
+  const rateCell = cells[0].replace(/%$/, "");
+  if (!/^(?:\d{1,2}|100)(?:[,.]\d{1,2})?$/.test(rateCell)) return null;
+  if (!cells.slice(1).every((cell) => exactFinancialAmountMatches(cell).some((match) => match[0] === cell))) return null;
+  const values = cells.slice(1).map(parseMoneyCents);
   if (values.some((value) => value === null)) return null;
-  const ratePercent = Number(cells[0].replace(",", "."));
+  const ratePercent = Number(rateCell.replace(",", "."));
   if (!Number.isFinite(ratePercent) || ratePercent < 0 || ratePercent > 100) return null;
-  return { ratePercent, baseCents: values[1]!, taxCents: values[2]! };
+  return { ratePercent, baseCents: values[0]!, taxCents: values[1]! };
 }
 
 function retailVatHeaderForRow(lines: LocatedLine[], index: number): LocatedLine | null {

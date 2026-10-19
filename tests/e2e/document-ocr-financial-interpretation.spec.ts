@@ -66,6 +66,38 @@ test("REC-OCR-143 · a repeated recipient's legal name cannot masquerade as the 
   expect(interpreted.issuer.value).toBeNull();
 });
 
+test("REC-OCR-147 · retail VAT tables recognise integer and percent-suffixed rates without misreading amounts", () => {
+  for (const printedRate of ["10", "10%", "10,00"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("tax-header", "TIPO % IMPUESTO BASE CUOTA TOTAL", 0.99, 0.12),
+      line("tax-data", `IVA ${printedRate} 25,37 2,54 27,91`, 0.99, 0.18),
+      line("payable", "IMPORTE TOTAL 27,91 €", 0.99, 0.80),
+    ]));
+    expect(parsed.taxLines).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        ratePercent: 10,
+        baseCents: 2537,
+        taxCents: 254,
+        trust: "doubtful",
+      }),
+    ]));
+    expect(parsed.totalCents.value).toBe(2791);
+  }
+});
+
+test("REC-OCR-148 · malformed or over-100-percent tax types do not become fiscal evidence", () => {
+  for (const printedRate of ["10,000", "10%%", "101", "1e2"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("tax-header", "TIPO % IMPUESTO BASE CUOTA TOTAL", 0.99, 0.12),
+      line("tax-data", `IVA ${printedRate} 25,37 2,54 27,91`, 0.99, 0.18),
+      line("payable", "IMPORTE TOTAL 27,91 €", 0.99, 0.80),
+    ]));
+    expect(parsed.taxLines.some((entry) =>
+      entry.ratePercent === 10 && entry.baseCents === 2537 && entry.taxCents === 254,
+    )).toBe(false);
+  }
+});
+
 function line(id: string, text: string, confidence = 0.95, y = 0.1): OcrLine {
   return {
     id,
