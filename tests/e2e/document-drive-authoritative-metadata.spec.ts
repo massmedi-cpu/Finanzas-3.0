@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../src/infrastructure/google/google-drive-document-discovery";
 import { registerAtomicDriveDocumentBatch } from "../../src/domain/atomic-drive-document-batch";
 import {
   GOOGLE_DRIVE_OCR_MAX_BYTES,
@@ -352,4 +353,68 @@ test("REC-DRIVE-139 · each metadata/media read has an independent abort deadlin
   expect(original.sizeBytes).toBe(Buffer.byteLength(pdf));
   expect(signals).toHaveLength(3);
   expect(new Set(signals).size).toBe(3);
+});
+
+
+test("REC-DOC-AUTH-222 · ID fuera de la carpeta impide obtener bytes", async () => {
+  let metadataCalls = 0;
+  let mediaCalls = 0;
+  const fetcher: typeof fetch = async (input) => {
+    if (String(input).includes("?fields=")) {
+      metadataCalls++;
+      return Response.json({ id: fileId, name: "externo.pdf", mimeType: "application/pdf",
+        size: String(Buffer.byteLength(pdf)), modifiedTime: authoritativeDate,
+        parents: ["unrelatedDriveFolder123"], trashed: false });
+    }
+    mediaCalls++;
+    return new Response(pdf);
+  };
+  const reader = new GoogleDriveDocumentDownloader({ getAccessToken: async () => "mock" }, fetcher);
+  await expect(reader.download({ fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID }))
+    .rejects.toMatchObject({ code: "google_drive_document_access_denied" });
+  expect(metadataCalls).toBe(1);
+  expect(mediaCalls).toBe(0);
+});
+
+test("REC-DOC-AUTH-223 · mover archivo fuera de carpeta invalida snapshot", async () => {
+  let metadataCalls = 0;
+  let mediaCalls = 0;
+  const fetcher: typeof fetch = async (input) => {
+    if (String(input).includes("?fields=")) {
+      metadataCalls++;
+      return Response.json({ id: fileId, name: "factura.pdf", mimeType: "application/pdf",
+        size: String(Buffer.byteLength(pdf)), modifiedTime: authoritativeDate, version: "7",
+        parents: metadataCalls === 1 ? [FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID] : ["unrelatedDriveFolder123"],
+        trashed: false });
+    }
+    mediaCalls++;
+    return new Response(pdf, { headers: { "content-length": String(Buffer.byteLength(pdf)) } });
+  };
+  const reader = new GoogleDriveDocumentDownloader({ getAccessToken: async () => "mock" }, fetcher);
+  await expect(reader.download({ fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID }))
+    .rejects.toMatchObject({ code: "google_drive_document_source_changed" });
+  expect(metadataCalls).toBe(2);
+  expect(mediaCalls).toBe(1);
+});
+
+test("REC-DOC-AUTH-224 · archivo autorizado pasa y batch manual transmite carpeta", async () => {
+  let mediaCalls = 0;
+  const fetcher: typeof fetch = async (input) => {
+    if (String(input).includes("?fields=")) return Response.json({
+      id: fileId, name: "factura.pdf", mimeType: "application/pdf",
+      size: String(Buffer.byteLength(pdf)), modifiedTime: authoritativeDate,
+      version: "8", parents: [FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID], trashed: false,
+    });
+    mediaCalls++;
+    return new Response(pdf, { headers: { "content-length": String(Buffer.byteLength(pdf)) } });
+  };
+  const reader = new GoogleDriveDocumentDownloader({ getAccessToken: async () => "mock" }, fetcher);
+  const result = await reader.download({ fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID });
+  expect(result.mimeType).toBe("application/pdf");
+  expect(mediaCalls).toBe(1);
+  expect(readFileSync("app/api/documents/route.ts", "utf8"))
+    .toContain("expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID");
 });

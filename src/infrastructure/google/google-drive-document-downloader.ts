@@ -22,6 +22,7 @@ type DriveMetadata = {
   trashed?: unknown;
   modifiedTime?: unknown;
   version?: unknown;
+  parents?: unknown;
 };
 
 export class GoogleDriveDocumentError extends Error {
@@ -137,9 +138,14 @@ export class GoogleDriveDocumentDownloader {
     expectedMimeType: string;
     expectedModifiedTime?: string;
     expectedSizeBytes?: number;
+    expectedAuthorizedFolderId?: string;
   }) {
     const fileId = input.fileId.trim();
     const expectedMimeType = input.expectedMimeType.trim().toLowerCase();
+    const authorizedFolder = input.expectedAuthorizedFolderId?.trim() ?? null;
+    if (authorizedFolder !== null && !FILE_ID.test(authorizedFolder)) {
+      throw new GoogleDriveDocumentError("google_drive_document_id_invalid", "La carpeta Drive autorizada no es válida.");
+    }
     if (!FILE_ID.test(fileId)) {
       throw new GoogleDriveDocumentError(
         "google_drive_document_id_invalid",
@@ -164,7 +170,7 @@ export class GoogleDriveDocumentDownloader {
     const encodedId = encodeURIComponent(fileId);
     const metadataUrl =
       `https://www.googleapis.com/drive/v3/files/${encodedId}` +
-      "?fields=id,name,mimeType,size,modifiedTime,version,trashed&supportsAllDrives=true";
+      "?fields=id,name,mimeType,size,modifiedTime,version,trashed,parents&supportsAllDrives=true";
     const metadataResponse = await this.fetcher(metadataUrl, {
       method: "GET",
       headers: googleHeaders(accessToken),
@@ -188,6 +194,15 @@ export class GoogleDriveDocumentDownloader {
       throw new GoogleDriveDocumentError(
         "google_drive_document_metadata_invalid",
         "Google Drive no ha devuelto metadatos íntegros del archivo original.",
+      );
+    }
+    // A service-account grant on another folder does not authorize importing
+    // a browser-supplied file ID. Reject BEFORE any media bytes are fetched.
+    if (authorizedFolder !== null && (!Array.isArray(metadata?.parents)
+      || !metadata.parents.includes(authorizedFolder))) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_access_denied",
+        "Este archivo no pertenece a la carpeta documental autorizada.",
       );
     }
     if (mimeType !== expectedMimeType || !ALLOWED_MIMES.has(mimeType)) {
@@ -285,6 +300,15 @@ export class GoogleDriveDocumentDownloader {
     const finalMime = asNonEmptyString(finalMetadata?.mimeType)?.toLowerCase() ?? null;
     const finalModified = driveModifiedTime(finalMetadata?.modifiedTime);
     const finalVersion = driveVersion(finalMetadata?.version);
+    // A folder move between the pre/post media metadata checks invalidates
+    // the snapshot: never persist bytes from an external Drive directory.
+    if (authorizedFolder !== null && (!Array.isArray(finalMetadata?.parents)
+      || !finalMetadata.parents.includes(authorizedFolder))) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_source_changed",
+        "El documento salió de la carpeta autorizada durante la descarga.",
+      );
+    }
     if (asNonEmptyString(finalMetadata?.id) !== fileId || finalMetadata?.trashed === true
       || finalSize !== size || finalMime !== mimeType || finalName !== firstName
       || finalModified !== modifiedTime || finalVersion !== version) {

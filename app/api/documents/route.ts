@@ -17,6 +17,7 @@ import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/
 import { verifyDriveDocumentBatchMetadata } from "../../../src/application/document-drive-batch-verification";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import { requireVerifiedSourceWorkspace } from "../../../src/infrastructure/auth/source-metadata-access";
+import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../../src/infrastructure/google/google-drive-document-discovery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -301,7 +302,11 @@ export async function POST(request: Request) {
       // preserving original ordering and verifying *every* Drive revision.
       // A failed verification prevents the single downstream batch write.
       const verifiedFiles = await verifyDriveDocumentBatchMetadata(files, async (file) => {
-        const downloaded = await downloader.download({ fileId: file.fileId, expectedMimeType: file.mimeType });
+        const downloaded = await downloader.download({
+          fileId: file.fileId,
+          expectedMimeType: file.mimeType,
+          expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        });
         return {
           ...file,
           name: downloaded.fileName ?? file.name,
