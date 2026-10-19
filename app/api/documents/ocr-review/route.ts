@@ -136,6 +136,11 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  // Fail closed before reading or validating private OCR review data. A valid
+  // session alone is insufficient: membership must pass source.capabilities.
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
+
   try {
     const body = await readLimitedJsonRequest(request, MAX_REVIEW_JSON_BYTES);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid_document_review");
