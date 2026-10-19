@@ -16,6 +16,7 @@ import {
 import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/application/document-query-integer";
 import { verifyDriveDocumentBatchMetadata } from "../../../src/application/document-drive-batch-verification";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
+import { requireVerifiedSourceWorkspace } from "../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -286,6 +287,15 @@ export async function POST(request: Request) {
       if (new Set(files.map((file) => file.fileId)).size !== files.length) {
         throw new Error("invalid_document_drive_batch");
       }
+      // Block any production-backed preview before contacting Google. The
+      // gateway also rejects writes, but this route must not download files
+      // using its service account for unauthenticated requests.
+      if (process.env.VERCEL_ENV === "preview") {
+        return Response.json({ error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" }, { status: 409, headers: HEADERS });
+      }
+      const accessDenied = await requireVerifiedSourceWorkspace();
+      if (accessDenied) return accessDenied;
+
       const downloader = driveDownloader();
       // Bounded concurrency reduces latency for large imports, while
       // preserving original ordering and verifying *every* Drive revision.

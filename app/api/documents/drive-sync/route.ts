@@ -18,6 +18,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import { requireVerifiedSourceWorkspace } from "../../../../src/infrastructure/auth/source-metadata-access";
 import {
   DocumentDriveInventoryError,
   loadDocumentDriveInventory,
@@ -189,6 +190,12 @@ export async function POST() {
     );
   }
   try {
+    // A service account must never list or download private Drive documents
+    // on behalf of an anonymous or non-member browser, even if the final
+    // persistence gateway would reject the eventual write.
+    const accessDenied = await requireVerifiedSourceWorkspace();
+    if (accessDenied) return accessDenied;
+
     const readers = googleReaders();
     const existingPromise = existingDriveDocuments();
     const discoveredPromise = readers.discovery.listAuthorizedFolder(
