@@ -238,7 +238,22 @@ export default function SourceClient() {
         ? await jsonOrEmpty<SyncStatus>(syncResponse)
         : EMPTY_SYNC_STATUS;
 
-      setGoogle(googlePayload);
+      // Preserve no previous financial connection/preflight after an Auth
+      // denial, even when only one of the three endpoints denied the session.
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401 || r.status === 403)) {
+        setGoogle(null);
+        setRuntime(null);
+        setSyncStatus(EMPTY_SYNC_STATUS);
+        setPreflight(null);
+        setSyncResult(null);
+        setNotice(null);
+        setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
+          ? "Inicia sesión para consultar la fuente bancaria."
+          : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+        return;
+      }
+
+      setGoogle(googleResponse.ok ? googlePayload : null);
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
 
@@ -254,6 +269,12 @@ export default function SourceClient() {
         setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
     } catch {
+      setGoogle(null);
+      setRuntime(null);
+      setSyncStatus(EMPTY_SYNC_STATUS);
+      setPreflight(null);
+      setSyncResult(null);
+      setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
     } finally {
       setLoading(false);

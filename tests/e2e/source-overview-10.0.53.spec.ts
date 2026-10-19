@@ -12,6 +12,7 @@ type MockOptions = {
   finishedAt?: string;
   syncPostError?: boolean;
   authRequired?: boolean;
+  networkFailure?: boolean;
   malformedSyncSuccess?: boolean;
   malformedPreflightSuccess?: boolean;
   syncGetRequests?: string[];
@@ -22,6 +23,10 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   const preflightPosts = options.preflightPosts ?? [];
 
   await page.route(STATUS_ROUTE, async (route) => {
+    if (options.networkFailure) {
+      await route.abort("failed");
+      return;
+    }
     if (options.authRequired) {
       await route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ error: "authentication_required" }) });
       return;
@@ -280,3 +285,32 @@ test("REC-AUTH-204 · la fuente bancaria ofrece acceso sin revelar metadatos al 
   await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
 });
+
+
+for (const sourcePage of ["/configuration/source", "/configuration/source/diagnostics"]) {
+  test(`REC-AUTH-211 · ${sourcePage} oculta estado anterior si la sesión caduca`, async ({ page }) => {
+    const options: MockOptions = { finishedAt: new Date(Date.now() - 60_000).toISOString() };
+    await mockSourceOverview(page, options);
+    await page.goto(sourcePage);
+    const update = page.getByRole("button", { name: "Actualizar desde Google" });
+    await expect(update).toBeEnabled();
+    options.authRequired = true;
+    await page.getByRole("button", { name: "Comprobar estado" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Inicia sesión para consultar la fuente bancaria." })).toBeVisible();
+    await expect(update).toBeDisabled();
+    await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
+  });
+
+  test(`REC-AUTH-212 · ${sourcePage} falla cerrado tras perder la red`, async ({ page }) => {
+    const options: MockOptions = { finishedAt: new Date(Date.now() - 60_000).toISOString() };
+    await mockSourceOverview(page, options);
+    await page.goto(sourcePage);
+    const update = page.getByRole("button", { name: "Actualizar desde Google" });
+    await expect(update).toBeEnabled();
+    options.networkFailure = true;
+    await page.getByRole("button", { name: "Comprobar estado" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "No se ha podido leer el estado de la fuente bancaria." })).toBeVisible();
+    await expect(update).toBeDisabled();
+    await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
+  });
+}

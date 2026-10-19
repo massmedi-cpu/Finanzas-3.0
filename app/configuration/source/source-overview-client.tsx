@@ -126,7 +126,20 @@ export default function SourceOverviewClient() {
       const runtimePayload = await readJson<RuntimeHealth>(runtimeResponse);
       const syncPayload = syncResponse.ok ? await readJson<SyncStatus>(syncResponse) : EMPTY_SYNC_STATUS;
 
-      setGoogle(googlePayload);
+      // An expired session must never leave previously authenticated source
+      // metadata or actions visible while the next request is denied.
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401 || r.status === 403)) {
+        setGoogle(null);
+        setRuntime(null);
+        setSyncStatus(EMPTY_SYNC_STATUS);
+        setNotice(null);
+        setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
+          ? "Inicia sesión para consultar la fuente bancaria."
+          : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+        return;
+      }
+
+      setGoogle(googleResponse.ok ? googlePayload : null);
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
 
@@ -139,6 +152,12 @@ export default function SourceOverviewClient() {
         setError("No se ha podido comprobar si la actualización está disponible.");
       } else if (!syncResponse.ok) setError("No se ha podido consultar la última actualización.");
     } catch {
+      // Network failures do not prove that a former connection is still
+      // usable; fail closed and remove stale bank metadata and success notices.
+      setGoogle(null);
+      setRuntime(null);
+      setSyncStatus(EMPTY_SYNC_STATUS);
+      setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
     } finally {
       setLoading(false);
