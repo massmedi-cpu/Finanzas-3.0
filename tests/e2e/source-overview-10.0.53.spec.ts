@@ -314,3 +314,18 @@ for (const sourcePage of ["/configuration/source", "/configuration/source/diagno
     await expect(page.getByText("Movimientos bancarios - fuente")).toHaveCount(0);
   });
 }
+
+
+test("REC-AUTH-213 · callback Google no anuncia conexión tras sesión caducada", async ({ page }) => {
+  await mockSourceOverview(page, { authRequired: true });
+  await page.goto("/configuration/source/diagnostics?google=connected");
+  await expect(page.getByRole("alert").filter({ hasText: "Inicia sesión para consultar la fuente bancaria." })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Google se ha conectado" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
+});
+
+test("REC-AUTH-214 · callback Google conserva éxito si la conexión está comprobada", async ({ page }) => {
+  await mockSourceOverview(page);
+  await page.goto("/configuration/source/diagnostics?google=connected");
+  await expect(page.getByRole("status").filter({ hasText: "Google se ha conectado" })).toBeVisible();
+});

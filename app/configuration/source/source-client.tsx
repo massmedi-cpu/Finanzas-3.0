@@ -250,7 +250,7 @@ export default function SourceClient() {
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
           : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
-        return;
+        return false;
       }
 
       setGoogle(googleResponse.ok ? googlePayload : null);
@@ -268,6 +268,7 @@ export default function SourceClient() {
       } else if (!syncResponse.ok) {
         setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
+      return googleResponse.ok && googlePayload.connection?.connected === true;
     } catch {
       setGoogle(null);
       setRuntime(null);
@@ -276,6 +277,7 @@ export default function SourceClient() {
       setSyncResult(null);
       setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -287,8 +289,8 @@ export default function SourceClient() {
     const callbackCode = params.get("code") ?? "";
 
     void (async () => {
-      await load();
-      if (googleResult === "connected") {
+      const connectionVerified = await load();
+      if (googleResult === "connected" && connectionVerified) {
         setNotice({
           message: "Google se ha conectado y la fuente oficial ha superado la validación previa de solo lectura.",
           tone: "success",
