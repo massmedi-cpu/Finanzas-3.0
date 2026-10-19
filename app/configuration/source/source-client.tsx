@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../../src/application/source-confirmation-contract";
 import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import { formatMoneyCents } from "../../../src/core/money";
 import { useActionFeedback } from "../../action-feedback";
@@ -304,6 +305,9 @@ export default function SourceClient() {
       const response = await fetch("/api/source/google/preflight", { method: "POST" });
       const payload = await jsonOrEmpty<PreflightSummary & { error?: string }>(response);
       if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
+      if (!isConfirmedSourcePreflight(payload)) {
+        throw new Error("La prevalidación ha devuelto datos incompletos. No se permite importar; vuelve a comprobar la fuente.");
+      }
 
       setPreflight(payload);
       const message = `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`;
@@ -332,6 +336,9 @@ export default function SourceClient() {
       const response = await fetch("/api/source/google/sync", { method: "POST" });
       const payload = await jsonOrEmpty<SyncResult & { error?: string }>(response);
       if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
+      if (!isConfirmedSourceSyncResult(payload)) {
+        throw new Error("No se puede confirmar el resultado de la sincronización. Consulta el historial antes de repetirla.");
+      }
 
       setSyncResult(payload);
       const incident = sourceIncidentMessage(payload);

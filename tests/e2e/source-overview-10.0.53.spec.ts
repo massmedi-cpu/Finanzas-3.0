@@ -11,6 +11,8 @@ type MockOptions = {
   preflightPosts?: string[];
   finishedAt?: string;
   syncPostError?: boolean;
+  malformedSyncSuccess?: boolean;
+  malformedPreflightSuccess?: boolean;
   syncGetRequests?: string[];
 };
 
@@ -53,10 +55,25 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
       body: JSON.stringify({
         sourceFileId: "source-file",
         sourceRevision: "rev-1",
-        schemaFingerprint: "safe",
+        schemaFingerprint: options.malformedPreflightSuccess ? "invalid" : "a".repeat(64),
         totalAuthoritativeRows: 120,
-        accounts: [],
-        cursors: [],
+        accounts: options.malformedPreflightSuccess ? [] : [{
+          accountExternalKey: "Cuenta corriente Openbank · 3967",
+          accountName: "Cuenta corriente Openbank · 3967",
+          accountType: "checking",
+          lifecycle: "active",
+          authoritativeRows: 120,
+          openingBalanceCents: 0,
+          newestBankDate: "2026-10-02",
+          oldestBankDate: "2025-01-01",
+          latestBalanceAfterCents: 1000,
+        }],
+        cursors: options.malformedPreflightSuccess ? [] : [{
+          sourceSheetId: "725351515",
+          sheetTitle: "Cuenta corriente · 3967",
+          authoritativeRows: 120,
+          lastSourceRowKey: "CC-0001",
+        }],
       }),
     });
   });
@@ -73,12 +90,15 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
         contentType: "application/json",
         body: JSON.stringify({
           status: "success",
-          rowsInserted: 2,
+          syncRunId: "11111111-1111-4111-8111-111111111111",
+          rowsSeen: 120,
+          rowsInserted: options.malformedSyncSuccess ? "2" : 2,
           rowsRevised: 1,
           rowsSkipped: 117,
           rowsMissing: 0,
           duplicatesDetected: 0,
           warningsCount: 0,
+          cursorsAdvanced: 1,
         }),
       });
       return;
@@ -202,6 +222,32 @@ test("REC-SYNC-199 · un POST sin respuesta concluyente no se reintenta ni prome
   await expect(error).toContainText("No se ha podido confirmar el resultado de la actualización");
   await expect(error).toContainText("antes de repetirla");
   await expect(error).not.toContainText("datos existentes siguen intactos");
+  await expect.poll(() => syncGetRequests.length).toBe(2);
+  expect(syncPosts).toHaveLength(1);
+  await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
+});
+
+
+test("REC-SYNC-200 · una respuesta de preflight HTTP 200 malformada bloquea la primera importación", async ({ page }) => {
+  const syncPosts: string[] = [];
+  const preflightPosts: string[] = [];
+  await mockSourceOverview(page, { firstImport: true, malformedPreflightSuccess: true, syncPosts, preflightPosts });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  await expect(page.locator(".config-message.error")).toContainText("No se ha iniciado la importación");
+  expect(preflightPosts).toHaveLength(1);
+  expect(syncPosts).toHaveLength(0);
+  await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);
+});
+
+test("REC-SYNC-201 · la respuesta de sync HTTP 200 con contadores inválidos no inventa éxito", async ({ page }) => {
+  const syncPosts: string[] = [];
+  const syncGetRequests: string[] = [];
+  await mockSourceOverview(page, { malformedSyncSuccess: true, syncPosts, syncGetRequests });
+  await page.goto("/configuration/source");
+  await expect.poll(() => syncGetRequests.length).toBe(1);
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  await expect(page.locator(".config-message.error")).toContainText("No se puede confirmar la actualización");
   await expect.poll(() => syncGetRequests.length).toBe(2);
   expect(syncPosts).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "Actualización completada" })).toHaveCount(0);

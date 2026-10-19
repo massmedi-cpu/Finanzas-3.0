@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildOfficialSourcePreflightSummary } from "../../src/application/source-preflight";
+import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../src/application/source-confirmation-contract";
 import type { OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
 import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/domain/official-bank-source";
 
@@ -132,4 +133,33 @@ test("preflight resume los tres productos sin perder el orden físico que usará
     lifecycle: "archived",
     accountType: "other",
   });
+});
+
+
+test("REC-SYNC-202 · el preflight canónico es aceptado y los recibos incompletos no", () => {
+  const valid = buildOfficialSourcePreflightSummary(snapshot());
+  expect(isConfirmedSourcePreflight(valid)).toBe(true);
+  expect(isConfirmedSourcePreflight({ ...valid, schemaFingerprint: "wrong" })).toBe(false);
+  expect(isConfirmedSourcePreflight({ ...valid, cursors: [] })).toBe(false);
+  expect(isConfirmedSourcePreflight({ ...valid, totalAuthoritativeRows: 100 })).toBe(false);
+});
+
+test("REC-SYNC-203 · solo un recibo de importación coherente certifica éxito", () => {
+  const receipt = {
+    status: "success",
+    syncRunId: "11111111-1111-4111-8111-111111111111",
+    rowsSeen: 3,
+    rowsInserted: 1,
+    rowsRevised: 0,
+    rowsSkipped: 2,
+    rowsMissing: 0,
+    duplicatesDetected: 0,
+    warningsCount: 0,
+    cursorsAdvanced: 2,
+  };
+  expect(isConfirmedSourceSyncResult(receipt)).toBe(true);
+  expect(isConfirmedSourceSyncResult({ ...receipt, status: "partial" })).toBe(false);
+  expect(isConfirmedSourceSyncResult({ ...receipt, rowsInserted: "1" })).toBe(false);
+  expect(isConfirmedSourceSyncResult({ ...receipt, rowsSeen: 999 })).toBe(false);
+  expect(isConfirmedSourceSyncResult({ ...receipt, syncRunId: null })).toBe(false);
 });

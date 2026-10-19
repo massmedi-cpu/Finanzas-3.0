@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../../src/application/source-confirmation-contract";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import styles from "./source-overview.module.css";
 
@@ -165,12 +166,18 @@ export default function SourceOverviewClient() {
         const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST" });
         const preflightPayload = await readJson<{ error?: string }>(preflightResponse);
         if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
+        if (!isConfirmedSourcePreflight(preflightPayload)) {
+          throw new Error("La validación previa no devolvió resultados completos. No se ha iniciado la importación.");
+        }
       }
 
       syncWasRequested = true;
       const response = await fetch("/api/source/google/sync", { method: "POST", cache: "no-store" });
       const payload = await readJson<SyncResult>(response);
       if (!response.ok) throw new Error(actionError(payload.error));
+      if (!isConfirmedSourceSyncResult(payload)) {
+        throw new Error("No se puede confirmar la actualización con la respuesta recibida. Consulta el estado antes de repetirla.");
+      }
 
       const changed = Math.max(0, payload.rowsInserted ?? 0) + Math.max(0, payload.rowsRevised ?? 0);
       const warning = incidentSummary(payload);
