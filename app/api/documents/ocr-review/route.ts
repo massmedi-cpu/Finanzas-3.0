@@ -4,6 +4,7 @@ import {
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../src/infrastructure/http/limited-json-request";
+import { requireVerifiedSourceWorkspace } from "../../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -112,6 +113,11 @@ function lineItems(value: unknown) {
 }
 
 export async function GET(request: Request) {
+  // Private OCR history is not a public existence oracle. Verify the app
+  // session and workspace membership before inspecting document identifiers.
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
+
   try {
     const url = new URL(request.url);
     // The document identity must be unique: URLSearchParams.get() silently
