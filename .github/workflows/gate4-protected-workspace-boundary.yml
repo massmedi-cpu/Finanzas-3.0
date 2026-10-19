@@ -1,6 +1,7 @@
 name: Gate 4 Protected Workspace Boundary
 
 on:
+  workflow_call:
   push:
     branches:
       - 'commercial-readiness/**'
