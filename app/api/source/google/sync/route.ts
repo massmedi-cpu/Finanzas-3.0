@@ -140,6 +140,11 @@ export async function GET() {
 }
 
 export async function POST() {
+  // Reject anonymous callers before resolving Google service-account state.
+  // The source.capabilities call below additionally verifies workspace membership.
+  const missingSession = await requireSourceSession();
+  if (missingSession) return missingSession;
+
   try {
     const connection = await resolveGoogleSourceConnection();
     if (!connection) {

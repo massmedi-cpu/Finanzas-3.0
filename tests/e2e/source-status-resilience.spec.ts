@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import {
   OFFICIAL_GOOGLE_SOURCE_FILE_ID,
   GoogleSourceConnectionContractError,
@@ -100,4 +101,26 @@ test("CR-006 · la UI conserva la trazabilidad aunque Google no esté configurad
   await expect(page.getByText("984", { exact: true })).toBeVisible();
   await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toHaveCount(0);
   await expect(page.getByText("ROW-3172", { exact: true })).toBeVisible();
+});
+
+
+test("REC-AUTH-207 · la prevalidación protege metadatos y saldos antes de leer Google", () => {
+  const preflight = readFileSync("app/api/source/google/preflight/route.ts", "utf8");
+  const identityGuard = preflight.indexOf("await requireVerifiedSourceWorkspace()");
+  const googleRead = preflight.indexOf("await runtime.reader.read()");
+  expect(identityGuard).toBeGreaterThan(-1);
+  expect(googleRead).toBeGreaterThan(identityGuard);
+  expect(preflight).toContain("if (accessDenied) return accessDenied;");
+});
+
+test("REC-AUTH-208 · el POST de sincronización deniega anonimato antes de consultar Google", () => {
+  const sourceSync = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const postStart = sourceSync.indexOf("export async function POST()");
+  const identityGuard = sourceSync.indexOf("await requireSourceSession()", postStart);
+  const googleResolve = sourceSync.indexOf("await resolveGoogleSourceConnection()", postStart);
+  const workspaceCheck = sourceSync.indexOf('callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities")', postStart);
+  expect(identityGuard).toBeGreaterThan(postStart);
+  expect(googleResolve).toBeGreaterThan(identityGuard);
+  expect(workspaceCheck).toBeGreaterThan(googleResolve);
+  expect(sourceSync).toContain("if (missingSession) return missingSession;");
 });
