@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { POST as postDocumentAction } from "../../app/api/documents/route";
+import { errorResponse as ocrReviewError } from "../../app/api/documents/ocr-review/route";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import { parseDocumentQueryInteger } from "../../src/application/document-query-integer";
 import { resolvePdfOcrSource } from "../../src/infrastructure/ocr/pdf-source-provenance";
@@ -257,25 +258,34 @@ test("document API rejects invalid inputs before persistence", async ({ request 
   await expect(invalidAssociation.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_document_association_method" });
 });
 
-test("REC-OCR-058 · historial OCR privado rechaza IDs duplicados y parámetros ajenos", async ({ request }) => {
+test("REC-OCR-058 · historial OCR exige autenticación antes de revelar errores de consulta", async ({ request }) => {
   const malformed = [
     `/api/documents/ocr-review?id=${documentId}&id=${unknownDocumentId}`,
     `/api/documents/ocr-review?id=${documentId}&scope=all`,
     "/api/documents/ocr-review",
+    "/api/documents/ocr-review?id=not-a-uuid",
+    `/api/documents/ocr-review?id=${documentId}`,
   ];
   for (const url of malformed) {
     const response = await request.get(url);
-    expect(response.status(), url).toBe(400);
-    await expect(response.json()).resolves.toEqual({
-      error: "invalid_request",
-      code: "invalid_document_review_query",
-    });
+    expect(response.status(), url).toBe(401);
+    expect(response.headers()["cache-control"], url).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "authentication_required" });
   }
-  const invalidId = await request.get("/api/documents/ocr-review?id=not-a-uuid");
-  expect(invalidId.status()).toBe(400);
-  await expect(invalidId.json()).resolves.toEqual({
-    error: "invalid_request", code: "invalid_document_id",
-  });
+});
+
+test("REC-OCR-058B · validaciones de consulta siguen siendo errores 400 después de Auth", async () => {
+  // Auth runs first in GET; malformed-query errors are safe only after membership.
+  // Verify their mapping without forging a cookie or calling the real gateway.
+  for (const [code, expected] of [
+    ["invalid_document_review_query", "invalid_document_review_query"],
+    ["invalid_document_id", "invalid_document_id"],
+  ] as const) {
+    const response = ocrReviewError(new Error(code));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "invalid_request", code: expected });
+  }
 });
 
 test("REC-DOC-055 · parámetros duplicados o vacíos se rechazan antes de consultar documentos privados", async ({ request }) => {
