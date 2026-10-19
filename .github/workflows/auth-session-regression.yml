@@ -12,8 +12,6 @@ on:
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
       - "tests/e2e/source-metadata-auth-boundary.spec.ts"
       - "tests/e2e/source-overview-10.0.53.spec.ts"
-      - ".github/workflows/gate4-protected-workspace-boundary.yml"
-      - "tests/e2e/preview-production-isolation-live.spec.ts"
       - "app/api/source/google/status/route.ts"
       - "app/api/source/google/sync/route.ts"
       - "app/api/health/source-runtime/route.ts"
@@ -30,8 +28,6 @@ on:
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
       - "tests/e2e/source-metadata-auth-boundary.spec.ts"
       - "tests/e2e/source-overview-10.0.53.spec.ts"
-      - ".github/workflows/gate4-protected-workspace-boundary.yml"
-      - "tests/e2e/preview-production-isolation-live.spec.ts"
       - "app/api/source/google/status/route.ts"
       - "app/api/source/google/sync/route.ts"
       - "app/api/health/source-runtime/route.ts"
@@ -85,14 +81,3 @@ jobs:
           name: auth-session-regression-${{ github.sha }}
           path: playwright-report/
           retention-days: 7
-
-  # Reuse the protected-preview tests from a workflow GitHub already schedules
-  # on this PR. The called job only receives short-lived OIDC credentials.
-  protected-preview-read-boundary:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    permissions:
-      contents: read
-      deployments: read
-      id-token: write
-    uses: ./.github/workflows/gate4-protected-workspace-boundary.yml
-    secrets: inherit
