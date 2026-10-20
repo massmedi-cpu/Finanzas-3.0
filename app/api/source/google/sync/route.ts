@@ -22,7 +22,7 @@ import {
   PersistenceGatewayError,
   callPersistenceGateway,
 } from "../../../../../src/infrastructure/persistence/vercel-supabase-gateway";
-import { requireSourceSession, sourceWorkspaceAuthError } from "../../../../../src/infrastructure/auth/source-metadata-access";
+import { requireSourceSession, requireVerifiedSourceWorkspace, sourceWorkspaceAuthError } from "../../../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 
@@ -78,8 +78,8 @@ export async function resolveSourceStatusFileId(
 }
 
 export async function GET() {
-  const missing = await requireSourceSession();
-  if (missing) return missing;
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
 
   try {
     const sourceFileId = await resolveSourceStatusFileId();
