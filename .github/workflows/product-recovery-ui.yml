@@ -135,6 +135,7 @@ jobs:
           tests/e2e/document-drive-folder-scope.spec.ts
           tests/e2e/document-drive-folder-recursive.spec.ts
           tests/e2e/google-service-account.spec.ts
+          tests/e2e/source-metadata-auth-boundary.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
           tests/e2e/document-ocr-json-byte-limit.spec.ts
