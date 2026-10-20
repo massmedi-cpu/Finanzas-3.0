@@ -3,6 +3,9 @@ import {
   assertOfficialSourceHistoricalBaseline,
   buildOfficialSourcePreflightSummary,
 } from "../../../../../src/application/source-preflight";
+import { isConfirmedSourcePreflight } from "../../../../../src/application/source-confirmation-contract";
+import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
+import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import {
   SourceSyncRuntimeCompatibilityError,
   assertSourceSyncRuntimeCapabilities,
@@ -156,7 +159,15 @@ export async function POST() {
 
     const runtime = createGoogleSourceRuntime(connection.sourceFileId);
     const snapshot = await runtime.reader.read();
-    assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
+    // This is a fresh, server-side, read-only check. A previous UI preflight
+    // never authorizes persistence of a newer or malformed workbook.
+    const summary = assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
+    if (!isConfirmedSourcePreflight(summary)) {
+      return Response.json(
+        { error: "google_source_contract_invalid", code: "source_preflight_invalid" },
+        { status: 422, headers: HEADERS },
+      );
+    }
     const result = await runtime.synchronization.synchronize(snapshot);
     if (runtime.authMode === "oauth" && runtime.oauth) {
       await runtime.oauth.markVerified();
@@ -221,6 +232,12 @@ export async function POST() {
     if (error instanceof OfficialSourceHistoricalBaselineError) {
       return Response.json(
         { error: "google_source_historical_regression", code: error.code },
+        { status: 422, headers: HEADERS },
+      );
+    }
+    if (error instanceof SourceWorkbookContractError || error instanceof OfficialSourceContractError) {
+      return Response.json(
+        { error: "google_source_contract_invalid", code: error.code },
         { status: 422, headers: HEADERS },
       );
     }

@@ -223,6 +223,9 @@ export default function SourceClient() {
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
+    // Any new status check invalidates the previously approved snapshot.
+    // The connection, identity or workbook may have changed in the meantime.
+    setPreflight(null);
     setLoading(true);
     setError(null);
 
@@ -311,7 +314,7 @@ export default function SourceClient() {
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
-  const readyToSync = connected && runtimeReady && !busy && preflight !== null;
+  const readyToSync = connected && runtimeReady && !busy && isConfirmedSourcePreflight(preflight);
   const latestAttemptFailed = syncStatus.run?.status === "failed";
   const persistentIncidentCounts = normalizeSourceSyncIncidents(syncStatus.run);
   const persistentIncident = syncStatus.run ? sourceIncidentMessage(syncStatus.run) : null;
@@ -322,6 +325,8 @@ export default function SourceClient() {
 
   async function preflightSource() {
     if (!readyToPreflight) return;
+    // Never retain an earlier approval during a new, possibly failing check.
+    setPreflight(null);
     setBusy(true);
     setError(null);
     setNotice(null);

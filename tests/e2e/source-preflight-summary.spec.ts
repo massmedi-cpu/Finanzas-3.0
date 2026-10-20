@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { buildOfficialSourcePreflightSummary } from "../../src/application/source-preflight";
 import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../src/application/source-confirmation-contract";
 import type { OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
@@ -196,4 +197,91 @@ test("REC-SYNC-240 · el preflight rechaza identidades duplicadas y fechas incoh
     newestBankDate: "2026-01-01",
   }))).toBe(false);
   expect(isConfirmedSourcePreflight(changedAccount({ oldestBankDate: null }))).toBe(false);
+});
+
+test("REC-SYNC-241 · prevalidación inválida y relectura de estado impiden todo POST de sincronización", async ({ page }) => {
+  const valid = buildOfficialSourcePreflightSummary(snapshot());
+  // Counts still add up, but the account identity is duplicated.
+  let receivedPreflight: unknown = {
+    ...valid,
+    accounts: [valid.accounts[0], valid.accounts[0], valid.accounts[2]],
+  };
+  let synchronizationPosts = 0;
+
+  await page.route("**/api/source/google/status", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      configured: true,
+      authMode: "service-account",
+      connection: {
+        connected: true,
+        accountEmail: "reader@example.invalid",
+        sourceFileName: "Movimientos bancarios - fuente",
+        connectedAt: null,
+        lastVerifiedAt: null,
+        readonly: true,
+        managed: true,
+      },
+    }),
+  }));
+  await page.route("**/api/health/source-runtime", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      status: "ok",
+      compatible: true,
+      capabilities: { contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true },
+    }),
+  }));
+  await page.route("**/api/source/google/sync", (route) => {
+    if (route.request().method() === "POST") {
+      synchronizationPosts += 1;
+      return route.fulfill({ status: 503, body: "No financial persistence is allowed in this test" });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ run: null, cursors: [] }),
+    });
+  });
+  await page.route("**/api/source/google/preflight", (route) => {
+    expect(route.request().method()).toBe("POST");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(receivedPreflight),
+    });
+  });
+
+  await page.goto("/configuration/source");
+  const validate = page.getByRole("button", { name: "Validar fuente antes de importar" });
+  await expect(validate).toBeEnabled();
+  await validate.click();
+  await expect(page.getByRole("alert")).toContainText("No se permite importar");
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toHaveCount(0);
+  expect(synchronizationPosts).toBe(0);
+
+  // A successful check can enable the control, but reading status again
+  // must revoke the approval, rather than silently reusing an old snapshot.
+  receivedPreflight = valid;
+  await validate.click();
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeEnabled();
+  await page.getByRole("button", { name: "Comprobar estado" }).click();
+  await expect(page.getByRole("button", { name: "Validar fuente antes de importar" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toHaveCount(0);
+  expect(synchronizationPosts).toBe(0);
+});
+
+test("REC-SYNC-242 · el backend valida el resumen canónico antes de permitir syncBatch", () => {
+  const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const post = route.indexOf("export async function POST()");
+  const summary = route.indexOf("assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot))", post);
+  const gate = route.indexOf("if (!isConfirmedSourcePreflight(summary))", summary);
+  const sync = route.indexOf("runtime.synchronization.synchronize(snapshot)", gate);
+  expect(post).toBeGreaterThan(-1);
+  expect(summary).toBeGreaterThan(post);
+  expect(gate).toBeGreaterThan(summary);
+  expect(sync).toBeGreaterThan(gate);
+  expect(route.slice(gate, sync)).toContain('status: 422');
 });
