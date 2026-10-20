@@ -173,7 +173,7 @@ test("Fuente bancaria prioriza estado y acciones y relega el diagnóstico técni
   expect(overflow).toBe(false);
 });
 
-test("una actualización explícita ejecuta una sola sincronización cuando ya existe histórico", async ({ page }) => {
+test("actualización con histórico exige preflight y un solo sync", async ({ page }) => {
   const syncPosts: string[] = [];
   const preflightPosts: string[] = [];
   await mockSourceOverview(page, { syncPosts, preflightPosts });
@@ -181,7 +181,7 @@ test("una actualización explícita ejecuta una sola sincronización cuando ya e
 
   await page.getByRole("button", { name: "Actualizar desde Google" }).click();
   await expect.poll(() => syncPosts.length).toBe(1);
-  expect(preflightPosts).toHaveLength(0);
+  expect(preflightPosts).toHaveLength(1);
   await expect(page.getByRole("status").filter({ hasText: "3 cambios incorporados" })).toBeVisible();
 });
 
@@ -328,4 +328,15 @@ test("REC-AUTH-214 · callback Google conserva éxito si la conexión está comp
   await mockSourceOverview(page);
   await page.goto("/configuration/source/diagnostics?google=connected");
   await expect(page.getByRole("status").filter({ hasText: "Google se ha conectado" })).toBeVisible();
+});
+
+test("REC-SYNC-239 · preflight inválido bloquea sync con histórico existente", async ({ page }) => {
+  const syncPosts: string[] = [];
+  const preflightPosts: string[] = [];
+  await mockSourceOverview(page, { malformedPreflightSuccess: true, syncPosts, preflightPosts });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  await expect(page.locator(".config-message.error")).toContainText("No se ha iniciado la importación");
+  expect(preflightPosts).toHaveLength(1);
+  expect(syncPosts).toHaveLength(0);
 });

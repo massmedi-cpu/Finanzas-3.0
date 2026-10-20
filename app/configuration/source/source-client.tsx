@@ -311,7 +311,7 @@ export default function SourceClient() {
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
-  const readyToSync = connected && runtimeReady && !busy && (!firstImportNeedsPreflight || preflight !== null);
+  const readyToSync = connected && runtimeReady && !busy && preflight !== null;
   const latestAttemptFailed = syncStatus.run?.status === "failed";
   const persistentIncidentCounts = normalizeSourceSyncIncidents(syncStatus.run);
   const persistentIncident = syncStatus.run ? sourceIncidentMessage(syncStatus.run) : null;
@@ -352,6 +352,8 @@ export default function SourceClient() {
 
   async function synchronize() {
     if (!readyToSync) return;
+    // A verified snapshot may only authorize one sync attempt.
+    setPreflight(null);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -495,16 +497,16 @@ export default function SourceClient() {
             <div className={styles.actions}>
               {google?.configured && runtimeReady && !connected && !serviceAccountMode ? (
                 <a className={`primary-button ${styles.buttonLink}`} href="/api/source/google/connect">Conectar Google</a>
-              ) : firstImportNeedsPreflight && !preflight ? (
+              ) : connected && !preflight ? (
                 <button className="primary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
-                  {busy ? "Validando…" : "Validar fuente antes de importar"}
+                  {busy ? "Validando…" : "Validar fuente antes de actualizar"}
                 </button>
               ) : (
                 <button className="primary-button" type="button" disabled={!readyToSync} onClick={() => void synchronize()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
-              {connected && (!firstImportNeedsPreflight || preflight) && (
+              {connected && preflight && (
                 <button className="secondary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
                   {preflight ? "Volver a validar fuente" : "Validar fuente"}
                 </button>

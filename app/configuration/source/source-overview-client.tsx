@@ -185,13 +185,12 @@ export default function SourceOverviewClient() {
     setNotice(null);
     let syncWasRequested = false;
     try {
-      if (firstImport) {
-        const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST" });
-        const preflightPayload = await readJson<{ error?: string }>(preflightResponse);
-        if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
-        if (!isConfirmedSourcePreflight(preflightPayload)) {
-          throw new Error("La validación previa no devolvió resultados completos. No se ha iniciado la importación.");
-        }
+      // Validate the read-only source snapshot before each update, not only first import.
+      const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST", cache: "no-store" });
+      const preflightPayload = await readJson<{ error?: string }>(preflightResponse);
+      if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
+      if (!isConfirmedSourcePreflight(preflightPayload)) {
+        throw new Error("La validación previa no devolvió resultados completos. No se ha iniciado la importación.");
       }
 
       syncWasRequested = true;
