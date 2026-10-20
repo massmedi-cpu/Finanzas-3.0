@@ -1172,7 +1172,9 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     /\bimporte(?:\s+de\s+la)?\s+factura\b/,
     /\ba pagar\b/,
   ], {
-    exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
+    // Tax subtotals use the same dotted IVA/IGIC forms as the tax parser.
+    // Exclude only their heading so a later payable label keeps its amount.
+    exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|i\.?v\.?a|i\.?g\.?i\.?c|ahorro|unidades|articulos|productos)\b/,
     prefer: /\b(?:total\s+a\s+pagar|total\s+importe\s+factura|importe\s+total|importe(?:\s+de\s+la)?\s+factura|a\s+pagar|total\s+factura|total\s+final)\b/,
     adjacentAmount: true,
     skipTaxTableFooter: true,

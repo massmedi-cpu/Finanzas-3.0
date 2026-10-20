@@ -1484,3 +1484,45 @@ test("REC-OCR-196 · malformed split tax rates cannot be silently interpreted as
     expect(parsed.totalCents.value, row).toBe(2804);
   }
 });
+
+test("REC-OCR-197 · IVA and IGIC subtotals never become payable totals, including dotted labels and refunds", () => {
+  for (const label of ["TOTAL IVA", "TOTAL I.V.A.", "TOTAL IGIC", "TOTAL I.G.I.C.", "TOTAL DE I.V.A.", "TOTAL DE I.G.I.C."]) {
+    for (const amount of ["2,10", "-2,10"]) {
+      const printed = `${label} ${amount}`;
+      const raw = result([line("tax-only", printed, 0.99)]);
+      const before = JSON.stringify(raw);
+      const parsed = interpretDocumentOcrFinancially(raw);
+      expect(parsed.totalCents.value, printed).toBeNull();
+      expect(parsed.totalCents.trust, printed).toBe("not_detected");
+      expect(parsed.taxesCents.value, printed).toBe(amount.startsWith("-") ? -210 : 210);
+      expect(parsed.taxesCents.evidence[0]?.rawText).toBe(printed);
+      expect(JSON.stringify(raw)).toBe(before);
+    }
+  }
+});
+
+test("REC-OCR-198 · excluded tax headings preserve ordinary, explicit and adjacent payable totals with source evidence", () => {
+  for (const tax of ["I.V.A.", "IGIC", "I.G.I.C."]) {
+    for (const payable of ["TOTAL", "TOTAL A PAGAR", "IMPORTE TOTAL FACTURA"]) {
+      const printed = `TOTAL ${tax} 2,10 ${payable} 12,10`;
+      const raw = result([line("merged", printed, 0.99)]);
+      const parsed = interpretDocumentOcrFinancially(raw);
+      expect(parsed.totalCents.value, printed).toBe(1210);
+      expect(parsed.totalCents.rawValue).toBe("12,10");
+      expect(parsed.totalCents.trust).toBe("reliable");
+      expect(parsed.taxesCents.value).toBe(210);
+      expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
+      expect(raw.plainText).toBe(printed);
+    }
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("tax", `TOTAL ${tax} -2,10`, 0.99, 0.2),
+      line("payable", "TOTAL A PAGAR", 0.99, 0.7),
+      line("amount", "-12,10 €", 0.94, 0.75),
+    ]));
+    expect(parsed.totalCents.value).toBe(-1210);
+    expect(parsed.totalCents.trust).toBe("doubtful");
+    expect(parsed.totalCents.confidence).toBe(0.94);
+    expect(parsed.totalCents.evidence.map((item) => item.lineId)).toEqual(["payable", "amount"]);
+    expect(parsed.taxesCents.value).toBe(-210);
+  }
+});
