@@ -70,7 +70,8 @@ jobs:
           node --input-type=module - <<'NODE'
           import { readFileSync } from 'node:fs';
           const source = readFileSync('.github/workflows/product-recovery-ui.yml', 'utf8');
-          const block = source.slice(source.indexOf('name: Integrated module regressions on the same optimized build'));
+          const stepName = ['name: Integrated module', 'regressions on the same optimized build'].join(' ');
+          const block = source.slice(source.indexOf(stepName));
           for (const path of [
             'tests/e2e/document-drive-folder-scope.spec.ts',
             'tests/e2e/document-drive-folder-recursive.spec.ts',
