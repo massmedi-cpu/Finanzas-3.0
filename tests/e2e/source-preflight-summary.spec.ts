@@ -254,7 +254,9 @@ test("REC-SYNC-241 · prevalidación inválida y relectura de estado impiden tod
     });
   });
 
-  await page.goto("/configuration/source");
+  // /configuration/source is the simple overview, while SourceClient with a
+  // separate Validate button lives at /configuration/source/diagnostics.
+  await page.goto("/configuration/source/diagnostics");
   const validate = page.getByRole("button", { name: "Validar fuente antes de importar" });
   await expect(validate).toBeEnabled();
   await validate.click();
