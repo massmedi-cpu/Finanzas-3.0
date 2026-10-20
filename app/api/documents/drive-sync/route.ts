@@ -213,9 +213,13 @@ export async function POST() {
       FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
     );
     const existingPromise = existingDriveDocuments();
+    const explicitFolderScope = Boolean(process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS?.trim());
     const discoveredPromise = discoverAuthorizedDocumentFolders(
       folderIds,
       (folderId) => readers.discovery.listAuthorizedFolder(folderId),
+      explicitFolderScope
+        ? (folderId) => readers.discovery.listAuthorizedChildFolders(folderId)
+        : undefined,
     );
     const [existing, discovered] = await Promise.all([existingPromise, discoveredPromise]);
 

@@ -232,4 +232,101 @@ export class GoogleDriveDocumentDiscovery {
 
     return { files, skippedUnsupported, skippedInvalid, truncated };
   }
+
+  /**
+   * Enumerate immediate child folders of a verified parent. Never search all of
+   * Drive: every request is limited by an exact parent ID. The caller manages
+   * depth and cumulative folder limits across all authorized roots.
+   */
+  async listAuthorizedChildFolders(folderId: string): Promise<string[]> {
+    const id = folderId.trim();
+    if (!DRIVE_FILE_ID.test(id)) {
+      throw new GoogleDriveDocumentDiscoveryError(
+        "google_drive_document_discovery_response_invalid",
+        "La carpeta de documentos contiene un identificador inválido.",
+      );
+    }
+    const accessToken = (await this.accessTokens.getAccessToken()).trim();
+    if (!accessToken) {
+      throw new GoogleDriveDocumentDiscoveryError(
+        "google_drive_document_discovery_access_denied",
+        "No existe permiso de lectura válido para consultar las subcarpetas.",
+      );
+    }
+    const children: string[] = [];
+    const seenIds = new Set<string>();
+    const seenCursors = new Set<string>();
+    let pageToken: string | null = null;
+    let pagesRead = 0;
+    do {
+      if (++pagesRead > MAX_DISCOVERY_PAGES || (pageToken && seenCursors.has(pageToken))) {
+        throw new GoogleDriveDocumentDiscoveryError(
+          "google_drive_document_discovery_response_invalid",
+          "La enumeración de subcarpetas excede el límite o repite un cursor.",
+        );
+      }
+      if (pageToken) seenCursors.add(pageToken);
+      const params = new URLSearchParams({
+        q: `'${id}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: "nextPageToken,files(id,mimeType,trashed)",
+        pageSize: "1000",
+        orderBy: "name asc",
+        supportsAllDrives: "true",
+        includeItemsFromAllDrives: "true",
+      });
+      if (pageToken) params.set("pageToken", pageToken);
+      const response = await this.fetcher(`${GOOGLE_DRIVE_FILES_ENDPOINT}?${params.toString()}`, {
+        method: "GET",
+        headers: discoveryHeaders(accessToken),
+        cache: "no-store",
+        redirect: "error",
+      }).catch(() => null);
+      if (!response || !response.ok) {
+        throw new GoogleDriveDocumentDiscoveryError(
+          response?.status === 401 || response?.status === 403
+            ? "google_drive_document_discovery_access_denied"
+            : "google_drive_document_discovery_failed",
+          "No ha sido posible enumerar por completo las subcarpetas autorizadas.",
+        );
+      }
+      const payload = (await response.json().catch(() => null)) as DriveListPayload | null;
+      if (!payload || Array.isArray(payload) || !Array.isArray(payload.files)
+        || (payload.nextPageToken !== undefined && payload.nextPageToken !== null
+          && (typeof payload.nextPageToken !== "string" || !payload.nextPageToken.trim()))) {
+        throw new GoogleDriveDocumentDiscoveryError(
+          "google_drive_document_discovery_response_invalid",
+          "La enumeración de subcarpetas ha devuelto un resultado inválido.",
+        );
+      }
+      for (const raw of payload.files) {
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          throw new GoogleDriveDocumentDiscoveryError(
+            "google_drive_document_discovery_response_invalid",
+            "La enumeración de subcarpetas contiene una entrada inválida.",
+          );
+        }
+        const item = raw as DriveFilePayload;
+        const childId = stringValue(item.id);
+        if (!childId || !DRIVE_FILE_ID.test(childId) || item.trashed === true
+          || item.mimeType !== "application/vnd.google-apps.folder" || seenIds.has(childId)
+          || children.length >= 100) {
+          throw new GoogleDriveDocumentDiscoveryError(
+            "google_drive_document_discovery_response_invalid",
+            "Hay una subcarpeta inválida, repetida o demasiadas subcarpetas.",
+          );
+        }
+        children.push(childId);
+        seenIds.add(childId);
+      }
+      pageToken = stringValue(payload.nextPageToken);
+      if (pageToken && seenCursors.has(pageToken)) {
+        throw new GoogleDriveDocumentDiscoveryError(
+          "google_drive_document_discovery_response_invalid",
+          "Google Drive ha repetido un cursor de subcarpetas.",
+        );
+      }
+    } while (pageToken);
+    return children;
+  }
+
 }
