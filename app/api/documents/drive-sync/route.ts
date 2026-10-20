@@ -25,6 +25,11 @@ import {
   type DocumentDriveInventoryRow,
   type DocumentDriveInventoryPage,
 } from "../../../../src/application/document-drive-inventory";
+import {
+  DocumentDriveFolderScopeError,
+  discoverAuthorizedDocumentFolders,
+  resolveAuthorizedDocumentFolders,
+} from "../../../../src/application/document-drive-folder-scope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -141,6 +146,12 @@ async function verifyCandidates(
 }
 
 function apiError(error: unknown) {
+  if (error instanceof DocumentDriveFolderScopeError) {
+    return Response.json(
+      { error: "drive_auto_detection_scope_incomplete", code: error.code },
+      { status: 503, headers: HEADERS },
+    );
+  }
   if (error instanceof DocumentDriveInventoryError) {
     return Response.json(
       { error: "drive_auto_detection_persistence_failed", code: error.message },
@@ -197,9 +208,14 @@ export async function POST() {
     if (accessDenied) return accessDenied;
 
     const readers = googleReaders();
-    const existingPromise = existingDriveDocuments();
-    const discoveredPromise = readers.discovery.listAuthorizedFolder(
+    const folderIds = resolveAuthorizedDocumentFolders(
+      process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS,
       FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+    );
+    const existingPromise = existingDriveDocuments();
+    const discoveredPromise = discoverAuthorizedDocumentFolders(
+      folderIds,
+      (folderId) => readers.discovery.listAuthorizedFolder(folderId),
     );
     const [existing, discovered] = await Promise.all([existingPromise, discoveredPromise]);
 
@@ -233,7 +249,8 @@ export async function POST() {
         contractVersion: 1,
         source: "google_drive",
         mode: "automatic_incremental_read_only",
-        folderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        folderId: folderIds.length === 1 ? folderIds[0] : null,
+        foldersScanned: folderIds.length,
         scanned: discovered.files.length,
         detectedChanges: changedFiles.length,
         imported,
