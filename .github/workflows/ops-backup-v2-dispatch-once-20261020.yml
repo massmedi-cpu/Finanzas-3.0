@@ -1,0 +1,42 @@
+name: One-time protected Financial App backup dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ops-backup-v2-dispatch-once-20261020.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-exact-production-backup:
+    if: >-
+      github.repository == 'massmedi-cpu/Finanzas-3.0' &&
+      github.ref == 'refs/heads/main' &&
+      github.event.head_commit.message == 'ops(backup): launch protected backup v2 once [20261020]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Request encrypted backup and isolated restore from trusted main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          payload='{"ref":"main","inputs":{"source_commit":"6dad59c6c2db3575618a7c91c49c3060a93bbba1","expected_app_version":"10.0.103"}}'
+          result=$(curl --silent --show-error --connect-timeout 10 --max-time 30 --output /tmp/backup-v2-dispatch-response --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'Accept: application/vnd.github+json' \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            --data "$payload" \
+            'https://api.github.com/repos/massmedi-cpu/Finanzas-3.0/actions/workflows/production-backup-v2.yml/dispatches')
+          if [ "$result" != '204' ]; then
+            echo "protected_backup_dispatch_failed_http_${result}" >&2
+            exit 1
+          fi
+          echo 'PROTECTED_BACKUP_V2|dispatched=true|source_version=10.0.103|source_commit=6dad59c6c2db3575618a7c91c49c3060a93bbba1'
+          rm -f /tmp/backup-v2-dispatch-response
