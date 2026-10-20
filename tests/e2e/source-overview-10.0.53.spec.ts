@@ -293,7 +293,12 @@ for (const sourcePage of ["/configuration/source", "/configuration/source/diagno
     await mockSourceOverview(page, options);
     await page.goto(sourcePage);
     const update = page.getByRole("button", { name: "Actualizar desde Google" });
-    await expect(update).toBeEnabled();
+    if (sourcePage.endsWith("/diagnostics")) {
+      // Existing history is never allowed to sync without preflight in the advanced view.
+      await expect(update).toBeDisabled();
+    } else {
+      await expect(update).toBeEnabled();
+    }
     options.authRequired = true;
     await page.getByRole("button", { name: "Comprobar estado" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Inicia sesión para consultar la fuente bancaria." })).toBeVisible();
@@ -306,7 +311,12 @@ for (const sourcePage of ["/configuration/source", "/configuration/source/diagno
     await mockSourceOverview(page, options);
     await page.goto(sourcePage);
     const update = page.getByRole("button", { name: "Actualizar desde Google" });
-    await expect(update).toBeEnabled();
+    if (sourcePage.endsWith("/diagnostics")) {
+      // Existing history is never allowed to sync without preflight in the advanced view.
+      await expect(update).toBeDisabled();
+    } else {
+      await expect(update).toBeEnabled();
+    }
     options.networkFailure = true;
     await page.getByRole("button", { name: "Comprobar estado" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "No se ha podido leer el estado de la fuente bancaria." })).toBeVisible();

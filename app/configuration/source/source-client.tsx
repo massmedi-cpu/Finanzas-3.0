@@ -497,16 +497,16 @@ export default function SourceClient() {
             <div className={styles.actions}>
               {google?.configured && runtimeReady && !connected && !serviceAccountMode ? (
                 <a className={`primary-button ${styles.buttonLink}`} href="/api/source/google/connect">Conectar Google</a>
-              ) : connected && !preflight ? (
+              ) : firstImportNeedsPreflight && !preflight ? (
                 <button className="primary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
-                  {busy ? "Validando…" : "Validar fuente antes de actualizar"}
+                  {busy ? "Validando…" : "Validar fuente antes de importar"}
                 </button>
               ) : (
                 <button className="primary-button" type="button" disabled={!readyToSync} onClick={() => void synchronize()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
-              {connected && preflight && (
+              {connected && (!firstImportNeedsPreflight || preflight) && (
                 <button className="secondary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
                   {preflight ? "Volver a validar fuente" : "Validar fuente"}
                 </button>
