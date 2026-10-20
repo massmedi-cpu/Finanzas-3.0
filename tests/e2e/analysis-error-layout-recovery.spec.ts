@@ -45,6 +45,26 @@ for (const theme of ["light", "dark"] as const) {
         expect(horizontal <= 1 || vertical <= 1, `Range buttons ${i} and ${j} overlap`).toBe(true);
       }
 
+      // REC-VIS-243: in the original 1366px screenshot, the Spanish month
+      // label physically painted over the adjacent calendar icon. A no-overflow
+      // document check cannot catch that intra-control collision.
+      const monthInput = page.getByRole("form", { name: "Filtros del análisis" })
+        .locator('input[type="month"]');
+      await expect(monthInput).toHaveCount(1);
+      const monthControl = monthInput.locator("..");
+      const monthText = monthControl.locator("span").first();
+      const calendarIcon = monthControl.locator('svg[data-product-icon="calendar"]');
+      const textBox = await monthText.boundingBox();
+      const iconBox = await calendarIcon.boundingBox();
+      const controlBox = await monthControl.boundingBox();
+      expect(textBox && iconBox && controlBox, "month text, icon and control must render").toBeTruthy();
+      expect(textBox!.x + textBox!.width,
+        `Spanish month must not cover the calendar at ${width}px / ${theme}`)
+        .toBeLessThanOrEqual(iconBox!.x - 4);
+      expect(iconBox!.x + iconBox!.width,
+        `calendar must fit the month control at ${width}px / ${theme}`)
+        .toBeLessThanOrEqual(controlBox!.x + controlBox!.width - 4);
+
       const errorBounds = await error.boundingBox();
       const advanced = page.getByRole("heading", { name: "Elige qué quieres analizar" });
       const advancedBounds = await advanced.boundingBox();
