@@ -141,18 +141,18 @@ export async function GET() {
 
 export async function POST() {
   // Reject anonymous callers before resolving Google service-account state.
-  // The source.capabilities call below additionally verifies workspace membership.
+  // Verify workspace membership before resolving any Google connection metadata.
   const missingSession = await requireSourceSession();
   if (missingSession) return missingSession;
 
   try {
+    const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
+    assertSourceSyncRuntimeCapabilities(capabilities);
+
     const connection = await resolveGoogleSourceConnection();
     if (!connection) {
       return Response.json({ error: "google_oauth_not_connected" }, { status: 409, headers: HEADERS });
     }
-
-    const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
-    assertSourceSyncRuntimeCapabilities(capabilities);
 
     const runtime = createGoogleSourceRuntime(connection.sourceFileId);
     const snapshot = await runtime.reader.read();
