@@ -1,17 +1,28 @@
 // Offline Tesseract engine smoke: real raster pixels and bundled Spanish model.
 // This is one controlled synthetic image, NOT accuracy certification on real bills.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { createWorker, PSM } from "tesseract.js";
 import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
+
+// Arial may be absent on CI; silent system-font fallback changes the pixels
+// being recognised. Register a unique family from the locked Next dependency
+// and fail if it is unavailable instead of accepting a host-dependent font.
+const smokeFont = "FinancialOcrSmokeFixture";
+const fontPath = path.join(process.cwd(), "node_modules", "next", "dist", "compiled", "@vercel", "og", "Geist-Regular.ttf");
+assert.ok(GlobalFonts.registerFromPath(fontPath, smokeFont), "pinned synthetic OCR font must load");
+const fontHash = createHash("sha256").update(readFileSync(fontPath)).digest("hex");
+console.log("OCR_NATIVE_FIXTURE_FONT|sha256=" + fontHash + "|family=" + smokeFont);
 
 const canvas = createCanvas(1000, 220);
 const context = canvas.getContext("2d");
 context.fillStyle = "#ffffff";
 context.fillRect(0, 0, 1000, 220);
 context.fillStyle = "#000000";
-context.font = "bold 62px Arial";
+context.font = `62px "${smokeFont}"`;
 context.fillText("TOTAL 23,45", 45, 145);
 const png = canvas.toBuffer("image/png");
 assert.ok(png.byteLength > 1000, "synthetic receipt image created");
@@ -204,16 +215,34 @@ try {
     brush.fillStyle = "#ffffff";
     brush.fillRect(0, 0, 1200, 240);
     brush.fillStyle = "#000000";
-    brush.font = "bold 56px Arial";
+    brush.font = `56px "${smokeFont}"`;
+    assert.ok(brush.measureText(specimen.printed).width < 1200 - 76,
+      "synthetic financial text must fit inside the raster: " + specimen.name);
     brush.fillText(specimen.printed, 38, 148);
     const bytes = variant.toBuffer("image/png");
+    const imageHash = createHash("sha256").update(bytes).digest("hex");
+    console.log("OCR_NATIVE_FIXTURE_IMAGE|case=" + specimen.name + "|sha256=" + imageHash);
     const ocr = await worker.recognize(bytes, { rotateRadians: 0 }, { text: true });
     const recognized = String(ocr.data?.text ?? "").replace(/\s+/g, " ").trim();
-    assert.match(recognized, new RegExp(specimen.heading, "i"),
-      "real Spanish OCR should find the heading: " + specimen.name);
-    assert.ok(recognized.includes(specimen.amount)
-      || recognized.includes(specimen.amount.replace(",", ".")),
-    "real Spanish OCR should retain the exact financial cents: " + specimen.name);
+    try {
+      assert.match(recognized, new RegExp(specimen.heading, "i"),
+        "real Spanish OCR should find the heading: " + specimen.name);
+      assert.ok(recognized.includes(specimen.amount)
+        || recognized.includes(specimen.amount.replace(",", ".")),
+      "real Spanish OCR should retain the exact financial cents: " + specimen.name);
+    } catch (error) {
+      // These bytes/text are generated above, never a user's document. The
+      // existing recovery artifact retains the actual failed raster/oracle.
+      const directory = path.join("recovery-evidence", "ocr-native");
+      const basename = specimen.name.replaceAll(" ", "-");
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(path.join(directory, basename + ".png"), bytes);
+      writeFileSync(path.join(directory, basename + ".json"), JSON.stringify({
+        synthetic: true, ...specimen, recognized, imageHash, fontHash,
+      }, null, 2) + "\n");
+      console.error("OCR_NATIVE_SYNTHETIC_FAILURE|case=" + specimen.name + "|recognized=" + JSON.stringify(recognized));
+      throw error;
+    }
     financialRasterPassed += 1;
   }
   assert.equal(financialRasterPassed, financialRasterCases.length);

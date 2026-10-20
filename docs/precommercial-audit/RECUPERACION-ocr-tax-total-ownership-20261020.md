@@ -69,3 +69,38 @@ commit `6dad59c6c2db3575618a7c91c49c3060a93bbba1`, deployment
 Este bloque no la sustituye. AP1–AP8 conservan sus pendientes: respaldo
 actual y restauración segregada, dos identidades cloud de ensayo, validación
 privada OCR heterogénea, sincronización segura y aceptación/publicación final.
+
+## Seguimiento: entrada reproducible del smoke Tesseract
+
+El commit de corrección `62f2b897f82133f542cca6508b0b13a988184cad`
+repitió el fallo de reconocimiento de `larger receipt` en el run
+[39378580020](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39378580020),
+jobs `118482177745` y `118483292648`. Falló la igualdad de céntimos; después,
+la regresión integrada no pudo arrancar porque el build previo quedó omitido.
+Un reintento no explicó ni resolvió el problema. No se atribuye este fallo al
+cambio de etiquetas: sucede antes de la compilación y de esas pruebas.
+
+El generador pedía Arial sin comprobar su disponibilidad, con fallback
+silencioso del sistema y sin conservar la imagen o el texto del fallo. Se
+registra ahora una familia exclusiva desde `Geist-Regular.ttf`, incluida en
+la dependencia Next fijada en el lockfile; el smoke aborta si no carga. Se
+comprueba que el texto cabe en el raster y se registran hashes de fuente e
+imagen. Si falla una variante, el artefacto existente de CI conserva PNG,
+oráculo y texto reconocido, todos generados sintéticamente por el propio test.
+Se mantienen las mismas etiquetas y cantidades esperadas, incluidos 124,90 €;
+no hay reintentos dentro del smoke ni tolerancia nueva de dígitos.
+
+Dos procesos locales, con fuentes de sistema habilitadas y deshabilitadas,
+completaron todos los casos y 3/3 variantes; produjeron estos mismos hashes:
+
+| Entrada fijada | SHA-256 |
+| --- | --- |
+| Fuente | bde046ddd9f20be35b0bd56cc79eb752b967fb6661a3fe76cb067bb09f871d76 |
+| small receipt | 4601390aac86f50326f2cb77f5d88577507eb508ea682c575c0f83b1e6d71ff2 |
+| invoice amount | dbcb217771a4d22b1fb3d3d153a03b1826eda6e95fab56cecc1053eafef3d193 |
+| larger receipt | 7e6801a0d988983aeca2cf974f8314e348dbc6c140704fdffa0cbea2c79fbc50 |
+
+Esto elimina la dependencia de Arial del host en el generador. No demuestra
+por sí solo que el fallback fuera la única causa del fallo previo, ni mejora
+la precisión sobre documentos reales. La nueva CI debe comprobar el SHA y
+contrastar estos hashes antes de afirmar una entrada reproducible en CI.
