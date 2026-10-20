@@ -154,7 +154,34 @@ test("Diagnóstico explica las incidencias persistidas y las conserva tras recar
 
 test("la vista simple resume una sincronización con incidencias y mantiene solo lectura", async ({ page }) => {
   let synchronized = false;
+  let preflightReads = 0;
   await mockConnectedConfiguration(page);
+  await page.route("**/api/source/google/preflight", (route) => {
+    preflightReads++;
+    return json(route, {
+      sourceFileId: "sheet-test",
+      sourceRevision: "drive-version:128",
+      schemaFingerprint: "a".repeat(64),
+      totalAuthoritativeRows: 12,
+      accounts: [{
+        accountExternalKey: "Cuenta corriente Openbank · 3967",
+        accountName: "Cuenta corriente Openbank · 3967",
+        accountType: "checking",
+        lifecycle: "active",
+        authoritativeRows: 12,
+        openingBalanceCents: 0,
+        newestBankDate: "2026-10-20",
+        oldestBankDate: "2026-01-01",
+        latestBalanceAfterCents: 1000,
+      }],
+      cursors: [{
+        sourceSheetId: "sheet-1",
+        sheetTitle: "Cuenta corriente · 3967",
+        authoritativeRows: 12,
+        lastSourceRowKey: "ROW-12",
+      }],
+    });
+  });
   await page.route("**/api/source/google/sync", async (route) => {
     if (route.request().method() === "POST") {
       synchronized = true;
@@ -184,6 +211,7 @@ test("la vista simple resume una sincronización con incidencias y mantiene solo
 
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  await expect.poll(() => preflightReads).toBe(1);
 
   const warning = page.locator(".config-message.warning");
   await expect(warning).toContainText("Actualización completada con avisos");
