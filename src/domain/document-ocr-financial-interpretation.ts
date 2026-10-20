@@ -259,13 +259,24 @@ function retailVatCells(text: string) {
   // A heading "TIPO %" may print rates as 10, 10% or 10,00.
   // Rates are percentages rather than amounts; validate them separately so
   // integer rates do not loosen the monetary cell acceptance contract.
-  const rateCell = cells[0].replace(/%$/, "");
-  if (!/^(?:\d{1,2}|100)(?:[,.]\d{1,2})?$/.test(rateCell)) return null;
-  if (!cells.slice(1).every((cell) => exactFinancialAmountMatches(cell).some((match) => match[0] === cell))) return null;
-  const values = cells.slice(1).map(parseMoneyCents);
+  const parsePrintedRate = (cell: string): number | null => {
+    const printed = cell.replace(/%$/, "");
+    if (!/^(?:\d{1,2}|100)(?:[,.]\d{1,2})?$/.test(printed)) return null;
+    const rate = Number(printed.replace(",", "."));
+    return rate >= 0 && rate <= 100 ? rate : null;
+  };
+  const ratePercent = parsePrintedRate(cells[0]);
+  // In six-column retail tables cell four is an equivalence surcharge RATE,
+  // often printed "0,5", "0,5%" or "0,50", not a euro amount.
+  // Its separate quota and the gross total must still be strict money tokens.
+  const recargoRate = cells.length === 6 ? parsePrintedRate(cells[3]) : 0;
+  if (ratePercent === null || recargoRate === null) return null;
+  const moneyCells = cells.length === 6
+    ? [cells[1], cells[2], cells[4], cells[5]]
+    : cells.slice(1);
+  if (!moneyCells.every((cell) => exactFinancialAmountMatches(cell).some((match) => match[0] === cell))) return null;
+  const values = moneyCells.map(parseMoneyCents);
   if (values.some((value) => value === null)) return null;
-  const ratePercent = Number(rateCell.replace(",", "."));
-  if (!Number.isFinite(ratePercent) || ratePercent < 0 || ratePercent > 100) return null;
   return { ratePercent, baseCents: values[0]!, taxCents: values[1]! };
 }
 

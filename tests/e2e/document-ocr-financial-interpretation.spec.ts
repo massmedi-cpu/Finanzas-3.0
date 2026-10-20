@@ -1413,3 +1413,30 @@ test("REC-OCR-177 · a retail VAT table keeps its rate, base and quota columns s
   expect(parsed.totalCents.value).toBe(3460);
   expect(parsed.totalCents.trust).toBe("reliable");
 });
+
+test("REC-OCR-193 · recargo rates in retail VAT tables are percentages, not amounts", () => {
+  for (const recargoRate of ["0,5", "0,5%", "0,50"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("head", "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL", 0.99, 0.15),
+      line("vat", `IVA 10 25,37 2,54 ${recargoRate} 0,13 28,04`, 0.99, 0.2),
+      line("payable", "IMPORTE TOTAL 28,04 €", 0.99, 0.8),
+    ]));
+    expect(parsed.taxLines, recargoRate).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ratePercent: 10, baseCents: 2537, taxCents: 254, trust: "doubtful" }),
+    ]));
+    expect(parsed.totalCents.value).toBe(2804);
+  }
+});
+
+test("REC-OCR-194 · malformed recargo percentages cannot certify a retail VAT row", () => {
+  for (const recargoRate of ["0,500", "0,5%%", "101", "1e2"]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("head", "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL", 0.99, 0.15),
+      line("vat", `IVA 10 25,37 2,54 ${recargoRate} 0,13 28,04`, 0.99, 0.2),
+      line("payable", "IMPORTE TOTAL 28,04 €", 0.99, 0.8),
+    ]));
+    expect(parsed.taxLines.some((tax) =>
+      tax.ratePercent === 10 && tax.baseCents === 2537 && tax.taxCents === 254,
+    ), recargoRate).toBe(false);
+  }
+});
