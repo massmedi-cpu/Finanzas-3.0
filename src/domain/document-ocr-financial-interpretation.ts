@@ -253,6 +253,11 @@ function retailVatCells(text: string) {
   const row = text.trim().match(/^i\.?v\.?a\.?\s+(.+)$/i);
   if (!row) return null;
   const cells = row[1].trim().split(/\s+/);
+  // OCR may split a printed percentage sign into its own token. Rejoin it
+  // only in the two known RATE columns, never in base/quota/total amounts.
+  // Keep the original source evidence unchanged for human review.
+  if (cells[1] === "%") cells.splice(0, 2, `${cells[0]}%`);
+  if (cells.length >= 6 && cells[4] === "%") cells.splice(3, 2, `${cells[3]}%`);
   // Four cells: rate, base, quota, row total. Six add recargo rate and
   // quota before the row total. Reject partial/misaligned OCR tokens.
   if (cells.length !== 4 && cells.length !== 6) return null;

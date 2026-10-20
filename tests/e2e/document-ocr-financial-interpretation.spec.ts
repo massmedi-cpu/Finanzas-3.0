@@ -1440,3 +1440,47 @@ test("REC-OCR-194 · malformed recargo percentages cannot certify a retail VAT r
     ), recargoRate).toBe(false);
   }
 });
+
+
+test("REC-OCR-195 · separated percentage signs keep VAT and surcharge columns intact", () => {
+  for (const sample of [
+    { row: "IVA 10 % 25,37 2,54 27,91", total: "27,91", cents: 2791,
+      header: "TIPO % IMPUESTO BASE CUOTA TOTAL" },
+    { row: "IVA 10 % 25,37 2,54 0,5 % 0,13 28,04", total: "28,04", cents: 2804,
+      header: "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL" },
+    { row: "IVA 10% 25,37 2,54 0,5 % 0,13 28,04", total: "28,04", cents: 2804,
+      header: "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL" },
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("head", sample.header, 0.99, 0.15),
+      line("vat", sample.row, 0.99, 0.20),
+      line("payable", `IMPORTE TOTAL ${sample.total} €`, 0.99, 0.80),
+    ]));
+    expect(parsed.taxLines, sample.row).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        ratePercent: 10, baseCents: 2537, taxCents: 254, trust: "doubtful",
+        evidence: expect.arrayContaining([expect.objectContaining({ rawText: sample.row })]),
+      }),
+    ]));
+    expect(parsed.totalCents.value, sample.row).toBe(sample.cents);
+  }
+});
+
+test("REC-OCR-196 · malformed split tax rates cannot be silently interpreted as valid percentages", () => {
+  for (const row of [
+    "IVA 10 % 25,37 2,54 0,500 % 0,13 28,04",
+    "IVA 10 % 25,37 2,54 101 % 0,13 28,04",
+    "IVA 10 % 25,37 2,54 0,5 %% 0,13 28,04",
+    "IVA 10,000 % 25,37 2,54 0,5 % 0,13 28,04",
+  ]) {
+    const parsed = interpretDocumentOcrFinancially(result([
+      line("head", "TIPO % IMPUESTO BASE CUOTA % RECARGO EQUIVALENCIA CUOTA R.E. TOTAL", 0.99, 0.15),
+      line("vat", row, 0.99, 0.20),
+      line("payable", "IMPORTE TOTAL 28,04 €", 0.99, 0.80),
+    ]));
+    expect(parsed.taxLines.some((tax) =>
+      tax.ratePercent === 10 && tax.baseCents === 2537 && tax.taxCents === 254,
+    ), row).toBe(false);
+    expect(parsed.totalCents.value, row).toBe(2804);
+  }
+});
