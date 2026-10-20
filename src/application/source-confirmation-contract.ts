@@ -16,7 +16,10 @@ function money(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value);
 }
 function bankDate(value: unknown) {
-  return value === null || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (value === null) return true;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 export function isConfirmedSourcePreflight(value: unknown): value is OfficialSourcePreflightSummary {
@@ -29,6 +32,7 @@ export function isConfirmedSourcePreflight(value: unknown): value is OfficialSou
     || !Array.isArray(value.cursors) || !value.cursors.length) return false;
 
   let productRows = 0;
+  const accountKeys = new Set<string>();
   for (const account of value.accounts) {
     if (!record(account) || !filled(account.accountExternalKey) || !filled(account.accountName)
       || !filled(account.accountType) || !filled(account.lifecycle)
@@ -36,15 +40,24 @@ export function isConfirmedSourcePreflight(value: unknown): value is OfficialSou
       || !money(account.openingBalanceCents) || !bankDate(account.newestBankDate)
       || !bankDate(account.oldestBankDate)
       || !(account.latestBalanceAfterCents === null || money(account.latestBalanceAfterCents))) return false;
+    // Sum equality alone cannot certify a preflight with repeated identities.
+    if (accountKeys.has(account.accountExternalKey)) return false;
+    accountKeys.add(account.accountExternalKey);
+    if ((account.newestBankDate === null) !== (account.oldestBankDate === null)) return false;
+    if (account.oldestBankDate !== null && account.newestBankDate !== null
+      && account.oldestBankDate > account.newestBankDate) return false;
     productRows += account.authoritativeRows;
     if (!Number.isSafeInteger(productRows)) return false;
   }
 
   let cursorRows = 0;
+  const sheetIds = new Set<string>();
   for (const cursor of value.cursors) {
     if (!record(cursor) || !filled(cursor.sourceSheetId) || !filled(cursor.sheetTitle)
       || !filled(cursor.lastSourceRowKey)
       || !count(cursor.authoritativeRows) || cursor.authoritativeRows === 0) return false;
+    if (sheetIds.has(cursor.sourceSheetId)) return false;
+    sheetIds.add(cursor.sourceSheetId);
     cursorRows += cursor.authoritativeRows;
     if (!Number.isSafeInteger(cursorRows)) return false;
   }
