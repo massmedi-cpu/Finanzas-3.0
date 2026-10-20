@@ -163,3 +163,37 @@ test("REC-SYNC-203 · solo un recibo de importación coherente certifica éxito"
   expect(isConfirmedSourceSyncResult({ ...receipt, rowsSeen: 999 })).toBe(false);
   expect(isConfirmedSourceSyncResult({ ...receipt, syncRunId: null })).toBe(false);
 });
+
+test("REC-SYNC-240 · el preflight rechaza identidades duplicadas y fechas incoherentes aunque sumen las filas", () => {
+  const valid = buildOfficialSourcePreflightSummary(snapshot());
+  expect(isConfirmedSourcePreflight(valid)).toBe(true);
+
+  // Los tres productos incluyen dos con una sola fila: duplicar el primero
+  // mantiene intacto el total, pero oculta otro producto bancario.
+  const repeatedAccounts = { ...valid, accounts: [valid.accounts[0], valid.accounts[0], valid.accounts[2]] };
+  expect(repeatedAccounts.accounts.reduce((total, item) => total + item.authoritativeRows, 0))
+    .toBe(valid.totalAuthoritativeRows);
+  expect(isConfirmedSourcePreflight(repeatedAccounts)).toBe(false);
+
+  const repeatedCursors = {
+    ...valid,
+    cursors: [
+      { ...valid.cursors[0], authoritativeRows: 1 },
+      { ...valid.cursors[0], authoritativeRows: 2 },
+    ],
+  };
+  expect(repeatedCursors.cursors.reduce((total, item) => total + item.authoritativeRows, 0))
+    .toBe(valid.totalAuthoritativeRows);
+  expect(isConfirmedSourcePreflight(repeatedCursors)).toBe(false);
+
+  const changedAccount = (changes: Record<string, unknown>) => ({
+    ...valid,
+    accounts: [{ ...valid.accounts[0], ...changes }, ...valid.accounts.slice(1)],
+  });
+  expect(isConfirmedSourcePreflight(changedAccount({ newestBankDate: "2026-02-31" }))).toBe(false);
+  expect(isConfirmedSourcePreflight(changedAccount({
+    oldestBankDate: "2026-10-20",
+    newestBankDate: "2026-01-01",
+  }))).toBe(false);
+  expect(isConfirmedSourcePreflight(changedAccount({ oldestBankDate: null }))).toBe(false);
+});
