@@ -18,6 +18,7 @@ on:
       - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
       - 'supabase/functions/financial-app-db-gateway/index.ts'
       - 'src/application/document-drive-inventory.ts'
+      - 'src/application/document-drive-folder-scope.ts'
       - 'src/application/private-document-original-detail.ts'
       - 'src/application/document-ocr-confirmation-integrity.ts'
       - 'src/application/document-ocr-error-messages.ts'
@@ -64,6 +65,20 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify Drive metadata batch atomicity and rollback
         run: node --experimental-strip-types scripts/test-drive-atomic-batch.mjs
+      - name: Ensure Drive folder scope regressions are really included in the run
+        run: |
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const source = readFileSync('.github/workflows/product-recovery-ui.yml', 'utf8');
+          const block = source.slice(source.indexOf('name: Integrated module regressions on the same optimized build'));
+          for (const path of [
+            'tests/e2e/document-drive-folder-scope.spec.ts',
+            'tests/e2e/document-drive-folder-recursive.spec.ts',
+          ]) {
+            if (!block.includes(path)) throw new Error('mandatory_drive_folder_regression_not_selected');
+          }
+          console.log('mandatory_drive_folder_regressions_selected');
+          NODE
       - name: Certify bounded Drive batch concurrency and atomic preflight
         run: node --experimental-strip-types scripts/test-drive-batch-verification.mjs
       - name: Certify Drive folder pagination and no fabricated empty result
@@ -116,6 +131,8 @@ jobs:
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
+          tests/e2e/document-drive-folder-scope.spec.ts
+          tests/e2e/document-drive-folder-recursive.spec.ts
           tests/e2e/google-service-account.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
