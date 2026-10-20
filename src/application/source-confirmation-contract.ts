@@ -43,9 +43,10 @@ export function isConfirmedSourcePreflight(value: unknown): value is OfficialSou
     // Sum equality alone cannot certify a preflight with repeated identities.
     if (accountKeys.has(account.accountExternalKey)) return false;
     accountKeys.add(account.accountExternalKey);
-    if ((account.newestBankDate === null) !== (account.oldestBankDate === null)) return false;
-    if (account.oldestBankDate !== null && account.newestBankDate !== null
-      && account.oldestBankDate > account.newestBankDate) return false;
+    const newest = account.newestBankDate;
+    const oldest = account.oldestBankDate;
+    if ((newest === null) !== (oldest === null)) return false;
+    if (typeof oldest === "string" && typeof newest === "string" && oldest > newest) return false;
     productRows += account.authoritativeRows;
     if (!Number.isSafeInteger(productRows)) return false;
   }
