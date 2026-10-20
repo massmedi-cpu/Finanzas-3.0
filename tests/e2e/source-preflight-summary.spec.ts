@@ -260,7 +260,9 @@ test("REC-SYNC-241 · prevalidación inválida y relectura de estado impiden tod
   const validate = page.getByRole("button", { name: "Validar fuente antes de importar" });
   await expect(validate).toBeEnabled();
   await validate.click();
-  await expect(page.getByRole("alert")).toContainText("No se permite importar");
+  // The page also renders a global action-feedback alert and a Next.js route
+  // announcer. Assert the actual source-form error, not an ambiguous ARIA role.
+  await expect(page.locator(".config-message.error")).toContainText("No se permite importar");
   await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toHaveCount(0);
   expect(synchronizationPosts).toBe(0);
 
