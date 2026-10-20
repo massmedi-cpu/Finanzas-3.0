@@ -65,6 +65,31 @@ for (const theme of ["light", "dark"] as const) {
         `calendar must fit the month control at ${width}px / ${theme}`)
         .toBeLessThanOrEqual(controlBox!.x + controlBox!.width - 4);
 
+      // REC-VIS-244: the advanced filter card must inherit the active palette.
+      // Previously it fell back to white while the dark heading stayed white,
+      // producing unreadable text even though axe/overflow checks were green.
+      const advancedPanel = page.locator('section[aria-labelledby="analysis-period-heading"]');
+      await expect(advancedPanel).toBeVisible();
+      const palette = await advancedPanel.evaluate((panel) => {
+        const probe = document.createElement("span");
+        probe.style.backgroundColor = "var(--surface-card)";
+        probe.style.color = "var(--color-text)";
+        panel.appendChild(probe);
+        const expectedBackground = getComputedStyle(probe).backgroundColor;
+        const expectedText = getComputedStyle(probe).color;
+        const actualBackground = getComputedStyle(panel).backgroundColor;
+        const heading = panel.querySelector("h2");
+        const actualHeadingText = heading ? getComputedStyle(heading).color : "";
+        probe.remove();
+        return { expectedBackground, expectedText, actualBackground, actualHeadingText };
+      });
+      expect(palette.actualBackground,
+        `REC-VIS-244 panel must use the ${theme} theme surface at ${width}px`)
+        .toBe(palette.expectedBackground);
+      expect(palette.actualHeadingText,
+        `REC-VIS-244 heading must use the ${theme} theme text at ${width}px`)
+        .toBe(palette.expectedText);
+
       const errorBounds = await error.boundingBox();
       const advanced = page.getByRole("heading", { name: "Elige qué quieres analizar" });
       const advancedBounds = await advanced.boundingBox();
