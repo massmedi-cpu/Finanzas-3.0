@@ -49,6 +49,13 @@ const cases = [
 const integrated = workflow.split("name: Integrated module regressions on the same optimized build")[1]?.split("      # Synthetic UI results")[0] ?? "";
 assert.ok(integrated.includes("npx playwright test"), "The real browser test command must exist");
 assert.ok(integrated.includes("--project=chromium-desktop --project=chromium-mobile"), "Both browser profiles are mandatory");
+
+ // REC-CI-250: A job may be green when Playwright retries recover a failed test.
+ // Require a failing exit code for ANY flaky result in BOTH browser phases;
+ // do not hide regressions with retries or selective result parsing.
+const flakyGate = "--fail-on-flaky-tests";
+assert.ok(integrated.includes(flakyGate), "Integrated browser regressions must fail when any test is flaky");
+
 for (const [file, casesInFile] of cases) {
   assert.ok(integrated.includes(file), `Workflow fails to execute ${file}`);
   const source = readFileSync(file, "utf8");
@@ -57,6 +64,7 @@ for (const [file, casesInFile] of cases) {
 }
 const visual = workflow.split("name: Browser coverage, theme, keyboard and layout checks")[1]?.split("name: Retain isolated visual screenshots")[0] ?? "";
 assert.ok(visual.includes("tests/e2e/product-recovery-visual.spec.ts"), "Product visual regressions must execute");
+assert.ok(visual.includes(flakyGate), "Visual browser coverage must fail when any test is flaky");
 const visualTests = readFileSync("tests/e2e/product-recovery-visual.spec.ts", "utf8");
 for (const id of ["REC-UI-DOC-006", "REC-UI-DOC-007", "REC-UI-DOC-008", "REC-UI-DOC-009", "REC-VIS-007"]) {
   assert.ok(visualTests.includes(id), "Mandatory Document visual regression missing: " + id);
