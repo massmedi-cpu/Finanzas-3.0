@@ -16,12 +16,8 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM financial_app.transactions)
     OR NOT EXISTS (SELECT 1 FROM financial_app.transaction_source_records)
-    OR NOT EXISTS (SELECT 1 FROM financial_app.documents LIMIT 0) THEN
-    -- The third test checks object existence, not a private user document.
-    NULL;
-  END IF;
-  IF to_regclass('financial_app.documents') IS NULL THEN
-    RAISE EXCEPTION 'REC_AP8_DOCUMENT_TABLE_MISSING';
+    OR to_regclass('financial_app.documents') IS NULL THEN
+    RAISE EXCEPTION 'REC_AP8_SYNTHETIC_BASELINE_DATA_OR_DOCUMENT_TABLE_MISSING';
   END IF;
 END $preflight$;
 
