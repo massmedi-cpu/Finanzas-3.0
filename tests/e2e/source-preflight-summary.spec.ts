@@ -531,8 +531,13 @@ test("REC-BANK-274 · informe con discontinuidad legible en siete anchuras y amb
     row[0] = id; row[1] = date; row[13] = amount; row[14] = balance;
     return row;
   });
-  source.sheets[0].rows = [...rows, [...prepaidRow]];
-  const state = await mockConfirmedSource(page, { summary: buildOfficialSourcePreflightSummary(source) });
+  // El informe visual usa una fuente físicamente válida: en la misma
+  // pestaña las fechas se mantienen 04, 03, 03, 02 (no 04, 03, 02, 03).
+  // La discontinuidad contable de CHAIN-OLD debe seguir siendo visible.
+  source.sheets[0].rows = [rows[0], rows[1], [...prepaidRow], rows[2]];
+  const preflight = buildOfficialSourcePreflightSummary(source);
+  expect(preflight.cursors[0]).toMatchObject({ authoritativeRows: 4, lastSourceRowKey: "CHAIN-OLD" });
+  const state = await mockConfirmedSource(page, { summary: preflight });
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Comprobar sin importar" }).click();
   const report = page.getByRole("region", { name: "Prevalidación de la fuente bancaria" });
