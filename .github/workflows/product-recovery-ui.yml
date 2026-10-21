@@ -104,7 +104,7 @@ jobs:
         run: npm run build
       - name: Browser coverage, theme, keyboard and layout checks
         run: >-
-          npx playwright test --config=playwright.recovery.config.ts
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
           tests/e2e/product-recovery-coverage.spec.ts
           tests/e2e/product-recovery-visual.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
@@ -124,7 +124,7 @@ jobs:
       - name: Integrated module regressions on the same optimized build
         if: ${{ !cancelled() }}
         run: >-
-          npx playwright test --config=playwright.recovery.config.ts
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
