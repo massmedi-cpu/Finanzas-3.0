@@ -3,7 +3,9 @@ import { expect, test } from "@playwright/test";
 // Real browser layout, isolated HTTP errors. No banking documents, user identity,
 // remote persistence or OCR originals are read by this regression.
 for (const theme of ["light", "dark"] as const) {
-  for (const width of [1366, 1440]) {
+  // REC-VIS-245: protect the same real layout and palette on phone/tablet
+  // viewports as well as on desktop; no private requests or writes.
+  for (const width of [390, 768, 1366, 1440]) {
     test(`REC-UI-ANA-016 · análisis sin datos no solapa filtros ni deja un vacío a ${width}px / ${theme}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 920 });
       await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
