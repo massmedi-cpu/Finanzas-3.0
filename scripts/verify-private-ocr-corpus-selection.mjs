@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,200}$/;
 const MAX_PRIVATE_ROOTS = 12;
-const REJECT_NON_RECEIPTS = /\b(?:contrato|condiciones|solicitud|p[oó]liza|oferta|certificado)\b/i;
+const REJECT_NON_RECEIPTS = /\b(?:contratos?|condiciones|solicitudes?|p[oó]lizas?|ofertas?|certificados?|contracts?|terms\s+(?:and\s+)?conditions)\b/i;
 const SPECS = [
   { key: "suministros", match: /emasesa|endesa|energ[ií]a|electric|iberdrola|naturgy|factura\s+agua|luz/i, dev: 4, hold: 2 },
   { key: "telecom", match: /vodafone|movistar|orange|yoigo|digi|telefon|fibra|telecom/i, dev: 2, hold: 1 },
@@ -114,10 +114,28 @@ function testSynthetic() {
     name: "Factura Vodafone compartida.pdf", mimeType: "application/pdf",
     sizeBytes: 3000, private: false,
   });
+  // Invalid-document variants must stay excluded even when classification
+  // keywords would otherwise place them into an invoice category.
+  for (const [suffix, name] of [
+    ["plural_001", "Contratos de suministro Energia.pdf"],
+    ["plural_002", "Factura de ofertas comerciales.pdf"],
+    ["english_01", "Service contract.pdf"],
+  ]) {
+    samples.push({
+      id: "synthetic_" + suffix + "000000",
+      parentFolderId: "folder_private_00",
+      name,
+      mimeType: "application/pdf",
+      sizeBytes: 3200,
+      private: true,
+    });
+  }
   const good = selectPrivateOcrCorpus(samples);
   assert.equal(good.development.length, 16);
   assert.equal(good.holdout.length, 8);
   assert.equal(good.folderCount, 6);
+  assert.deepEqual(good.counts.map((x) => [x.development, x.holdout]),
+    [[4, 2], [2, 1], [6, 2], [1, 1], [1, 1], [2, 1]]);
   assert.equal(new Set([...good.development, ...good.holdout].map((x) => x.file.id)).size, 24);
   assert.equal(good.holdout.some((x) => x.file.previouslyInspected), false);
   assert.equal([...good.development, ...good.holdout].some((x) => REJECT_NON_RECEIPTS.test(x.file.name)), false);
