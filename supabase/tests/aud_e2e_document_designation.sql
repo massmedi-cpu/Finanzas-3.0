@@ -193,7 +193,7 @@ end;
 $aud_private_original$;
 
 reset role;
-do $
+do $$
 begin
   if pg_catalog.has_function_privilege('anon','financial_app.set_document_test_designation(uuid,boolean,text,boolean)','execute')
     or pg_catalog.has_function_privilege('authenticated','financial_app.set_document_test_designation(uuid,boolean,text,boolean)','execute')
