@@ -8,6 +8,7 @@ const cases = [
     "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
     "REC-SYNC-266", "REC-SYNC-267", "REC-SYNC-268", "REC-SYNC-269",
     "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274",
+    "REC-SYNC-276", "REC-SYNC-277", "REC-SYNC-278", "REC-SYNC-279",
   ]],
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-DOC-140", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
