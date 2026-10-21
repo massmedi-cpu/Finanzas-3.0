@@ -76,7 +76,7 @@ END $capture$;
 \i supabase/migrations/20261017160345_statement_workspace_policy_context.sql
 
 DO $postflight$
-DECLARE r record; v_digest text; v_bad integer := 0;
+DECLARE r record; v_digest text;
 BEGIN
   IF to_regprocedure('financial_app.prevent_private_original_rewrite()') IS NULL
     OR NOT EXISTS (
@@ -164,7 +164,7 @@ BEGIN
   THEN RAISE EXCEPTION 'REC_AP8_AP1_GUARD_ROLLBACK_FAILED'; END IF;
   IF EXISTS (
     SELECT 1 FROM rec_ap8_functions b
-    FULL JOIN pg_proc p ON p.oid=b.signature::regprocedure
+    LEFT JOIN pg_proc p ON p.oid=b.signature::regprocedure
     WHERE p.oid IS NULL OR b.definition IS DISTINCT FROM pg_get_functiondef(p.oid)
       OR b.proowner IS DISTINCT FROM p.proowner OR b.proacl IS DISTINCT FROM p.proacl
       OR b.prosecdef IS DISTINCT FROM p.prosecdef
