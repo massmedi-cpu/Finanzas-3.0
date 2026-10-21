@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
 const cases = [
@@ -118,5 +119,20 @@ for (const path of releaseWorkflows) {
   assert.ok(visualWorkflow.includes("'" + path + "'"), `Release workflow changes must retrigger the CI guard: ${path}`);
 }
 process.stdout.write("PASS: release workflows pin actions, guard ancestry and do not persist checkout credentials\n");
+
+// G5 acceptance must NEVER rely on Drive originals in public CI. Run only
+// the selector's synthetic privacy/quotas regression, early in the existing
+// mandatory browser gate. Do not pass file IDs, filenames, or metadata files.
+const privateCorpusSmoke = execFileSync(process.execPath, [
+  "scripts/verify-private-ocr-corpus-selection.mjs",
+  "--self-test",
+], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
+assert.ok(
+  privateCorpusSmoke.includes(
+    "REC_G5_PRIVATE_CORPUS|status=ok|development=16|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false"
+  ),
+  "Private G5 selection must pass synthetic privacy/quotas tests without reading user originals",
+);
+process.stdout.write("PASS: G5 private corpus selection self-test (synthetic only; no user files)\\n");
 
 process.stdout.write("PASS: recovery visual suites are executable by the mandatory browser gate\n");
