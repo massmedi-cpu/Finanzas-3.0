@@ -8,7 +8,7 @@ import {
 import { summarizeSourceBalanceContinuity } from "../../src/domain/source-balance-continuity";
 import { readOfficialSourcePreflight, synchronizeOfficialSource } from "../../src/application/source-sync-client";
 import AxeBuilder from "@axe-core/playwright";
-import type { OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
+import { prepareOfficialSourceSyncBatch, SourceWorkbookContractError, type OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
 import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/domain/official-bank-source";
 
 const currentRow: SourceCellValue[] = [
@@ -566,4 +566,93 @@ test("REC-BANK-274 · informe con discontinuidad legible en siete anchuras y amb
     }
   }
   expect(state.syncBodies).toHaveLength(0);
+});
+
+
+function expectRejectedPhysicalSource(input: OfficialSourceWorkbookSnapshot, code: SourceWorkbookContractError["code"]) {
+  let failure: unknown = null;
+  try {
+    prepareOfficialSourceSyncBatch(input);
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(SourceWorkbookContractError);
+  expect((failure as SourceWorkbookContractError).code).toBe(code);
+}
+
+test("REC-SYNC-276 · IDs técnicos compartidos o vacíos no pueden fusionar cursores físicos", () => {
+  const original = snapshot();
+  const before = JSON.stringify(original);
+  for (const badId of ["725351515", " 725351515 "]) {
+    expectRejectedPhysicalSource({
+      ...original,
+      sheets: [original.sheets[0], { ...original.sheets[1], sourceSheetId: badId }],
+    }, "duplicate_source_sheet_identity");
+  }
+  expectRejectedPhysicalSource({
+    ...original,
+    sheets: [{ ...original.sheets[0], sourceSheetId: "   " }, original.sheets[1]],
+  }, "invalid_workbook_identity");
+  // All failures precede a persistence call, without rewriting the fixture.
+  expect(JSON.stringify(original)).toBe(before);
+  expect(prepareOfficialSourceSyncBatch(original).observations).toHaveLength(3);
+});
+
+test("REC-SYNC-277 · intercalar productos en una pestaña no puede ocultar inversión cronológica", () => {
+  const original = snapshot();
+  // Checking and prepaid each have only one row, so a per-product-only
+  // ordering check incorrectly accepted this mixed physical sheet.
+  const inverted = {
+    ...original,
+    sheets: [
+      { ...original.sheets[0], rows: [original.sheets[0].rows[1], original.sheets[0].rows[0]] },
+      original.sheets[1],
+    ],
+  };
+  expectRejectedPhysicalSource(inverted, "source_order_mismatch");
+  expect(prepareOfficialSourceSyncBatch(original).observations.map((row) => row.sourceRowKey))
+    .toEqual(["CC-PREFLIGHT-1", "TP-PREFLIGHT-1", "AH-PREFLIGHT-1"]);
+});
+
+test("REC-SYNC-278 · prepago archivado tampoco puede retroceder su cursor físico", () => {
+  const original = snapshot();
+  const olderPrepaid = [...prepaidRow];
+  olderPrepaid[0] = "TP-PREFLIGHT-2";
+  olderPrepaid[1] = "02/09/2026";
+  const newerPrepaid = [...prepaidRow];
+  newerPrepaid[0] = "TP-PREFLIGHT-3";
+  newerPrepaid[1] = "05/09/2026";
+  const inverted = {
+    ...original,
+    sheets: [
+      { ...original.sheets[0], rows: [currentRow, prepaidRow, olderPrepaid, newerPrepaid] },
+      original.sheets[1],
+    ],
+  };
+  expectRejectedPhysicalSource(inverted, "source_order_mismatch");
+});
+
+test("REC-SYNC-279 · fechas coincidentes y cuentas mezcladas válidas preservan importes e identidades", () => {
+  const original = snapshot();
+  const sameDayPrepaid = [...prepaidRow];
+  sameDayPrepaid[1] = "04/09/2026";
+  const fixture = {
+    ...original,
+    sheets: [
+      { ...original.sheets[0], rows: [currentRow, sameDayPrepaid] },
+      original.sheets[1],
+    ],
+  };
+  const before = JSON.stringify(fixture);
+  const prepared = prepareOfficialSourceSyncBatch(fixture);
+  const preflight = buildOfficialSourcePreflightSummary(fixture);
+  expect(prepared.observations.map((row) => [row.sourceRowKey, row.bankDate, row.amountCents]))
+    .toEqual([
+      ["CC-PREFLIGHT-1", "2026-09-04", 100],
+      ["TP-PREFLIGHT-1", "2026-09-04", -50],
+      ["AH-PREFLIGHT-1", "2026-09-04", 200],
+    ]);
+  expect(preflight.cursors.map((cursor) => cursor.authoritativeRows)).toEqual([2, 1]);
+  expect(isConfirmedSourcePreflight(preflight)).toBe(true);
+  expect(JSON.stringify(fixture)).toBe(before);
 });
