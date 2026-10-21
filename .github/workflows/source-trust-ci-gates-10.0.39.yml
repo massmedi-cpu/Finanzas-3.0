@@ -16,6 +16,7 @@ on:
       - 'src/application/source-confirmation-contract.ts'
       - 'src/application/source-sync-client.ts'
       - 'src/application/source-preflight.ts'
+      - 'src/application/source-sync-service.ts'
       - 'src/domain/source-balance-continuity.ts'
       - 'app/configuration/source/**'
       - 'app/inicio-overview.tsx'
