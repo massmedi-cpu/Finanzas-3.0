@@ -95,3 +95,9 @@ sin credenciales privadas, sin merge ni publicación. Las comprobaciones del
 producto siguen condicionadas a aceptación de AP1–AP8: aislamiento de
 usuarios, OCR G5 original y persistente, restauración/upgrade segregados,
 preflight-sync-postflight para las 20 altas y release final verificada.
+
+### Contraste CI REC-BANK-274 y corrección de fixture
+
+El job [Source Trust del SHA 61b4b31d](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39665697962) comprobó los cuatro regresores REC-SYNC-276–279 en **desktop y móvil: 8/8 PASS**. El build y typecheck del workflow llegaron a la fase de Playwright. El resultado global del job fue FAILURE: 122 PASS y dos fallos (desktop+móvil) del visual REC-BANK-274. **Causa reproducida:** el fixture de prueba había montado 04/09, 03/09, 02/09 y después una fila prepago 03/09 en la misma pestaña; la nueva protección real lo rechaza correctamente como `source_order_mismatch`.
+
+En [commit 85a09247](https://github.com/massmedi-cpu/Finanzas-3.0/commit/85a09247acc1d9de67e5c00d69b984bb6483e9b1) se reordenó **solo el fixture sintético** a 04/09, 03/09, 03/09, 02/09, conservando exactamente el ejemplo financiero de un enlace correcto y otro discontinuo. Se añadió aserción explícita de cursor físico de cuatro filas apuntando a `CHAIN-OLD`. El importador no suaviza ningún control, no reordena la fuente real y no escribe datos. La nueva CI requiere acreditación por SHA exacto antes de declarar completado el bloque.
