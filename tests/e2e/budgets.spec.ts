@@ -1184,7 +1184,8 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   // Start at a deliberately older month, then navigate to the SAME Next.js
   // route using the real product sidebar link (without the old query).
   await page.goto("/budgets?month=2026-07");
-  const monthInput = page.locator('input[type="month"]');
+  const monthInput = page.locator('main input[type="month"]');
+  await expect(monthInput).toHaveCount(1);
   await expect(monthInput).toHaveValue("2026-07");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
 
@@ -1204,10 +1205,17 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   const year = parts.find((part) => part.type === "year")!.value;
   const monthNumber = parts.find((part) => part.type === "month")!.value;
   const currentMonth = `${year}-${monthNumber}`;
-  await expect(monthInput).toHaveValue(currentMonth);
+  // During an App Router transition the outgoing page and the new page may
+  // briefly coexist (especially in Chromium mobile). Wait for real navigation
+  // and the new request before requiring exactly ONE live budget-month control.
+  // Do not use .first(): duplicate final controls must still fail this gate.
   await expect(page).toHaveURL(new RegExp(`month=${currentMonth}`));
   await expect.poll(() => requested.includes(currentMonth)).toBe(true);
-  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).not.toContainText("Julio de 2026");
+  await expect(monthInput).toHaveCount(1);
+  await expect(monthInput).toHaveValue(currentMonth);
+  const budgetSummary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
+  await expect(budgetSummary).toHaveCount(1);
+  await expect(budgetSummary).not.toContainText("Julio de 2026");
 });
 
 test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
