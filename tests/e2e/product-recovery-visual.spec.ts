@@ -76,6 +76,47 @@ test("REC-UI-ONBOARD-188 · Primeros pasos usa superficies y contraste accesible
   }
 });
 
+// REC-VIS-251: a visually blue button in the light theme used the regular dark
+// text token and scored only ~2.74:1. Axe found no issue on an unloaded screen,
+// so explicitly measure the rendered call-to-action on both real browser themes.
+test("REC-VIS-251 · forecast primary CTA text meets AA contrast at phone and desktop widths", async ({ page }) => {
+  await mockRecoveryHome(page, "covered");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 1366]) {
+      await page.setViewportSize({ width, height: width === 360 ? 900 : 1024 });
+      await page.goto("/forecast");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      const action = page.getByRole("button", { name: "Actualizar recurrentes" });
+      await expect(action).toBeVisible();
+      const colors = await action.evaluate((node) => {
+        const style = getComputedStyle(node);
+        const channels = (value: string) => (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 3).map(Number);
+        const luminance = (value: string) => {
+          const rgb = channels(value);
+          if (rgb.length !== 3) return Number.NaN;
+          const linear = rgb.map(channel => {
+            const normal = channel / 255;
+            return normal <= 0.04045 ? normal / 12.92 : ((normal + 0.055) / 1.055) ** 2.4;
+          });
+          return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+        };
+        const fg = luminance(style.color);
+        const bg = luminance(style.backgroundColor);
+        return {
+          text: style.color,
+          background: style.backgroundColor,
+          contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
+        };
+      });
+      const where = theme + " / " + width + "px";
+      expect(colors.background, "Opaque forecast button background at " + where).toMatch(/^rgb\(/);
+      expect(colors.text, "Explicit forecast button text at " + where).toMatch(/^rgb\(/);
+      expect(colors.contrast, "Forecast primary CTA AA contrast at " + where).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
 // This matrix verifies browser rendering with synthetic data and unavailable states.
 // Real persistence is evaluated separately by authenticated isolation, without mocks.
 for (const theme of ["light", "dark"] as const) {
