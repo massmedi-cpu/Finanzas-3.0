@@ -37,3 +37,61 @@ Ninguna escritura financiera productiva, sincronización real, migración, cambi
 AP1/AP5 mejoran en código y evidencia local. AP1–AP8 **no se cierran**: faltan OCR G5 original y persistencia privada, dos identidades cloud en entorno segregado, restore/upgrade real aislado y conciliación/sync autorizada con postflight. Las pestañas antiguas sin el contrato nuevo deben recargarse; el servidor las rechaza de forma segura. El Gantt no obtiene avance de aceptación por contar líneas o tests.
 
 Siguiente comprobación: CI y preview del SHA remoto exacto de este bloque; documentar su resultado terminal en los lugares canónicos, conservando PR #619 y #620 en DRAFT/NO MERGE mientras sigan abiertas las puertas.
+
+## Continuación de Chat · REC-SYNC-275–279 · integridad de cursores físicos
+
+Este bloque se añade a la PR #619 sin alterar datos reales ni la versión
+publicada. Análisis basado en el código de la rama acumulativa y en los logs
+exactos de GitHub Actions, no en conjeturas sobre los movimientos bancarios.
+
+### CI basal observada y reparación
+
+La CI final del commit `d2ca5f0b` produjo 83 éxitos, 3 fallos y 1 omisión:
+dos matrices de navegador y UX 15 quedaron en rojo por el mismo contrato
+obsoleto de Inicio: `dashboard-performance-contract.spec.ts:45` buscaba un
+POST directo cuando Inicio delega la operación en
+`synchronizeOfficialSource()`. El contrato actualizado, REC-SYNC-275,
+comprueba expresamente preflight, confirmación y recibo, así como la ausencia
+del POST directo desde Inicio. Solo se corrige la prueba; NO se debilita
+ningún umbral ni se permite importar sin un preflight válido.
+
+### Hallazgo de producto REC-SYNC-276/277
+
+1. Dos pestañas con el mismo `sourceSheetId` técnico —incluidos aliases con
+   espacios laterales— representaban un único cursor persistente, aunque el
+   libro tuviera los dos nombres de pestaña correctos. El preparador comprueba
+   ahora que todos los IDs físicos no estén vacíos y sean únicos normalizados
+   antes de consumir filas. Código `duplicate_source_sheet_identity` en
+   caso de colisión. Nunca mezcla pestañas ni modifica la fuente.
+2. El orden descendente de fechas se comprobaba por producto solo para cuentas
+   cuyo saldo inicial se derivaba del movimiento más antiguo. En una pestaña
+   con corriente y prepago intercalados, cada producto podía estar ordenado y
+   la pestaña física no. El cursor se calcula por pestaña, por lo que aceptar
+   esa situación era ambiguo. Ahora se valida el orden newest-first de
+   **cada pestaña física completa**, también en filas de prepago archivado;
+   una inversión detiene la importación con `source_order_mismatch`.
+   **La igualdad de fechas se admite**; no se cambian importes, conceptos,
+   saldos ni orden de los registros.
+
+### Regresiones ejecutables y alcance
+
+- REC-SYNC-276: IDs físicos repetidos, repetidos tras `trim`, vacíos,
+  fuente sintética inmutable y caso válido.
+- REC-SYNC-277: inversión cronológica oculta entre corriente y prepago
+  individualmente ordenados.
+- REC-SYNC-278: inversión del historial de prepago archivado.
+- REC-SYNC-279: fechas iguales válidas, preservación de importes, cursores
+  separados y ausencia de mutación del JSON de entrada.
+- El guard `verify-recovery-visual-suite-gate` exige los cuatro casos y
+  confirma que su archivo está incluido realmente en la matriz integrada.
+  El workflow Source Trust se dispara también al cambiar el preparador.
+- La ejecución externa CI del último SHA se consulta independientemente;
+  los verdes de un SHA anterior NO acreditan uno nuevo.
+
+### Límites de la corrección
+
+Sin POST bancario real, sin escritura Google Sheets, sin mutaciones Supabase,
+sin credenciales privadas, sin merge ni publicación. Las comprobaciones del
+producto siguen condicionadas a aceptación de AP1–AP8: aislamiento de
+usuarios, OCR G5 original y persistente, restauración/upgrade segregados,
+preflight-sync-postflight para las 20 altas y release final verificada.
