@@ -133,6 +133,6 @@ assert.ok(
   ),
   "Private G5 selection must pass synthetic privacy/quotas tests without reading user originals",
 );
-process.stdout.write("PASS: G5 private corpus selection self-test (synthetic only; no user files)\\n");
+process.stdout.write("PASS: G5 private corpus selection self-test (synthetic only; no user files)\n");
 
 process.stdout.write("PASS: recovery visual suites are executable by the mandatory browser gate\n");
