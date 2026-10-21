@@ -7,9 +7,9 @@ const REJECT_NON_RECEIPTS = /\b(?:contratos?|condiciones|solicitudes?|p[oó]liza
 const SPECS = [
   { key: "suministros", match: /emasesa|endesa|energ[ií]a|electric|iberdrola|naturgy|factura\s+agua|luz/i, dev: 4, hold: 2 },
   { key: "telecom", match: /vodafone|movistar|orange|yoigo|digi|telefon|fibra|telecom/i, dev: 2, hold: 1 },
-  { key: "supermercado", match: /carrefour|mercadona|lidl|dia\b|supermerc|aldi/i, dev: 6, hold: 2 },
+  { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 6, hold: 2 },
   { key: "transporte", match: /renfe|uber|cabify|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 1, hold: 1 },
-  { key: "tecnologia", match: /amazon|mediamarkt|pccomponentes|fnac|aliexpress|tecnolog/i, dev: 1, hold: 1 },
+  { key: "tecnologia", match: /amazon|media\s*markt|pccomponentes|fnac|aliexpress|tecnolog/i, dev: 1, hold: 1 },
   { key: "otros", match: /.*/, dev: 2, hold: 1 },
 ];
 const die = (code) => { throw new Error(code); };
@@ -91,7 +91,7 @@ export function selectPrivateOcrCorpus(files) {
 function testSynthetic() {
   const samples = [];
   const tokens = ["Factura Energia", "Factura Vodafone", "Mercadona ticket",
-    "Factura Cabify", "Factura MediaMarkt", "Factura independiente"];
+    "Factura Cabify", "Factura Media Markt", "Factura independiente"];
   const counts = [7, 5, 10, 4, 3, 5];
   for (let group = 0; group < counts.length; group++) {
     for (let i = 0; i < counts[group]; i++) {
@@ -130,6 +130,14 @@ function testSynthetic() {
       private: true,
     });
   }
+  samples.push({
+    id: "synthetic_mediamarkt_0001",
+    parentFolderId: "folder_private_04",
+    name: "Factura MediaMarkt distinta.pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 3500,
+    private: true,
+  });
   const good = selectPrivateOcrCorpus(samples);
   assert.equal(good.development.length, 16);
   assert.equal(good.holdout.length, 8);
