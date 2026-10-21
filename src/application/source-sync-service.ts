@@ -106,6 +106,7 @@ export class SourceWorkbookContractError extends Error {
   constructor(
     public readonly code:
       | "invalid_workbook_identity"
+      | "duplicate_source_sheet_identity"
       | "sheet_set_mismatch"
       | "empty_source_sheet"
       | "source_order_mismatch"
@@ -265,6 +266,28 @@ export function prepareOfficialSourceSyncBatch(
     );
   }
 
+  // REC-SYNC-276: two visible tabs with the same (possibly whitespace-padded)
+  // technical ID are not two independent cursors. Do not collapse their rows
+  // or accept a source fingerprint whose physical identity is ambiguous.
+  const physicalSheetIds = new Set<string>();
+  for (const sheet of snapshot.sheets) {
+    const physicalId = sheet.sourceSheetId.trim();
+    if (!physicalId) {
+      throw new SourceWorkbookContractError(
+        "invalid_workbook_identity",
+        "Una pestaña de la fuente no tiene identificador técnico verificable.",
+      );
+    }
+    if (physicalSheetIds.has(physicalId)) {
+      throw new SourceWorkbookContractError(
+        "duplicate_source_sheet_identity",
+        "Dos pestañas físicas comparten el mismo identificador técnico. Se detiene la importación para no mezclar sus cursores.",
+        physicalId,
+      );
+    }
+    physicalSheetIds.add(physicalId);
+  }
+
   const schemaParts: string[] = [];
   const parsedSheets: ParsedSheet[] = snapshot.sheets.map((sheet) => {
     const headerFingerprint = validateOfficialSourceHeaders(sheet.headers);
@@ -286,6 +309,10 @@ export function prepareOfficialSourceSyncBatch(
         values,
       }),
     );
+    // REC-SYNC-277: cursor state is keyed by PHYSICAL sheet. Comparing only
+    // individual products allows an interleaved archived/prepaid row to move
+    // forward in time while the cursor silently points at an older position.
+    validateNewestFirstSourceOrder(sheet.sourceSheetId, sheet.title, rows);
     return { sourceSheetId: sheet.sourceSheetId, title: sheet.title, rows };
   });
 
