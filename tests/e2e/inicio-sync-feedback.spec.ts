@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { hasRecentSourceSyncEvidence } from "../../src/application/source-sync-incidents";
 
@@ -71,12 +72,17 @@ async function mockInicio(page: Page, mode: SyncMode) {
     const request = route.request();
     const url = new URL(request.url());
 
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(10));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       if (request.method() === "POST") {
         posts += 1;
         await json(route, mode === "missing-after-sync"
-          ? { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 1, duplicatesDetected: 0, warningsCount: 1 }
-          : { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 0, duplicatesDetected: 2, warningsCount: 0 });
+          ? { ...syntheticSourceSyncReceipt(10), rowsMissing: 1, warningsCount: 1 }
+          : { ...syntheticSourceSyncReceipt(10), duplicatesDetected: 2 });
         return;
       }
 

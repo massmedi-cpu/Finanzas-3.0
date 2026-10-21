@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../../src/application/source-confirmation-contract";
+import { isConfirmedSourcePreflight } from "../../../src/application/source-confirmation-contract";
+import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
-import { formatMoneyCents } from "../../../src/core/money";
+import type { OfficialSourcePreflightSummary as PreflightSummary } from "../../../src/application/source-preflight";
+import { SourcePreflightReport } from "./source-preflight-report";
 import { useActionFeedback } from "../../action-feedback";
 import styles from "./source.module.css";
 
@@ -88,34 +90,6 @@ type SyncResult = {
   sourceRevision: string | null;
 };
 
-type PreflightAccount = {
-  accountExternalKey: string;
-  accountName: string;
-  accountType: string;
-  lifecycle: string;
-  authoritativeRows: number;
-  openingBalanceCents: number;
-  newestBankDate: string | null;
-  oldestBankDate: string | null;
-  latestBalanceAfterCents: number | null;
-};
-
-type PreflightCursor = {
-  sourceSheetId: string;
-  sheetTitle: string;
-  authoritativeRows: number;
-  lastSourceRowKey: string;
-};
-
-type PreflightSummary = {
-  sourceFileId: string;
-  sourceRevision: string | null;
-  schemaFingerprint: string;
-  totalAuthoritativeRows: number;
-  accounts: PreflightAccount[];
-  cursors: PreflightCursor[];
-};
-
 const EMPTY_SYNC_STATUS: SyncStatus = { run: null, cursors: [] };
 
 const CONFIG_LABELS: Record<string, string> = {
@@ -151,11 +125,6 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
-function formatSourceMoney(value: number | null) {
-  if (value === null) return "Sin saldo";
-  return formatMoneyCents(value);
-}
-
 function sourceIncidentMessage(value: SyncRun | SyncResult) {
   const incidents = normalizeSourceSyncIncidents(value);
   if (incidents.missingRows === 0 && incidents.duplicates === 0 && incidents.additionalWarnings === 0) return null;
@@ -187,6 +156,10 @@ function sourceIncidentMessage(value: SyncRun | SyncResult) {
 }
 
 function sourceActionErrorMessage(code: string | undefined) {
+  if (code === "google_source_preflight_changed") return "La fuente ha cambiado desde la comprobación previa. Vuelve a validarla antes de importar. No se ha guardado ningún cambio.";
+  if (code === "google_source_preflight_required") return "Vuelve a comprobar la fuente antes de importar movimientos.";
+  if (code === "source_preflight_invalid") return "La prevalidación ha devuelto datos incompletos. No se permite importar; vuelve a comprobar la fuente.";
+  if (code === "google_source_sync_unconfirmed") return "No se puede confirmar el resultado de la sincronización. Consulta el historial antes de repetirla.";
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
   if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
   if (code === "source_runtime_incompatible") return "La sincronización está detenida porque faltan comprobaciones de seguridad. Inténtalo más tarde.";
@@ -334,20 +307,14 @@ export default function SourceClient() {
     actionFeedback.begin(feedbackId, "Validando la fuente bancaria en modo solo lectura…");
 
     try {
-      const response = await fetch("/api/source/google/preflight", { method: "POST" });
-      const payload = await jsonOrEmpty<PreflightSummary & { error?: string }>(response);
-      if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
-      if (!isConfirmedSourcePreflight(payload)) {
-        throw new Error("La prevalidación ha devuelto datos incompletos. No se permite importar; vuelve a comprobar la fuente.");
-      }
-
+      const payload = await readOfficialSourcePreflight();
       setPreflight(payload);
       const message = `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`;
       setNotice({ message, tone: "success" });
       actionFeedback.success(feedbackId, message);
     } catch (cause) {
       setPreflight(null);
-      const message = cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.";
+      const message = cause instanceof SourceSyncClientError ? sourceActionErrorMessage(cause.code) : cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.";
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
@@ -356,8 +323,9 @@ export default function SourceClient() {
   }
 
   async function synchronize() {
-    if (!readyToSync) return;
-    // A verified snapshot may only authorize one sync attempt.
+    if (!readyToSync || !isConfirmedSourcePreflight(preflight)) return;
+    // Consume this exact confirmation once; a new read must match it on the server.
+    const confirmedPreflight = preflight;
     setPreflight(null);
     setBusy(true);
     setError(null);
@@ -367,12 +335,7 @@ export default function SourceClient() {
     actionFeedback.begin(feedbackId, "Sincronizando desde Google en modo solo lectura…");
 
     try {
-      const response = await fetch("/api/source/google/sync", { method: "POST" });
-      const payload = await jsonOrEmpty<SyncResult & { error?: string }>(response);
-      if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
-      if (!isConfirmedSourceSyncResult(payload)) {
-        throw new Error("No se puede confirmar el resultado de la sincronización. Consulta el historial antes de repetirla.");
-      }
+      const payload = await synchronizeOfficialSource({ preflight: confirmedPreflight });
 
       setSyncResult(payload);
       const incident = sourceIncidentMessage(payload);
@@ -384,7 +347,7 @@ export default function SourceClient() {
       await load();
       actionFeedback.success(feedbackId, summary);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
+      const message = cause instanceof SourceSyncClientError ? sourceActionErrorMessage(cause.code) : cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
       await load();
       setError(message);
       actionFeedback.error(feedbackId, message);
@@ -411,7 +374,7 @@ export default function SourceClient() {
       await load();
       actionFeedback.success(feedbackId, message);
     } catch (cause) {
-      const message = cause instanceof Error ? cause.message : "No se ha podido desconectar Google.";
+      const message = cause instanceof SourceSyncClientError ? sourceActionErrorMessage(cause.code) : cause instanceof Error ? cause.message : "No se ha podido desconectar Google.";
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
@@ -526,38 +489,8 @@ export default function SourceClient() {
               </button>
             </div>
 
-            {preflight && (
-              <div className={styles.preflightBlock} role="region" aria-label="Prevalidación de la fuente bancaria">
-                <div className="panel-heading">
-                  <div><p className="panel-kicker">PREVALIDACIÓN READ-ONLY</p><h3>Fotografía autoritativa antes de importar</h3></div>
-                  <span className="status-chip">Validada</span>
-                </div>
-                <dl className={styles.metrics}>
-                  <div><dt>Movimientos</dt><dd>{preflight.totalAuthoritativeRows}</dd></div>
-                  <div><dt>Productos</dt><dd>{preflight.accounts.length}</dd></div>
-                  <div><dt>Pestañas</dt><dd>{preflight.cursors.length}</dd></div>
-                </dl>
-                <div className={styles.preflightProducts}>
-                  {preflight.accounts.map((account) => (
-                    <article key={account.accountExternalKey}>
-                      <span>{account.lifecycle === "archived" ? "Archivada" : "Activa"} · {account.accountType}</span>
-                      <strong>{account.accountName}</strong>
-                      <small>{account.authoritativeRows} movimientos · saldo inicial {formatSourceMoney(account.openingBalanceCents)}</small>
-                      <small>Último saldo observado: {formatSourceMoney(account.latestBalanceAfterCents)}</small>
-                    </article>
-                  ))}
-                </div>
-                <div className={styles.metaRows}>
-                  {preflight.cursors.map((cursor) => (
-                    <p key={cursor.sourceSheetId}>
-                      <span>{cursor.sheetTitle} · {cursor.authoritativeRows} filas</span>
-                      <strong>Cursor previsto: {cursor.lastSourceRowKey}</strong>
-                    </p>
-                  ))}
-                  <p><span>Revisión fuente</span><strong>{preflight.sourceRevision ?? "Sin revisión"}</strong></p>
-                </div>
-              </div>
-            )}
+            {preflight && <SourcePreflightReport summary={preflight} />}
+
           </section>
 
           <aside className={`config-panel ${styles.sidePanel}`}>

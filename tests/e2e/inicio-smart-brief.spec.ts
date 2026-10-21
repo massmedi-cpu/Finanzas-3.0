@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const HOME_VISIT_KEY = "financial-app:home-last-visit:v1";
@@ -99,6 +100,11 @@ async function mockInicio(page: Page) {
       });
       return;
     }
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(12));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
@@ -328,22 +334,7 @@ test("QA-08 · Saldo se invalida al Actualizar datos aunque el periodo no cambie
       return;
     }
     refreshed = true;
-    await json(route, {
-      run: {
-        id: "run-refresh",
-        status: "success",
-        startedAt: "2026-09-16T06:10:00.000Z",
-        finishedAt: "2026-09-16T06:10:05.000Z",
-        rowsSeen: 12,
-        rowsInserted: 0,
-        rowsRevised: 0,
-        rowsSkipped: 12,
-        rowsFailed: 0,
-        errorCode: null,
-        errorMessage: null,
-      },
-      cursors: [],
-    });
+    await json(route, syntheticSourceSyncReceipt(12));
   });
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {

@@ -13,7 +13,7 @@ for (const theme of ["light", "dark"] as const) {
     const notice = page.getByText("El mes solicitado no era válido; se muestra el mes actual.", { exact: true });
     await expect(notice).toBeVisible();
 
-    const colors = await page.evaluate(() => {
+    const readColors = () => page.evaluate(() => {
       const status = [...document.querySelectorAll('p[role="status"]')]
         .find((node) => node.textContent?.includes("El mes solicitado no era válido"));
       if (!status) throw new Error("Missing invalid-month status notice");
@@ -55,9 +55,15 @@ for (const theme of ["light", "dark"] as const) {
       const l1 = luminance(foreground), l2 = luminance(background);
       return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
     };
-    expect(rgb(colors.noticeColor)).toEqual(hexToRgb(colors.primary));
-    expect(rgb(colors.warningColor)).toEqual(hexToRgb(colors.warning));
-    expect(ratio(rgb(colors.noticeColor), hexToRgb(colors.canvas))).toBeGreaterThanOrEqual(4.5);
-    expect(ratio(rgb(colors.warningColor), hexToRgb(colors.canvas))).toBeGreaterThanOrEqual(4.5);
+    // data-theme and visibility may settle before inherited CSS has been
+    // recalculated for streamed content. Wait for the actual computed colors,
+    // keeping token equality AND WCAG AA mandatory in the same sample.
+    await expect(async () => {
+      const colors = await readColors();
+      expect(rgb(colors.noticeColor)).toEqual(hexToRgb(colors.primary));
+      expect(rgb(colors.warningColor)).toEqual(hexToRgb(colors.warning));
+      expect(ratio(rgb(colors.noticeColor), hexToRgb(colors.canvas))).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(rgb(colors.warningColor), hexToRgb(colors.canvas))).toBeGreaterThanOrEqual(4.5);
+    }).toPass({ timeout: 3000 });
   });
 }

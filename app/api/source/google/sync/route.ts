@@ -3,7 +3,11 @@ import {
   assertOfficialSourceHistoricalBaseline,
   buildOfficialSourcePreflightSummary,
 } from "../../../../../src/application/source-preflight";
-import { isConfirmedSourcePreflight } from "../../../../../src/application/source-confirmation-contract";
+import {
+  isConfirmedSourcePreflight, isSourcePreflightConfirmation,
+  matchesSourcePreflightConfirmation, isSourceSyncResultForPreflight,
+} from "../../../../../src/application/source-confirmation-contract";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../../src/infrastructure/http/limited-json-request";
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
 import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import {
@@ -142,13 +146,17 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   // Reject anonymous callers before resolving Google service-account state.
   // Verify workspace membership before resolving any Google connection metadata.
   const missingSession = await requireSourceSession();
   if (missingSession) return missingSession;
 
   try {
+    const confirmation = await readLimitedJsonRequest(request, 2048);
+    if (!isSourcePreflightConfirmation(confirmation)) {
+      return Response.json({ error: "google_source_preflight_required" }, { status: 400, headers: HEADERS });
+    }
     const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
     assertSourceSyncRuntimeCapabilities(capabilities);
 
@@ -168,7 +176,15 @@ export async function POST() {
         { status: 422, headers: HEADERS },
       );
     }
+    if (!matchesSourcePreflightConfirmation(confirmation, summary)) {
+      return Response.json({ error: "google_source_preflight_changed" }, { status: 409, headers: HEADERS });
+    }
     const result = await runtime.synchronization.synchronize(snapshot);
+    // The mutation may have committed. A malformed or unrelated receipt is
+    // uncertain, never a promise of rollback and never retried automatically.
+    if (!isSourceSyncResultForPreflight(result, summary)) {
+      return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
+    }
     if (runtime.authMode === "oauth" && runtime.oauth) {
       await runtime.oauth.markVerified();
     }
@@ -176,11 +192,19 @@ export async function POST() {
     return Response.json(
       {
         ...result,
-        sourceRevision: snapshot.sourceRevision,
+        sourceRevision: summary.sourceRevision,
+        snapshotFingerprint: summary.snapshotFingerprint,
       },
       { headers: HEADERS },
     );
   } catch (error) {
+    if (error instanceof LimitedJsonRequestError) {
+      return Response.json({ error: "google_source_preflight_required" }, {
+        status: error.reason === "too_large" ? 413 : 400, headers: HEADERS,
+      });
+    }
+    const denied = sourceWorkspaceAuthError(error);
+    if (denied) return denied;
     if (error instanceof GoogleSourceRuntimeConfigurationError) {
       return Response.json(
         { error: "google_oauth_not_configured", missing: error.missing },

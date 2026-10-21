@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { synchronizeOfficialSource } from "../src/application/source-sync-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
@@ -535,13 +536,7 @@ export default function InicioOverview() {
     setSyncing(true);
     setSyncFeedback(null);
     try {
-      const response = await fetch("/api/source/google/sync", {
-        method: "POST",
-        cache: "no-store",
-        headers: { accept: "application/json" },
-      });
-      const payload = await response.json().catch(() => null) as SyncResult | null;
-      if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
+      const payload = await synchronizeOfficialSource();
       setSyncFeedback(syncFeedbackFromResult(payload));
       await refreshDashboard();
       setEvolutionRevision((current) => current + 1);

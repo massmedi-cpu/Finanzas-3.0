@@ -6,6 +6,9 @@ on:
     paths:
       - 'app/**'
       - 'src/design/**'
+      - 'src/application/source-*.ts'
+      - 'src/domain/source-balance-continuity.ts'
+      - 'tests/helpers/verified-source-fixture.ts'
       - 'src/domain/document-ocr-financial-interpretation.ts'
       - 'src/domain/private-document-content-address.ts'
       - 'src/domain/private-document-replay.ts'

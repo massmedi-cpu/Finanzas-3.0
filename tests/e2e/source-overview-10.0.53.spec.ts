@@ -70,6 +70,7 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
         sourceFileId: "source-file",
         sourceRevision: "rev-1",
         schemaFingerprint: options.malformedPreflightSuccess ? "invalid" : "a".repeat(64),
+        snapshotFingerprint: "b".repeat(64),
         totalAuthoritativeRows: 120,
         accounts: options.malformedPreflightSuccess ? [] : [{
           accountExternalKey: "Cuenta corriente Openbank · 3967",
@@ -81,6 +82,7 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
           newestBankDate: "2026-10-02",
           oldestBankDate: "2025-01-01",
           latestBalanceAfterCents: 1000,
+          balanceContinuity: { comparablePairs: 119, consistentPairs: 119, discontinuousPairs: 0, unverifiablePairs: 0 },
         }],
         cursors: options.malformedPreflightSuccess ? [] : [{
           sourceSheetId: "725351515",
@@ -117,6 +119,8 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
           duplicatesDetected: 0,
           warningsCount: 0,
           cursorsAdvanced: 1,
+          sourceRevision: "rev-1",
+          snapshotFingerprint: "b".repeat(64),
         }),
       });
       return;
@@ -157,7 +161,7 @@ test("Fuente bancaria prioriza estado y acciones y relega el diagnóstico técni
   await mockSourceOverview(page);
   await page.goto("/configuration/source");
 
-  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: /Navegación (principal|móvil)/ })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByText("Movimientos bancarios - fuente")).toBeVisible();
   await expect(page.getByText("Fuente conectada")).toBeVisible();
@@ -203,7 +207,7 @@ test("Detalles técnicos conserva la superficie de diagnóstico avanzada", async
   await mockSourceOverview(page);
   await page.goto("/configuration/source/diagnostics");
 
-  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: /Navegación (principal|móvil)/ })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByText("TRAZABILIDAD", { exact: true })).toBeVisible();
   await expect(page.getByText("Pestañas físicas", { exact: true })).toBeVisible();

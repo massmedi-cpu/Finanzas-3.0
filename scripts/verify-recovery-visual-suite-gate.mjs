@@ -4,6 +4,11 @@ import { execFileSync } from "node:child_process";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
 const cases = [
+  ["tests/e2e/source-preflight-summary.spec.ts", [
+    "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
+    "REC-SYNC-266", "REC-SYNC-267", "REC-SYNC-268", "REC-SYNC-269",
+    "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274",
+  ]],
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-DOC-140", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-DATE-002"]],
@@ -56,6 +61,9 @@ assert.ok(integrated.includes("--project=chromium-desktop --project=chromium-mob
  // do not hide regressions with retries or selective result parsing.
 const flakyGate = "--fail-on-flaky-tests";
 assert.ok(integrated.includes(flakyGate), "Integrated browser regressions must fail when any test is flaky");
+for (const path of ["src/application/source-*.ts", "src/domain/source-balance-continuity.ts", "tests/helpers/verified-source-fixture.ts"]) {
+  assert.ok(workflow.includes("'" + path + "'"), `Source confirmation changes must retrigger browser certification: ${path}`);
+}
 
 for (const [file, casesInFile] of cases) {
   assert.ok(integrated.includes(file), `Workflow fails to execute ${file}`);

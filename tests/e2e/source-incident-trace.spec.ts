@@ -162,6 +162,7 @@ test("la vista simple resume una sincronización con incidencias y mantiene solo
       sourceFileId: "sheet-test",
       sourceRevision: "drive-version:128",
       schemaFingerprint: "a".repeat(64),
+      snapshotFingerprint: "b".repeat(64),
       totalAuthoritativeRows: 12,
       accounts: [{
         accountExternalKey: "Cuenta corriente Openbank · 3967",
@@ -173,6 +174,7 @@ test("la vista simple resume una sincronización con incidencias y mantiene solo
         newestBankDate: "2026-10-20",
         oldestBankDate: "2026-01-01",
         latestBalanceAfterCents: 1000,
+        balanceContinuity: { comparablePairs: 11, consistentPairs: 11, discontinuousPairs: 0, unverifiablePairs: 0 },
       }],
       cursors: [{
         sourceSheetId: "sheet-1",
@@ -196,6 +198,7 @@ test("la vista simple resume una sincronización con incidencias y mantiene solo
         duplicatesDetected: 2,
         warningsCount: 1,
         cursorsAdvanced: 1,
+        snapshotFingerprint: "b".repeat(64),
         sourceRevision: "drive-version:128",
       });
       return;

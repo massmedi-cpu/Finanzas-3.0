@@ -46,7 +46,7 @@ test("REC-AUTH-216 · callback OAuth con state válido pero sin sesión no canje
 
 test("REC-AUTH-236 · POST verifica el workspace antes de consultar Google y antes del sync", () => {
   const text = readFileSync("app/api/source/google/sync/route.ts", "utf8");
-  const handler = text.slice(text.indexOf("export async function POST()"));
+  const handler = text.slice(text.indexOf("export async function POST(request: Request)"));
   const session = handler.indexOf("await requireSourceSession()");
   const capability = handler.indexOf('callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities")');
   const connection = handler.indexOf("await resolveGoogleSourceConnection()");
@@ -68,7 +68,7 @@ test("REC-AUTH-237 · POST sin sesión rechaza sin tocar fuente ni sincronizaci�
 
 test("REC-AUTH-238 · GET de estado verifica workspace antes de resolver credenciales Google", () => {
   const text = readFileSync("app/api/source/google/sync/route.ts", "utf8");
-  const handler = text.slice(text.indexOf("export async function GET()"), text.indexOf("export async function POST()"));
+  const handler = text.slice(text.indexOf("export async function GET()"), text.indexOf("export async function POST(request: Request)"));
   const workspace = handler.indexOf("await requireVerifiedSourceWorkspace()");
   const google = handler.indexOf("await resolveSourceStatusFileId()");
   const gateway = handler.indexOf('callPersistenceGateway<GatewaySourceStatus>("source.status"');

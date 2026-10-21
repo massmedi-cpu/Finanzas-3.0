@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const financial = {
@@ -116,10 +117,15 @@ async function mockInicio(page: Page) {
       return;
     }
 
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(3174));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       if (request.method() === "POST") {
         postCount += 1;
-        await json(route, { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 3174 });
+        await json(route, syntheticSourceSyncReceipt(3174));
       } else {
         await json(route, {
           run: {

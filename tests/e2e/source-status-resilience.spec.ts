@@ -115,12 +115,13 @@ test("REC-AUTH-207 · la prevalidación protege metadatos y saldos antes de leer
 
 test("REC-AUTH-208 · el POST de sincronización deniega anonimato antes de consultar Google", () => {
   const sourceSync = readFileSync("app/api/source/google/sync/route.ts", "utf8");
-  const postStart = sourceSync.indexOf("export async function POST()");
+  const postStart = sourceSync.indexOf("export async function POST(request: Request)");
   const identityGuard = sourceSync.indexOf("await requireSourceSession()", postStart);
   const googleResolve = sourceSync.indexOf("await resolveGoogleSourceConnection()", postStart);
   const workspaceCheck = sourceSync.indexOf('callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities")', postStart);
   expect(identityGuard).toBeGreaterThan(postStart);
   expect(googleResolve).toBeGreaterThan(identityGuard);
-  expect(workspaceCheck).toBeGreaterThan(googleResolve);
+  expect(workspaceCheck).toBeGreaterThan(identityGuard);
+  expect(googleResolve).toBeGreaterThan(workspaceCheck);
   expect(sourceSync).toContain("if (missingSession) return missingSession;");
 });

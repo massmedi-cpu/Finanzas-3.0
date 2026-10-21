@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { isConfirmedSourcePreflight, isConfirmedSourceSyncResult } from "../../../src/application/source-confirmation-contract";
+import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
+import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
 
 type GoogleConnection = {
@@ -94,6 +96,10 @@ function incidentSummary(value: SyncRun | SyncResult | null) {
 }
 
 function actionError(code: string | undefined) {
+  if (code === "google_source_preflight_changed") return "La fuente ha cambiado desde la comprobación previa. Vuelve a comprobarla antes de importar. No se ha guardado ningún cambio.";
+  if (code === "google_source_preflight_required") return "Vuelve a comprobar la fuente antes de importar movimientos.";
+  if (code === "source_preflight_invalid") return "La validación previa no devolvió resultados completos. No se ha iniciado la importación.";
+  if (code === "google_source_sync_unconfirmed") return "No se puede confirmar la actualización con la respuesta recibida. Consulta el estado antes de repetirla.";
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a conectar la fuente.";
   if (code === "source_runtime_incompatible") return "La actualización está temporalmente bloqueada para proteger tus datos.";
   if (code === "google_source_changed_during_read") return "La fuente cambió mientras se estaba leyendo. Vuelve a intentarlo.";
@@ -111,9 +117,11 @@ export default function SourceOverviewClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
+    setPreflight(null);
     setLoading(true);
     setError(null);
     try {
@@ -178,28 +186,32 @@ export default function SourceOverviewClient() {
   const staleSuccess = run?.status === "success" && !hasProblem
     && !hasRecentSourceSyncEvidence(run);
 
+  async function checkWithoutImporting() {
+    if (!connected || !runtimeReady || busy) return;
+    setBusy(true);
+    setPreflight(null);
+    setNotice(null);
+    setError(null);
+    try {
+      const payload = await readOfficialSourcePreflight();
+      setPreflight(payload);
+    } catch (cause) {
+      setError(cause instanceof SourceSyncClientError ? actionError(cause.code) : cause instanceof Error ? cause.message : "No se ha podido comprobar la fuente.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateFromGoogle() {
     if (!connected || !runtimeReady || busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
+    setPreflight(null);
     let syncWasRequested = false;
     try {
-      // Validate the read-only source snapshot before each update, not only first import.
-      const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST", cache: "no-store" });
-      const preflightPayload = await readJson<{ error?: string }>(preflightResponse);
-      if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
-      if (!isConfirmedSourcePreflight(preflightPayload)) {
-        throw new Error("La validación previa no devolvió resultados completos. No se ha iniciado la importación.");
-      }
-
+      const payload = await synchronizeOfficialSource();
       syncWasRequested = true;
-      const response = await fetch("/api/source/google/sync", { method: "POST", cache: "no-store" });
-      const payload = await readJson<SyncResult>(response);
-      if (!response.ok) throw new Error(actionError(payload.error));
-      if (!isConfirmedSourceSyncResult(payload)) {
-        throw new Error("No se puede confirmar la actualización con la respuesta recibida. Consulta el estado antes de repetirla.");
-      }
 
       const changed = Math.max(0, payload.rowsInserted ?? 0) + Math.max(0, payload.rowsRevised ?? 0);
       const warning = incidentSummary(payload);
@@ -215,8 +227,8 @@ export default function SourceOverviewClient() {
     } catch (cause) {
       // Only a status GET may follow an ambiguous mutation response. Never
       // automatically repeat the POST: a first attempt could have committed.
-      if (syncWasRequested) await load();
-      setError(cause instanceof Error ? cause.message : "No se ha podido confirmar el resultado de la actualización. Consulta el estado antes de repetirla.");
+      if (syncWasRequested || (cause instanceof SourceSyncClientError && cause.syncRequested)) await load();
+      setError(cause instanceof SourceSyncClientError ? actionError(cause.code) : cause instanceof Error ? cause.message : "No se ha podido confirmar el resultado de la actualización. Consulta el estado antes de repetirla.");
     } finally {
       setBusy(false);
     }
@@ -316,6 +328,11 @@ export default function SourceOverviewClient() {
             )}
 
             <div className={styles.actions}>
+              {connected && runtimeReady && (
+                <button className="secondary-button" type="button" disabled={busy} onClick={() => void checkWithoutImporting()}>
+                  Comprobar sin importar
+                </button>
+              )}
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
@@ -328,6 +345,8 @@ export default function SourceOverviewClient() {
               </button>
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
+            {preflight && <SourcePreflightReport summary={preflight} />}
+
           </section>
 
           <aside className={`config-panel ${styles.guarantees}`} aria-labelledby="source-guarantees-heading">

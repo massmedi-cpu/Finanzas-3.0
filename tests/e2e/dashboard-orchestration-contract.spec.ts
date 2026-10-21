@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const financial = {
@@ -155,8 +156,13 @@ async function installDashboardMocks(
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === "/api/source/google/preflight") {
+      await fulfillJson(route, syntheticSourcePreflight(10));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
-      await fulfillJson(route, { run: null });
+      await fulfillJson(route, route.request().method() === "POST" ? syntheticSourceSyncReceipt(10) : { run: null });
       return;
     }
 

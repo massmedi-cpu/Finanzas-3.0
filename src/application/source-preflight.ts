@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { summarizeSourceBalanceContinuity, type SourceBalanceContinuity } from "../domain/source-balance-continuity";
 import {
   prepareOfficialSourceSyncBatch,
   type OfficialSourceWorkbookSnapshot,
@@ -14,6 +16,7 @@ export type OfficialSourcePreflightAccount = {
   newestBankDate: string | null;
   oldestBankDate: string | null;
   latestBalanceAfterCents: number | null;
+  balanceContinuity: SourceBalanceContinuity;
 };
 
 export type OfficialSourcePreflightCursor = {
@@ -27,6 +30,7 @@ export type OfficialSourcePreflightSummary = {
   sourceFileId: string;
   sourceRevision: string | null;
   schemaFingerprint: string;
+  snapshotFingerprint: string;
   totalAuthoritativeRows: number;
   accounts: OfficialSourcePreflightAccount[];
   cursors: OfficialSourcePreflightCursor[];
@@ -110,7 +114,13 @@ export function buildOfficialSourcePreflightSummary(
   snapshot: OfficialSourceWorkbookSnapshot,
 ): OfficialSourcePreflightSummary {
   const batch = prepareOfficialSourceSyncBatch(snapshot);
+  // This hash binds the confirmation to the complete prepared content and its
+  // order, not just a Drive revision, row count or schema. No original bytes
+  // are sent back in the confirmation request.
+  const snapshotFingerprint = createHash("sha256")
+    .update(JSON.stringify(batch), "utf8").digest("hex");
   const grouped = observationsByAccount(batch.observations);
+  const balanceContinuity = summarizeSourceBalanceContinuity(batch.observations);
   const sheetTitles = new Map(snapshot.sheets.map((sheet) => [sheet.sourceSheetId, sheet.title]));
   const cursors = new Map<string, OfficialSourcePreflightCursor>();
 
@@ -128,6 +138,7 @@ export function buildOfficialSourcePreflightSummary(
     sourceFileId: batch.sourceFileId,
     sourceRevision: batch.sourceRevision,
     schemaFingerprint: batch.schemaFingerprint,
+    snapshotFingerprint,
     totalAuthoritativeRows: batch.observations.length,
     accounts: batch.accounts.map((account) => {
       const observations = grouped.get(account.accountExternalKey) ?? [];
@@ -141,6 +152,7 @@ export function buildOfficialSourcePreflightSummary(
         newestBankDate: observations[0]?.bankDate ?? null,
         oldestBankDate: observations.at(-1)?.bankDate ?? null,
         latestBalanceAfterCents: observations[0]?.balanceAfterCents ?? null,
+        balanceContinuity: balanceContinuity.get(account.accountExternalKey)!,
       };
     }),
     cursors: [...cursors.values()],
