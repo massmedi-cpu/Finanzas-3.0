@@ -148,6 +148,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/ocr-g5-private-runner-contract.spec.ts
           tests/e2e/ap8-readiness-contract.spec.ts
           tests/e2e/data-trust.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
