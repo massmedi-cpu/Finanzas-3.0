@@ -21,6 +21,7 @@ on:
       - 'src/infrastructure/http/gateway-public-error.ts'
       - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
       - 'supabase/functions/financial-app-db-gateway/index.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
       - 'src/application/document-drive-inventory.ts'
       - 'src/application/document-drive-folder-scope.ts'
       - 'src/application/private-document-original-detail.ts'
@@ -142,6 +143,7 @@ jobs:
           tests/e2e/source-metadata-auth-boundary.spec.ts
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
+          tests/e2e/source-postflight-boundary.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
           tests/e2e/document-ocr-json-byte-limit.spec.ts
