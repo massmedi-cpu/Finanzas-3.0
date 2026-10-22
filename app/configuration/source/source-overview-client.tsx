@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
-import type { SourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
+import { isConfirmedSourcePostflightReport, type SourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
 import { SourcePostflightReportPanel } from "./source-postflight-report";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
@@ -228,21 +228,11 @@ export default function SourceOverviewClient() {
         }
         throw new Error("La conciliación no está disponible. No se han modificado datos.");
       }
-      // A partial, malformed or empty result must never look reconciled.
-      if (!payload || !["verified", "pending", "blocked"].includes(payload.status ?? "")
-        || payload.scope !== "supplied_snapshots_only"
-        || !Number.isSafeInteger(payload.sourceRows) || (payload.sourceRows ?? 0) < 1
-        || !Number.isSafeInteger(payload.persistedRows)
-        || !Number.isSafeInteger(payload.matchingRows)
-        || !Number.isSafeInteger(payload.pendingRows)
-        || !Number.isSafeInteger(payload.orphanRows)
-        || !Number.isSafeInteger(payload.differingRows)
-        || !Array.isArray(payload.accounts)
-        || payload.matchingRows! + payload.pendingRows! + payload.differingRows! !== payload.sourceRows
-        || payload.matchingRows! + payload.differingRows! + payload.orphanRows! !== payload.persistedRows) {
+      // The same fail-closed contract used in domain tests protects UI.
+      if (!isConfirmedSourcePostflightReport(payload)) {
         throw new Error("La conciliación no ha devuelto resultados completos y verificables.");
       }
-      setPostflight(payload as SourcePostflightReport);
+      setPostflight(payload);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se ha podido completar la conciliación sin importar.");
     } finally {
