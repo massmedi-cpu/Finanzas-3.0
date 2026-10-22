@@ -103,6 +103,9 @@ test("REC-POST-285 · un huérfano o un cero inventado impiden certificación", 
   });
   const extra = reconcileOfficialSourcePostflight([], [row(9)]);
   expect(extra).toMatchObject({ status: "blocked", sourceRows: 0, orphanRows: 1 });
+  expect(reconcileOfficialSourcePostflight([], [])).toMatchObject({
+    status: "blocked", scope: "supplied_snapshots_only", sourceRows: 0, persistedRows: 0,
+  });
 });
 
 test("REC-POST-286 · la identidad incluye archivo y pestaña, sin mezclar cuentas", () => {
