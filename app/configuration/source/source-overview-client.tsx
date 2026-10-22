@@ -216,7 +216,7 @@ export default function SourceOverviewClient() {
     setError(null);
     try {
       const response = await fetch("/api/source/google/postflight", { cache: "no-store" });
-      const payload = await readJson<Partial<SourcePostflightReport>>(response);
+      const payload = await readJson<Partial<PublicSourcePostflightReport>>(response);
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           setGoogle(null);
