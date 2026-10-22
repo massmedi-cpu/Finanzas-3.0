@@ -25,3 +25,8 @@ Fecha: 22/10/2026 · Decisión explícita del propietario: no existe producto mu
 ## Aceptación pendiente
 
 La eliminación de requisitos multiusuario **no** elimina la autenticación ni sustituye los ensayos del OCR privado G5, restore y rollback aislados, gateway postflight real y conciliación bancaria con importación segura. La prueba exacta de CI para el commit de este cambio solo puede declararse PASS tras su finalización; el commit anterior `fbbe613e` sí acabó en 86 SUCCESS, 1 SKIPPED, 0 FAILURE.
+
+## Barrido adicional de componentes financieros
+
+- Revisión de pantallas de movimientos, análisis, presupuestos, documentos, OCR, cuentas bancarias, previsión, comparador, inicio, navegación móvil y menús de Configuración: sin menús ni botones para miembros, invitaciones o cambios de espacio. Las clases CSS `workspace` y el estado técnico `workspaceSessionMissing` no se muestran al usuario y se preservan por compatibilidad.
+- Encontrados dos mensajes adicionales en la pantalla alternativa `app/configuration/source/source-client.tsx`. Ambos pasan a «La sesión actual no tiene acceso a esta fuente bancaria». REC-OWNER-302 ahora protege también esa pantalla.

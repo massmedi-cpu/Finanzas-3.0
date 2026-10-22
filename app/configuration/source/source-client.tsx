@@ -225,7 +225,7 @@ export default function SourceClient() {
         setNotice(null);
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
-          : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+          : "La sesión actual no tiene acceso a esta fuente bancaria.");
         return false;
       }
 
@@ -236,7 +236,7 @@ export default function SourceClient() {
       if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
         setError("Inicia sesión para consultar la fuente bancaria.");
       } else if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 403)) {
-        setError("Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+        setError("La sesión actual no tiene acceso a esta fuente bancaria.");
       } else if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {

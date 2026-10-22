@@ -83,11 +83,14 @@ test("REC-OWNER-301 · pantalla personal sin controles ni promesas de multiusuar
 
 test("REC-OWNER-302 · textos personales sin alterar protección ni contratos internos", () => {
   const source = readFileSync("app/configuration/source/source-overview-client.tsx", "utf8");
+  const alternativeSource = readFileSync("app/configuration/source/source-client.tsx", "utf8");
   const privateData = readFileSync("app/configuration/data/workspace-deletion-panel.tsx", "utf8");
   const serverAuth = readFileSync("app/api/source/google/postflight/route.ts", "utf8");
   const logout = readFileSync("app/api/auth/logout/route.ts", "utf8");
   expect(source).not.toContain("Tu usuario no tiene acceso al espacio de trabajo");
   expect(source).toContain("La sesión actual no tiene acceso a esta fuente bancaria.");
+  expect(alternativeSource).not.toContain("Tu usuario no tiene acceso al espacio de trabajo");
+  expect(alternativeSource).toContain("La sesión actual no tiene acceso a esta fuente bancaria.");
   expect(privateData).not.toContain("<strong>Borrado de datos del workspace</strong>");
   expect(privateData).toContain("<strong>Borrado definitivo de mis datos</strong>");
   expect(serverAuth).toContain("requireVerifiedSourceWorkspace()");
