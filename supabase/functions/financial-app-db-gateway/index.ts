@@ -73,6 +73,9 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "source.google_policy",
   "source.google_connection_status",
   "source.status",
+  // Tenant-scoped read-only operation. Rows remain internal to Next.js;
+  // browser endpoint returns aggregate reconciliation only.
+  "source.postflight_rows",
 ]);
 
 function isPreviewProductionAccessAllowed(action: unknown) {
