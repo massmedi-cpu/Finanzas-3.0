@@ -43,7 +43,7 @@ export function verifyRestoredAclSql(sql) {
     if (grants.has(match[2]) || roles.length !== new Set(roles).size) fail("AP8_ACL_DUPLICATE_GRANT");
     grants.set(match[2], new Set(roles));
   }
-  const permittedTables = [...expected].filter((name) => expected.get(name).size > 0);
+  const permittedTables = [...expected.keys()].filter((name) => expected.get(name).size > 0);
   if (grants.size !== permittedTables.length) fail("AP8_ACL_MISSING_OR_EXTRA_GRANT");
   for (const [name, roles] of expected) {
     if (!TABLE_NAME.test(name) || !equalSets(roles, grants.get(name) ?? new Set())) fail("AP8_ACL_GRANT_DIFFERS_FROM_MATRIX");
@@ -67,7 +67,7 @@ function selfTest(sql) {
   const bad = [
     [sql.replace("('account_source_mappings'", '("account_source_mappings"'), "AP8_ACL_INVALID_SQL_LITERAL_OR_ROLE"],
     [sql.replace("GRANT SELECT, INSERT, UPDATE, DELETE ON financial_app.documents", "GRANT SELECT, UPDATE, DELETE ON financial_app.documents"), "AP8_ACL_GRANT_DIFFERS_FROM_MATRIX"],
-    [sql.replace("('workspaces', ARRAY[]::text[])", "('workspaces', ARRAY['SELECT']::text[])"), "AP8_ACL_MISSING_OR_EXTRA_GRANT"],
+    [sql.replace("('workspaces', ARRAY[]::text[])", "('workspaces', ARRAY['SELECT']::text[])"), "AP8_ACL_RESTRICTED_ROLE_BASELINE_BROKEN"],
     [sql.replace("REVOKE ALL ON ALL TABLES IN SCHEMA financial_app FROM financial_app_gateway;", "-- removed"), "AP8_ACL_REQUIRED_GUARD_MISSING"],
   ];
   for (const [altered, code] of bad) {
