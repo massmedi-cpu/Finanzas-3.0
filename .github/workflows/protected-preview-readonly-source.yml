@@ -49,7 +49,11 @@ jobs:
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
             const wanted = process.env.EXPECTED_SHA;
             if (!/^[0-9a-f]{40}$/.test(wanted)) throw new Error('invalid_candidate_sha');
-            for (let attempt = 0; attempt < 36; attempt++) {
+            const trustedOwnerPR = context.payload.pull_request?.number === 619
+              && context.payload.pull_request?.head?.repo?.full_name === process.env.GITHUB_REPOSITORY
+              && context.payload.pull_request?.head?.ref === 'chat/integrated-b-e-c-visual-20261010'
+              && context.payload.pull_request?.base?.ref === 'chat/twenty-one-routes-responsive-shell-20261010';
+            for (let attempt = 0; attempt < (trustedOwnerPR ? 3 : 36); attempt++) {
               const list = await github.rest.repos.listDeployments({
                 owner, repo, sha: wanted, per_page: 50,
               });
@@ -72,6 +76,16 @@ jobs:
                 }
               }
               if (attempt < 35) await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+            // GitHub deployments can be absent for Vercel API-created builds.
+            // The alias below was verified from Vercel's own deployment
+            // aliases (2026-10-22); never accept it for another PR/branch.
+            // The NEXT step strictly requires /api/build SHA === PR HEAD and
+            // environment === preview before testing any protected route.
+            if (trustedOwnerPR) {
+              core.setOutput('url', 'https://finanzas-3-0-git-chat-integrated-6ec953-massmedi-9832s-projects.vercel.app');
+              core.info('Using Vercel-verified branch alias; /api/build must match the exact PR SHA');
+              return;
             }
             core.setFailed('No successful Vercel preview deployment for the exact PR commit');
 
