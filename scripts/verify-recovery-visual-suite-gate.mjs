@@ -10,6 +10,10 @@ const cases = [
     "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274",
     "REC-SYNC-276", "REC-SYNC-277", "REC-SYNC-278", "REC-SYNC-279",
   ]],
+  ["tests/e2e/source-postflight-reconciliation.spec.ts", [
+    "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",
+    "REC-POST-285", "REC-POST-286", "REC-POST-287",
+  ]],
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-DOC-140", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-DATE-002"]],
