@@ -185,3 +185,60 @@ test("REC-POST-296 · el informe público protege identidades de cuentas y conse
   expect(isConfirmedSourcePostflightReport(internal)).toBe(false);
   expect(JSON.stringify(internal)).toBe(before);
 });
+
+
+test("REC-POST-334 · la serialización sólo publica métricas permitidas incluso tras ampliar el objeto interno", () => {
+  const privateMarker = "DIAGNOSTICO_BANCARIO_PRIVADO_NO_PUBLICAR_334";
+  const original = reconcileOfficialSourcePostflight([row(0), row(1)], [row(0)]);
+  const expanded = {
+    ...original,
+    sourceFileId: privateMarker,
+    documentLocation: privateMarker,
+    differences: { ...original.differences, privateDiagnostic: privateMarker },
+    accounts: original.accounts.map(account => ({
+      ...account, bankIban: privateMarker, sourceRowKey: privateMarker,
+    })),
+  };
+  const before = JSON.stringify(expanded);
+  const result = toPublicSourcePostflightReport(expanded);
+  expect(isConfirmedSourcePostflightReport(result)).toBe(true);
+  expect(JSON.stringify(result)).not.toContain(privateMarker);
+  expect(Object.keys(result).sort()).toEqual([
+    "status", "scope", "sourceRows", "persistedRows", "matchingRows",
+    "pendingRows", "orphanRows", "differingRows", "matchingUnknownBalances",
+    "differences", "accounts",
+  ].sort());
+  expect(Object.keys(result.differences).sort()).toEqual([
+    "account", "bankDate", "amountCents", "balanceAfterCents",
+  ].sort());
+  expect(Object.keys(result.accounts[0]).sort()).toEqual([
+    "accountLabel", "sourceRows", "persistedRows", "matchingRows",
+    "pendingRows", "orphanRows", "differingRows",
+  ].sort());
+  expect(JSON.stringify(expanded)).toBe(before);
+});
+
+test("REC-POST-335 · las respuestas que agregan metadatos no permitidos fallan en cliente", () => {
+  const clean = toPublicSourcePostflightReport(
+    reconcileOfficialSourcePostflight([row(0), row(1)], [row(0)]),
+  );
+  expect(isConfirmedSourcePostflightReport(clean)).toBe(true);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, readConsistency: "sequential_non_atomic",
+  })).toBe(true);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, readConsistency: "atomic",
+  })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, sourceFileId: "should-not-leak",
+  })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, differences: { ...clean.differences, sourceRowKey: "should-not-leak" },
+  })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, accounts: [{ ...clean.accounts[0], accountIban: "should-not-leak" }],
+  })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({
+    ...clean, accounts: [{ ...clean.accounts[0], importCursor: 123 }],
+  })).toBe(false);
+});

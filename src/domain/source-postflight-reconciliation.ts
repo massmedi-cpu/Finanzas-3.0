@@ -49,15 +49,38 @@ export type PublicSourcePostflightAccount = Omit<SourcePostflightAccount, "accou
 };
 export type PublicSourcePostflightReport = Omit<SourcePostflightReport, "accounts"> & {
   accounts: PublicSourcePostflightAccount[];
+  readConsistency?: "sequential_non_atomic";
 };
 
+// REC-POST-334: never spread internal report objects over the public wire.
+// New backend fields (IBAN, source identity, matching diagnostics) must NOT
+// become public automatically. Only the explicitly reviewed numeric contract
+// and generic labels are serializable to the browser.
 export function toPublicSourcePostflightReport(report: SourcePostflightReport): PublicSourcePostflightReport {
-  const { accounts, ...aggregates } = report;
   return {
-    ...aggregates,
-    accounts: accounts.map(({ accountExternalKey: _privateKey, ...counts }, index) => ({
-      ...counts,
+    status: report.status,
+    scope: report.scope,
+    sourceRows: report.sourceRows,
+    persistedRows: report.persistedRows,
+    matchingRows: report.matchingRows,
+    pendingRows: report.pendingRows,
+    orphanRows: report.orphanRows,
+    differingRows: report.differingRows,
+    matchingUnknownBalances: report.matchingUnknownBalances,
+    differences: {
+      account: report.differences.account,
+      bankDate: report.differences.bankDate,
+      amountCents: report.differences.amountCents,
+      balanceAfterCents: report.differences.balanceAfterCents,
+    },
+    accounts: report.accounts.map((account, index) => ({
       accountLabel: `Cuenta ${index + 1}`,
+      sourceRows: account.sourceRows,
+      persistedRows: account.persistedRows,
+      matchingRows: account.matchingRows,
+      pendingRows: account.pendingRows,
+      orphanRows: account.orphanRows,
+      differingRows: account.differingRows,
     })),
   };
 }
@@ -192,9 +215,21 @@ export function reconcileOfficialSourcePostflight(
  * REC-POST-295: refuse contradictory aggregates returned by a remote route.
  * In particular, an HTTP 200 cannot call 20 pending movements "verified".
  */
+// REC-POST-335: fail closed if a future backend/gateway accidentally adds
+// private metadata to an otherwise internally consistent public report.
+function publicKeysOnly(value: object, keys: readonly string[]) {
+  return Object.keys(value).every(key => keys.includes(key));
+}
+
 export function isConfirmedSourcePostflightReport(value: unknown): value is PublicSourcePostflightReport {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const r = value as Partial<PublicSourcePostflightReport>;
+  if (!publicKeysOnly(value, [
+    "status", "scope", "sourceRows", "persistedRows", "matchingRows",
+    "pendingRows", "orphanRows", "differingRows", "matchingUnknownBalances",
+    "differences", "accounts", "readConsistency",
+  ])) return false;
+  if (Object.hasOwn(r, "readConsistency") && r.readConsistency !== "sequential_non_atomic") return false;
   if (r.scope !== "supplied_snapshots_only" || !["verified", "pending", "blocked"].includes(r.status ?? "")) return false;
   const numeric = [
     r.sourceRows, r.persistedRows, r.matchingRows, r.pendingRows,
@@ -208,7 +243,8 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Publ
     || r.matchingUnknownBalances! > r.matchingRows!) return false;
 
   const diff = r.differences;
-  if (!diff || typeof diff !== "object") return false;
+  if (!diff || typeof diff !== "object"
+    || !publicKeysOnly(diff, ["account", "bankDate", "amountCents", "balanceAfterCents"])) return false;
   if ([diff.account, diff.bankDate, diff.amountCents, diff.balanceAfterCents].some(
     n => !Number.isSafeInteger(n) || n < 0 || n > r.differingRows!,
   )) return false;
@@ -231,6 +267,10 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Publ
   };
   for (const entry of r.accounts) {
     if (!entry || typeof entry !== "object"
+      || !publicKeysOnly(entry, [
+        "accountLabel", "sourceRows", "persistedRows", "matchingRows",
+        "pendingRows", "orphanRows", "differingRows",
+      ])
       || typeof entry.accountLabel !== "string"
       || !/^Cuenta [1-9][0-9]*$/.test(entry.accountLabel)
       || entry.accountLabel.length > 20
