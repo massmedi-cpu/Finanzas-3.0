@@ -453,3 +453,27 @@ test("REC-OCR-165 · long tax-only overlays also require raster inspection", () 
   expect(taxOverlay.length).toBeGreaterThan(5);
   expect(pdfNativeTextNeedsVisualOcr(taxOverlay)).toBe(true);
 });
+
+
+test("REC-OCR-329 · native tax table footer with base and quota cannot hide raster payable total", () => {
+  const footerOnly = words(
+    "TIPO % IMPUESTO BASE CUOTA IVA 21 25,37 3,81 TOTAL 25,37 3,81. " + boilerplate.repeat(3),
+  );
+  const realPayable = words("FACTURA ORIGINAL TOTAL A PAGAR 29,18 €");
+  expect(pdfNativeTextNeedsVisualOcr(footerOnly)).toBe(true);
+  expect(pdfVisualOcrImprovesNative(footerOnly, realPayable)).toBe(true);
+});
+
+test("REC-OCR-330 · a payable total following the tax footer remains authoritative", () => {
+  const document = words(
+    "TIPO % IMPUESTO BASE CUOTA IVA 21 25,37 3,81 TOTAL 25,37 3,81 "
+    + "IMPORTE TOTAL FACTURA 29,18 € " + boilerplate.repeat(2),
+  );
+  expect(pdfNativeTextNeedsVisualOcr(document)).toBe(false);
+  expect(pdfVisualOcrImprovesNative(document, words("TOTAL 99,00 €"))).toBe(false);
+});
+
+test("REC-OCR-331 · two-amount total without tax-table evidence is not discarded", () => {
+  const original = words("FACTURA ORIGINAL TOTAL 25,37 3,81 " + boilerplate.repeat(2));
+  expect(pdfNativeTextNeedsVisualOcr(original)).toBe(false);
+});

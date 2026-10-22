@@ -14,6 +14,22 @@ function hasMoneyEvidence(text: string) {
 
 const NON_INVOICE_TOTAL_SUFFIX = /^\s+(?:(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)|(?:(?:de\s+)?(?:la|esta)\s+|de\s+)?(?:pag(?:ina)?\.?|hoja)|a\s+transportar|transportado|anterior)\b/;
 
+// A selectable VAT table footer prints its taxable base and tax quota, not
+// the invoice total. Keep the raster recovery path available when that is the
+// only selectable TOTAL. Require BOTH a tax-table heading and an actual rate
+// so standalone invoice totals retain their normal native-text precedence.
+const TAX_FOOTER_PAIR = /^\s+(?:-?\d{1,3}(?:\.\d{3})+,\d{2}|-?\d+[,.]\d{2})\s+(?:-?\d{1,3}(?:\.\d{3})+,\d{2}|-?\d+[,.]\d{2})(?=\s|[.;]|$)/;
+
+function isTaxTableSubtotalLabel(text: string, labelStart: number, afterLabel: string) {
+  if (!TAX_FOOTER_PAIR.test(afterLabel)) return false;
+  const preceding = text.slice(Math.max(0, labelStart - 320), labelStart);
+  const hasColumns = /\bbase\s+imponible\b[\s\S]{0,130}\bcuota\b/.test(preceding)
+    || /\btipo\s*%?\s*impuesto\s+base\s+cuota\b/.test(preceding);
+  const hasTaxRate = /\b(?:i\.?v\.?a|i\.?g\.?i\.?c)\b\s*\d{1,2}(?:[,.]\d{1,2})?\s*%?/.test(preceding)
+    || /\b\d{1,2}(?:[,.]\d{1,2})?\s*%/.test(preceding);
+  return hasColumns && hasTaxRate;
+}
+
 function hasInvoiceTotalEvidence(words: OcrWord[]) {
   const text = words.map((word) => word.text).join(" ")
     .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -24,6 +40,7 @@ function hasInvoiceTotalEvidence(words: OcrWord[]) {
     // must not hide the scanned document body below them. Continue to
     // later independent labels such as "TOTAL A PAGAR 22,10" on this line.
     if (NON_INVOICE_TOTAL_SUFFIX.test(afterLabel)) continue;
+    if (label[0] === "total" && isTaxTableSubtotalLabel(text, label.index ?? 0, afterLabel)) continue;
     const tail = afterLabel.slice(0, 56);
     // TOTAL without a value is not proved by an unrelated IVA, tax base,
     // reference number or unit price printed after the heading.

@@ -353,3 +353,27 @@ test("REC-OCR-108 · real rotated native PDF.js total keeps geometry and outrank
   expect(result.pages[0].words.map(word => word.text).join(" ")).not.toContain("23,45");
   expect(result.warnings).toContain("pdf_page_sparse_native_unverified:1");
 });
+
+
+test("REC-OCR-332 · actual PDF.js routes a selectable tax-table subtotal to raster recovery", async () => {
+  let rasterReads = 0;
+  const provider = new PdfTextOcrProvider({
+    extract: async ({ bytes, mimeType }) => {
+      rasterReads++;
+      expect(mimeType).toBe("image/png");
+      expect([...bytes.slice(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+      return visualResult(0.96);
+    },
+  });
+  const selectableTaxFooter = "TIPO % IMPUESTO BASE CUOTA IVA 21 25,37 3,81 "
+    + "TOTAL 25,37 3,81. " + footer.repeat(3);
+  const result = await provider.extract({
+    bytes: hybridPdf(selectableTaxFooter),
+    mimeType: "application/pdf",
+    originalFileName: "synthetic-tax-table-over-raster.pdf",
+  });
+  expect(rasterReads).toBe(1);
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.pages[0].words.map((word) => word.text)).toEqual(["TOTAL", "23,45"]);
+  expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
+});
