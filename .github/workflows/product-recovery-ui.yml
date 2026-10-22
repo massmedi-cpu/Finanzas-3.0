@@ -36,6 +36,7 @@ on:
       - 'scripts/test-drive-atomic-batch.mjs'
       - 'scripts/test-drive-discovery-integrity.mjs'
       - 'scripts/verify-recovery-visual-suite-gate.mjs'
+      - 'scripts/verify-private-ocr-corpus-selection.mjs'
       - 'tests/e2e/**'
       - 'playwright*.ts'
       - 'package*.json'

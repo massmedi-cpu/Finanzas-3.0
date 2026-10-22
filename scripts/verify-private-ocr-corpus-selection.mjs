@@ -146,13 +146,12 @@ function testSynthetic() {
   assert.equal(classOf("2024-07-31 - Samsung - Factura ejemplo.pdf"), "tecnologia");
   assert.equal(classOf("Ticket Xiaomi ejemplo.pdf"), "tecnologia");
   // REC-G5-305: a generic PDF is not a receipt just because its name matches a merchant.
-  const generic = {
-    id: "synthetic_not_a_receipt_0001", parentFolderId: "folder_private_05",
-    name: "Informe Santander sin justificante ni factura de compra.pdf",
+  // Explicitly non-receipt filenames stay out of the real sample.
+  const otherGeneric = {
+    id: "synthetic_non_invoice_000000", parentFolderId: "folder_private_05",
+    name: "Resumen de cuenta bancaria.pdf",
     mimeType: "application/pdf", sizeBytes: 2500, private: true,
   };
-  // Explicitly non-receipt filenames stay out of the real sample.
-  const otherGeneric = { ...generic, id: "synthetic_non_invoice_000000", name: "Resumen de cuenta bancaria.pdf" };
   const good = selectPrivateOcrCorpus([...samples, otherGeneric]);
   assert.ok(![...good.development, ...good.holdout].some((entry) => entry.file.id === "synthetic_non_invoice_000000"));
   assert.equal(good.development.length, 16);

@@ -139,6 +139,11 @@ for (const path of releaseWorkflows) {
 }
 process.stdout.write("PASS: release workflows pin actions, guard ancestry and do not persist checkout credentials\n");
 
+// REC-G5-306: G5 selector edits must retrigger the exact real browser CI,
+// rather than relying on green results from an earlier selector version.
+assert.ok(workflow.includes("'scripts/verify-private-ocr-corpus-selection.mjs'"),
+  "G5 selector changes must retrigger the mandatory browser certification");
+
 // G5 acceptance must NEVER rely on Drive originals in public CI. Run only
 // the selector's synthetic privacy/quotas regression, early in the existing
 // mandatory browser gate. Do not pass file IDs, filenames, or metadata files.

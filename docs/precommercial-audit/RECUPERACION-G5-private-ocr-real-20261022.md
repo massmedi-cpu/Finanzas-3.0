@@ -21,3 +21,6 @@ Fecha: 22/10/2026. PR #619. Datos de fuente Google Drive tratados de forma priva
 4. Confirmar que preview/productivo conservan autenticación y nunca importan documentos o movimientos sin consentimiento/validación previa.
 
 El commit anterior `3d6d3f99` tenía 84/87 workflows PASS y 2 todavía en curso al momento de iniciar este bloque; comprobar la CI completa por el SHA exacto de cualquier nuevo commit.
+
+## Integridad de la CI (REC-G5-306)
+La ruta `scripts/verify-private-ocr-corpus-selection.mjs` queda añadida explícitamente al filtro de cambios que dispara `.github/workflows/product-recovery-ui.yml`. El guard de la suite exige esa ruta: así el selector nunca conserva una certificación verde obsoleta al cambiar categorías o admisión de PDF. El self-test sigue siendo 100 % sintético sin originales bancarios o facturas privadas.
