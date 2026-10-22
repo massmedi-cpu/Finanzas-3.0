@@ -147,7 +147,7 @@ export default function SourceOverviewClient() {
         setNotice(null);
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
-          : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+          : "La sesión actual no tiene acceso a esta fuente bancaria.");
         return;
       }
 
@@ -158,7 +158,7 @@ export default function SourceOverviewClient() {
       if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
         setError("Inicia sesión para consultar la fuente bancaria.");
       } else if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 403)) {
-        setError("Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+        setError("La sesión actual no tiene acceso a esta fuente bancaria.");
       } else if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
       else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido comprobar si la actualización está disponible.");
@@ -224,7 +224,7 @@ export default function SourceOverviewClient() {
           setSyncStatus(EMPTY_SYNC_STATUS);
           throw new Error(response.status === 401
             ? "Inicia sesión para consultar la fuente bancaria."
-            : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+            : "La sesión actual no tiene acceso a esta fuente bancaria.");
         }
         throw new Error("La conciliación no está disponible. No se han modificado datos.");
       }

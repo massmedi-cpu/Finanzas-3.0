@@ -144,6 +144,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/data-trust.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
           tests/e2e/document-ocr-json-byte-limit.spec.ts

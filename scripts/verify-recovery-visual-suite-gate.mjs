@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
 const cases = [
+  ["tests/e2e/data-trust.spec.ts", ["REC-OWNER-300", "REC-OWNER-301", "REC-OWNER-302"]],
   ["tests/e2e/source-preflight-summary.spec.ts", [
     "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
     "REC-SYNC-266", "REC-SYNC-267", "REC-SYNC-268", "REC-SYNC-269",

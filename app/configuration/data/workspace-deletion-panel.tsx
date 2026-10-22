@@ -178,7 +178,7 @@ export default function WorkspaceDeletionPanel() {
     <div className={styles.deletionPanel} data-testid="workspace-deletion-panel">
       <div className={styles.deletionHeading}>
         <div>
-          <strong>Borrado de datos del workspace</strong>
+          <strong>Borrado definitivo de mis datos</strong>
           <p>
             El proceso elimina únicamente datos gestionados por Financial App. La fuente bancaria oficial y los archivos externos de Google Drive no forman parte del borrado.
           </p>
