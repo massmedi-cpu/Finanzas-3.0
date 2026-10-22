@@ -17,6 +17,7 @@ const cases = [
   ["tests/e2e/source-postflight-reconciliation.spec.ts", [
     "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",
     "REC-POST-285", "REC-POST-286", "REC-POST-287",
+    "REC-POST-295",
   ]],
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-DOC-140", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],
