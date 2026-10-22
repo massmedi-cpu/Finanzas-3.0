@@ -212,9 +212,16 @@ function testSynthetic() {
   // Missing explicit inspection state must fail closed, not silently enter holdout.
   assert.throws(() => selectPrivateOcrCorpus(samples.map((x, i) =>
     i === 1 ? { ...x, previouslyInspected: undefined } : x)), /g5_private_inspection_state_required/);
-  // If every candidate has been opened, an independent holdout is impossible.
+  // An inspected but ineligible contract is rejected before any quota check.
   assert.throws(() => selectPrivateOcrCorpus(samples.map((x) => ({
-    ...x, previouslyInspected: true,
+    ...x, previouslyInspected: x.name === "Contrato de suministro Energia.pdf" ? true : x.previouslyInspected,
+  }))), /g5_private_inspected_document_ineligible/);
+  // Only genuinely eligible PDFs can be marked opened. With all of those
+  // inspected, the holdout has no untouched candidates and must fail closed.
+  assert.throws(() => selectPrivateOcrCorpus(samples.map((x) => ({
+    ...x, previouslyInspected: x.private === true
+      && ACCEPT_RECEIPTS.test(x.name) && !REJECT_NON_RECEIPTS.test(x.name)
+      ? true : x.previouslyInspected,
   }))), /g5_private_quota_unreachable/);
   process.stdout.write("REC_G5_PRIVATE_CORPUS|status=ok|development=16|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false\n");
 }
