@@ -12,6 +12,7 @@ on:
       - 'supabase/tests/fixtures/production-10.0.102-permissions-20261009.json'
       - 'scripts/aud-e2e-production-backup-preflight.sh'
       - 'scripts/rec-ap8-restored-backup-rehearsal.sh'
+      - 'scripts/verify-ap8-restored-acl-matrix.mjs'
       - 'scripts/render-aud-production-permissions.mjs'
       - 'scripts/restore-verify-production-backup-v2.sh'
       - 'scripts/protect-backup-artifact-v2.sh'
@@ -161,6 +162,8 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
+      - name: Validate 32-table gateway ACL matrix and reject malformed SQL before backup download
+        run: node scripts/verify-ap8-restored-acl-matrix.mjs
       - name: Verify specific immutable backup metadata (no plaintext access)
         env:
           GH_TOKEN: ${{ github.token }}

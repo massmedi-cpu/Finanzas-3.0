@@ -52,7 +52,8 @@ permissions:
 jobs:
   auth-session-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # Browser dependencies + build exhausted the old 12-min ceiling before tests.
+    timeout-minutes: 22
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v6
