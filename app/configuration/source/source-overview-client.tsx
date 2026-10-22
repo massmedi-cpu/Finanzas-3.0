@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
-import { isConfirmedSourcePostflightReport, type SourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
+import { isConfirmedSourcePostflightReport, type PublicSourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
 import { SourcePostflightReportPanel } from "./source-postflight-report";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
@@ -120,7 +120,7 @@ export default function SourceOverviewClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
-  const [postflight, setPostflight] = useState<SourcePostflightReport | null>(null);
+  const [postflight, setPostflight] = useState<PublicSourcePostflightReport | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {

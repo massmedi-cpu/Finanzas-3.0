@@ -152,7 +152,7 @@ async function mockSourceOverviewForPostflight(page: import("@playwright/test").
         pendingRows: 1, orphanRows: 0, differingRows: 0,
         matchingUnknownBalances: 1,
         differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0 },
-        accounts: [{ accountExternalKey: "Cuenta de ensayo", sourceRows: 3,
+        accounts: [{ accountLabel: "Cuenta 1", sourceRows: 3,
           persistedRows: 2, matchingRows: 2, pendingRows: 1, orphanRows: 0, differingRows: 0 }],
       },
     });
@@ -197,4 +197,14 @@ test("REC-POST-294 · sesión caducada revoca el reporte y los botones", async (
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
+});
+
+
+test("REC-POST-297 · la ruta anonimiza cada cuenta y no expone huellas ni revisiones privadas", () => {
+  const route = readFileSync("app/api/source/google/postflight/route.ts", "utf8");
+  const index = route.indexOf("...toPublicSourcePostflightReport(report)");
+  expect(index).toBeGreaterThan(route.indexOf("buildSourcePostflightReport(snapshot, stored)"));
+  expect(route).not.toContain("...report,");
+  expect(route).not.toContain("sourceRevision: summary.sourceRevision");
+  expect(route).not.toContain("snapshotFingerprint: summary.snapshotFingerprint");
 });

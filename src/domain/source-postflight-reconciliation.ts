@@ -40,6 +40,28 @@ export type SourcePostflightReport = {
   accounts: SourcePostflightAccount[];
 };
 
+/**
+ * The browser-facing contract contains counts and generic account labels only.
+ * Source account keys stay on the server: they may encode bank product details.
+ */
+export type PublicSourcePostflightAccount = Omit<SourcePostflightAccount, "accountExternalKey"> & {
+  accountLabel: string;
+};
+export type PublicSourcePostflightReport = Omit<SourcePostflightReport, "accounts"> & {
+  accounts: PublicSourcePostflightAccount[];
+};
+
+export function toPublicSourcePostflightReport(report: SourcePostflightReport): PublicSourcePostflightReport {
+  const { accounts, ...aggregates } = report;
+  return {
+    ...aggregates,
+    accounts: accounts.map(({ accountExternalKey: _privateKey, ...counts }, index) => ({
+      ...counts,
+      accountLabel: `Cuenta ${index + 1}`,
+    })),
+  };
+}
+
 export type SourcePostflightErrorCode =
   | "source_postflight_invalid_record"
   | "source_postflight_duplicate_identity"
@@ -170,9 +192,9 @@ export function reconcileOfficialSourcePostflight(
  * REC-POST-295: refuse contradictory aggregates returned by a remote route.
  * In particular, an HTTP 200 cannot call 20 pending movements "verified".
  */
-export function isConfirmedSourcePostflightReport(value: unknown): value is SourcePostflightReport {
+export function isConfirmedSourcePostflightReport(value: unknown): value is PublicSourcePostflightReport {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const r = value as Partial<SourcePostflightReport>;
+  const r = value as Partial<PublicSourcePostflightReport>;
   if (r.scope !== "supplied_snapshots_only" || !["verified", "pending", "blocked"].includes(r.status ?? "")) return false;
   const numeric = [
     r.sourceRows, r.persistedRows, r.matchingRows, r.pendingRows,
@@ -209,11 +231,12 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Sour
   };
   for (const entry of r.accounts) {
     if (!entry || typeof entry !== "object"
-      || typeof entry.accountExternalKey !== "string"
-      || entry.accountExternalKey.trim() !== entry.accountExternalKey
-      || entry.accountExternalKey.length < 1 || entry.accountExternalKey.length > 256
-      || keys.has(entry.accountExternalKey)) return false;
-    keys.add(entry.accountExternalKey);
+      || typeof entry.accountLabel !== "string"
+      || !/^Cuenta [1-9][0-9]*$/.test(entry.accountLabel)
+      || entry.accountLabel.length > 20
+      || Object.hasOwn(entry, "accountExternalKey")
+      || keys.has(entry.accountLabel)) return false;
+    keys.add(entry.accountLabel);
     for (const key of Object.keys(accountTotals) as Array<keyof typeof accountTotals>) {
       const n = entry[key];
       if (!Number.isSafeInteger(n) || n < 0 || n > 10000) return false;

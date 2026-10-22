@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  reconcileOfficialSourcePostflight, isConfirmedSourcePostflightReport, SourcePostflightError,
+  reconcileOfficialSourcePostflight, isConfirmedSourcePostflightReport, toPublicSourcePostflightReport, SourcePostflightError,
   type SourcePostflightRow,
 } from "../../src/domain/source-postflight-reconciliation";
 
@@ -144,7 +144,7 @@ test("REC-POST-287 · 10000 observaciones exactas siguen siendo deterministas", 
 
 
 test("REC-POST-295 · ninguna respuesta contradictoria acredita conciliación completa", () => {
-  const report = reconcileOfficialSourcePostflight([row(0), row(1)], [row(0)]);
+  const report = toPublicSourcePostflightReport(reconcileOfficialSourcePostflight([row(0), row(1)], [row(0)]));
   expect(report.status).toBe("pending");
   expect(isConfirmedSourcePostflightReport(report)).toBe(true);
   const mismatchedStatus = { ...report, status: "verified" };
@@ -161,6 +161,27 @@ test("REC-POST-295 · ninguna respuesta contradictoria acredita conciliación co
     ...report.differences, bankDate: 1,
   } })).toBe(false);
   expect(isConfirmedSourcePostflightReport(null)).toBe(false);
-  const allExact = reconcileOfficialSourcePostflight([row(0)], [row(0)]);
+  const allExact = toPublicSourcePostflightReport(reconcileOfficialSourcePostflight([row(0)], [row(0)]));
   expect(isConfirmedSourcePostflightReport(allExact)).toBe(true);
+});
+
+
+test("REC-POST-296 · el informe público protege identidades de cuentas y conserva recuentos", () => {
+  const secret = "Cuenta real privada · 987654";
+  const source = [row(0, { accountExternalKey: secret }), row(1, { accountExternalKey: secret })];
+  const internal = reconcileOfficialSourcePostflight(source, [source[0]]);
+  const before = JSON.stringify(internal);
+  const publicReport = toPublicSourcePostflightReport(internal);
+  expect(publicReport).toMatchObject({ status: "pending", sourceRows: 2, persistedRows: 1,
+    matchingRows: 1, pendingRows: 1 });
+  expect(publicReport.accounts).toMatchObject([{ accountLabel: "Cuenta 1",
+    sourceRows: 2, persistedRows: 1, matchingRows: 1, pendingRows: 1 }]);
+  expect(JSON.stringify(publicReport)).not.toContain(secret);
+  expect(JSON.stringify(publicReport)).not.toContain("accountExternalKey");
+  expect(isConfirmedSourcePostflightReport(publicReport)).toBe(true);
+  expect(isConfirmedSourcePostflightReport({ ...publicReport, accounts: [
+    { ...publicReport.accounts[0], accountExternalKey: secret },
+  ] })).toBe(false);
+  expect(isConfirmedSourcePostflightReport(internal)).toBe(false);
+  expect(JSON.stringify(internal)).toBe(before);
 });

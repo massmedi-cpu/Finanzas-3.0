@@ -5,7 +5,7 @@ import {
 import {
   buildSourcePostflightReport,
 } from "../../../../../src/application/source-postflight-report";
-import { SourcePostflightError } from "../../../../../src/domain/source-postflight-reconciliation";
+import { SourcePostflightError, toPublicSourcePostflightReport } from "../../../../../src/domain/source-postflight-reconciliation";
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
 import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import {
@@ -49,10 +49,8 @@ export async function GET() {
     });
     const report = buildSourcePostflightReport(snapshot, stored);
     return Response.json({
-      ...report,
+      ...toPublicSourcePostflightReport(report),
       readConsistency: "sequential_non_atomic",
-      sourceRevision: summary.sourceRevision,
-      snapshotFingerprint: summary.snapshotFingerprint,
     }, { headers: HEADERS });
   } catch (error) {
     const denied = sourceWorkspaceAuthError(error);

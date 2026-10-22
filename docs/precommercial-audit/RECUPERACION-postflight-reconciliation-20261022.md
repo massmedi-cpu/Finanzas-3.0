@@ -155,3 +155,23 @@ secuenciales no garantizan una transacción atómica intersistema.
 **Estado de entrega**: implementado en GitHub; las nuevas suites y el
 nuevo SHA requieren evidencias terminales independientes; AP1–AP8
 siguen abiertas.
+
+
+## 22/10/2026 · REC-POST-296/297 · privacidad de identificadores en la respuesta
+
+Auditoría de frontera HTTP: el informe agregado interno contenía
+`accounts[].accountExternalKey` y el endpoint lo serializaba sin retirar
+la clave del producto bancario. Además enviaba la revisión y la huella
+SHA-256 de la fuente, que no son necesarias para la pantalla de conciliación.
+
+Se introduce un contrato público explícito con etiquetas genéricas
+`Cuenta 1`, `Cuenta 2`, etc. El servidor conserva los identificadores
+originales solo durante el cruce en memoria y devuelve los mismos contadores
+por cuenta, sin identificadores, revisión ni huella de la fuente. El cliente
+rechaza respuestas que contengan `accountExternalKey` y verifica que
+las sumas y el estado sean coherentes. Nuevas regresiones REC-POST-296 y
+REC-POST-297, obligatorias en la matriz de navegador y su guard.
+
+**Limitación:** por diseño las etiquetas genéricas no sustituyen la
+identificación bancaria interna ni equivalen a pruebas con dos usuarios
+reales. No se publica, fusiona ni sincroniza mientras AP1–AP8 sigan abiertas.

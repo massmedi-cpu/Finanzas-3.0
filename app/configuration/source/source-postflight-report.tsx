@@ -1,9 +1,9 @@
-import type { SourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
+import type { PublicSourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
 import { formatInteger } from "../../../src/core/formatters";
 import styles from "./source.module.css";
 
 /** Aggregated counts only; no source row identifiers, values or concepts. */
-export function SourcePostflightReportPanel({ report }: { report: SourcePostflightReport }) {
+export function SourcePostflightReportPanel({ report }: { report: PublicSourcePostflightReport }) {
   const label = report.status === "verified"
     ? "Coinciden los datos comprobados"
     : report.status === "pending"
@@ -30,8 +30,8 @@ export function SourcePostflightReportPanel({ report }: { report: SourcePostflig
       </dl>
       <div className={styles.preflightProducts}>
         {report.accounts.map((account) => (
-          <article key={account.accountExternalKey}>
-            <strong>{account.accountExternalKey}</strong>
+          <article key={account.accountLabel}>
+            <strong>{account.accountLabel}</strong>
             <small>{formatInteger(account.matchingRows)} coincidentes · {formatInteger(account.pendingRows)} pendientes</small>
             {(account.differingRows > 0 || account.orphanRows > 0) && (
               <p role="status" className="config-message warning">
