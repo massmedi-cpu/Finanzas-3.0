@@ -8,6 +8,7 @@ on:
       - 'src/design/**'
       - 'src/application/source-*.ts'
       - 'src/domain/source-balance-continuity.ts'
+      - 'src/domain/source-postflight-reconciliation.ts'
       - 'tests/helpers/verified-source-fixture.ts'
       - 'src/domain/document-ocr-financial-interpretation.ts'
       - 'src/domain/private-document-content-address.ts'
@@ -140,6 +141,7 @@ jobs:
           tests/e2e/google-service-account.spec.ts
           tests/e2e/source-metadata-auth-boundary.spec.ts
           tests/e2e/source-preflight-summary.spec.ts
+          tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
           tests/e2e/document-ocr-json-byte-limit.spec.ts
