@@ -298,6 +298,34 @@ export async function handleSourceSyncAction(input: {
     return json(result);
   }
 
+  if (action === "source.postflight_rows") {
+    // REC-POST-288: workspace membership, Vercel OIDC and tenant GUC are
+    // established upstream in index.ts. Read-only, bounded to one workbook,
+    // selected workspace and a single SQL statement/snapshot.
+    text(payload.sourceFileId, "source_file_id");
+    const workspaceId = await sql`
+      select nullif(pg_catalog.current_setting('financial_app.workspace_id',true),'') as workspace_id
+    `;
+    if (!workspaceId[0]?.workspace_id) return json({ error: "workspace_context_required" }, 403);
+    const rows = await sql`
+      select
+        source_file_id,source_sheet_id,source_row_key,account_external_key,
+        bank_date::text as bank_date,
+        amount_cents::text as amount_cents,
+        balance_after_cents::text as balance_after_cents
+      from financial_app.transaction_source_records
+      where source_file_id=${payload.sourceFileId}
+        and workspace_id=${workspaceId[0].workspace_id}::uuid
+      order by source_sheet_id,source_row_key
+      limit 10001
+    `;
+    if (rows.length > 10000) {
+      return json({ error: "source_postflight_limit_exceeded" }, 413);
+    }
+    // Full result or explicit refusal, never pagination masquerading as truth.
+    return json({ rows });
+  }
+
   if (action === "source.status") {
     text(payload.sourceFileId, "source_file_id");
     const rows = await sql`
