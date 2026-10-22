@@ -13,3 +13,9 @@ Fecha: 22/10/2026. **No confundir con despliegue en producción.**
 
 ## Evidencia y criterio de cierre
 Cualquier éxito de `REC_AP8_REAL_BACKUP|status=ok` certificará únicamente la **repetición en aislamiento sobre la copia real del 20/10**, con rollback probado. No significa que el trigger esté desplegado en Supabase productivo, ni que Edge v86 se haya actualizado, ni que los 20 movimientos estén importados. Para la publicación se requiere respaldo **reciente**, comprobar permisos y aplicar y revalidar cambios productivos con rollback ya demostrado. La PR continúa DRAFT hasta completar OCR G5 y todas las puertas restantes.
+
+## REC-AP8-311 · bloqueo diagnosticado del primer ensayo auténtico
+- Run [39762726914](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39762726914) FAILED tras completar checks del cifrado y restauración correcta en PostgreSQL 17 aislado. Primer error registrado por PostgreSQL: **permission denied for schema financial_app** durante fixture AP1 con rol restringido. La exportación portable usa `pg_dump --no-privileges`; **no** es prueba de un problema en permisos de Supabase vivo, cuyo esquema/funciones/documentos han sido verificados READ ONLY con permiso correcto.
+- SQL de ensayo repone exclusivamente **GRANT de prueba** de USAGE del esquema, SELECT+UPDATE de documentos y SELECT de movements/source_records, antes de capturar huellas. Son permisos **solo de la base temporal**: NO se altera SQL de migración productivo.
+- Las suites sintéticas para etiquetas y splits se conservan intactas con su guardia de base `financial_app_pre001_disposable`; dos variantes clonadas exigen específicamente `financial_app_production_backup_restore_check`, para evitar un fallo seguro pero ajeno a la migración.
+- En nuevos fallos el script expone solo la etapa y códigos estáticos, nunca contenido bancario o logs SQL. El ensayo AP8 aún debe terminar de forma real y verificable con rollback.

@@ -18,9 +18,27 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM financial_app.transactions)
     OR NOT EXISTS (SELECT 1 FROM financial_app.transaction_source_records)
     OR to_regclass('financial_app.documents') IS NULL THEN
-    RAISE EXCEPTION 'REC_AP8_SYNTHETIC_BASELINE_DATA_OR_DOCUMENT_TABLE_MISSING';
+    RAISE EXCEPTION 'REC_AP8_AUTHENTIC_BASELINE_DATA_OR_DOCUMENT_TABLE_MISSING';
   END IF;
 END $preflight$;
+
+-- Portable pg_dump --no-privileges strips the gateway's production ACLs.
+-- Recreate only privileges confirmed by a live, READ ONLY catalog query.
+-- These GRANTs exist EXCLUSIVELY inside the isolated restored PostgreSQL.
+GRANT USAGE ON SCHEMA financial_app TO financial_app_gateway;
+GRANT SELECT, UPDATE ON financial_app.documents TO financial_app_gateway;
+GRANT SELECT ON financial_app.transactions,
+  financial_app.transaction_source_records TO financial_app_gateway;
+DO $acl_check$
+BEGIN
+  IF NOT has_schema_privilege('financial_app_gateway','financial_app','USAGE')
+    OR NOT has_table_privilege('financial_app_gateway','financial_app.documents','SELECT')
+    OR NOT has_table_privilege('financial_app_gateway','financial_app.documents','UPDATE')
+    OR NOT has_table_privilege('financial_app_gateway','financial_app.transactions','SELECT')
+    OR NOT has_table_privilege('financial_app_gateway','financial_app.transaction_source_records','SELECT') THEN
+    RAISE EXCEPTION 'REC_AP8_PORTABLE_ACL_RECONSTRUCTION_FAILED';
+  END IF;
+END $acl_check$;
 
 CREATE TEMP TABLE rec_ap8_functions AS
 SELECT p.oid::regprocedure::text AS signature,
@@ -136,8 +154,8 @@ END $postflight$;
 -- These existing real PostgreSQL fixtures run with the restricted gateway role.
 -- Each wraps its synthetic fixture in BEGIN/ROLLBACK (no banking data).
 \i supabase/tests/ap1_private_document_original_immutable.sql
-\i supabase/tests/transaction_category_label_batch_disposable.sql
-\i supabase/tests/transaction_split_fact_batch_disposable.sql
+\i supabase/tests/transaction_category_label_batch_restored_103.sql
+\i supabase/tests/transaction_split_fact_batch_restored_103.sql
 
 \echo REC_AP8_DELTA|phase=rollback|target=disposable_only
 DO $restore$

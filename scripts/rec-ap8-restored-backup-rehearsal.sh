@@ -37,8 +37,17 @@ fi
 echo 'REC_AP8_REAL_BACKUP|stage=restore|status=ok|source=2026-10-20|version=10.0.103'
 if ! psql "$local_db" -X -v ON_ERROR_STOP=1 -q \
   -f supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql >"$private_log" 2>&1; then
-  # SQL errors may contain user data: never print the private log.
-  fail migration_or_rollback_failed
+  # SQL errors may contain user data: print only stable sanitized codes.
+  node - "$private_log" <<'NODE'
+const fs=require('node:fs');
+const s=fs.readFileSync(process.argv[2],'utf8');
+const phase=[...s.matchAll(/REC_AP8_DELTA\|phase=(upgrade|rollback)/g)].at(-1)?.[1]||'preflight';
+const reason=s.includes('permission denied for schema financial_app') ? 'portable_acl_not_reconstructed'
+  : s.includes('CATEGORY_LABEL_BATCH_REQUIRES_DISPOSABLE_DB') || s.includes('SPLIT_FACT_BATCH_REQUIRES_DISPOSABLE_DB')
+    ? 'wrong_fixture_database_guard' : 'sql_fixture_or_migration_failed';
+console.log('REC_AP8_REAL_BACKUP|status=failed|phase='+phase+'|reason='+reason);
+NODE
+  exit 1
 fi
 node - "$private_log" <<'NODE'
 const fs = require('node:fs');
