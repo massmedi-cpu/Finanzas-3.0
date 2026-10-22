@@ -9,3 +9,9 @@ No recorre subcarpetas, nunca abre los **8 documentos reservados**, y no imprime
 La prueba `REC-G5-316`, añadida a la suite CI general, certifica el **contrato de privacidad del corredor**, NO la exactitud de los documentos privados ni un G5 final. G5 solo podrá cerrarse después de revisar campos contra los originales, congelar la versión y ejecutar entonces la muestra holdout independiente. Nunca subir PDFs al repositorio ni utilizar datos ficticios como métricas de aceptación.
 
 La fuente Google Sheets, Supabase productivo y la publicación permanecen estrictamente intactas.
+
+## REC-G5-317 · protección redundante frente a ejecución accidental en GitHub Actions
+El corredor privado se salta incluso si la variable del directorio se define accidentalmente cuando `GITHUB_ACTIONS=true`. La puerta pública comprueba ambas condiciones; las pruebas privadas deben ejecutarse explícitamente fuera de GitHub Actions. Ningún PDF se sube, abre o registra en CI.
+
+## REC-UX15-317 · suite no recortada
+El trabajo `UX 15 User Value` alcanzó su límite de 18 minutos y fue cancelado mientras ejecutaba la batería de escritorio/móvil. Se cambia solo el techo a 35 minutos; se conservan todas las pruebas y la compilación. Es obligatorio observar el resultado terminal del commit nuevo; una cancelación nunca se contabiliza como éxito.

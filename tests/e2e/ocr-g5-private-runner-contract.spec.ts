@@ -4,7 +4,7 @@ test("REC-G5-316 · the private G5 runner never executes on public CI or leaks d
   const source = readFileSync("tests/e2e/ocr-g5-private-development-local.spec.ts", "utf8");
   const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
   for (const requirement of [
-    "FINANCIAL_APP_G5_DEVELOPMENT_DIR", "test.skip(!PRIVATE_DEV_DIR",
+    "FINANCIAL_APP_G5_DEVELOPMENT_DIR", "test.skip(!PRIVATE_DEV_DIR || process.env.GITHUB_ACTIONS === \"true\"",
     "new PdfTextOcrProvider()", "runDocumentOcr({",
     "interpretDocumentOcrFinancially(result)", "readdirSync(root, { withFileTypes: true })",
     "toBe(17)", "No pass threshold", "names_logged=false",

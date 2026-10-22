@@ -8,7 +8,8 @@ import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-f
 // REC-G5-315: owner-local ONLY. Never read folders recursively or output
 // filenames, amounts, private PDFs, OCR text, individual errors or identifiers.
 const PRIVATE_DEV_DIR = process.env.FINANCIAL_APP_G5_DEVELOPMENT_DIR ?? "";
-test.skip(!PRIVATE_DEV_DIR, "The owner's local private PDFs are not in GitHub CI");
+test.skip(!PRIVATE_DEV_DIR || process.env.GITHUB_ACTIONS === "true",
+  "Never open private owner documents on GitHub Actions, even if a variable is set");
 
 function referenceCents(name: string): number | null {
   const m = name.match(/[-–]\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:€|EUR)\.pdf$/i);
