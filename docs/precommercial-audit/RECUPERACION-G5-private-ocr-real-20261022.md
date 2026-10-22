@@ -24,3 +24,10 @@ El commit anterior `3d6d3f99` tenía 84/87 workflows PASS y 2 todavía en curso 
 
 ## Integridad de la CI (REC-G5-306)
 La ruta `scripts/verify-private-ocr-corpus-selection.mjs` queda añadida explícitamente al filtro de cambios que dispara `.github/workflows/product-recovery-ui.yml`. El guard de la suite exige esa ruta: así el selector nunca conserva una certificación verde obsoleta al cambiar categorías o admisión de PDF. El self-test sigue siendo 100 % sintético sin originales bancarios o facturas privadas.
+
+## REC-G5-307 · reapertura de estratificación con historial de inspección explícito
+- Al corregir las categorías FREE NOW / Samsung, PDF ya abiertos pueden superar el límite de desarrollo de su categoría. El selector anterior preseleccionaba **todos** los `previouslyInspected=true` y luego forzaba 16+8, haciendo el conjunto imposible. Ahora reserva hasta la cuota por categoría; los excedentes ya inspeccionados quedan excluidos de **ambos** grupos y jamás se reciclan como holdout.
+- Se admite un historial global superior a 16 PDFs abiertos, pero **solo** si todavía existen 8 privados nunca inspeccionados para la reserva, sin duplicados, con las cuotas exactas. La separación se valida de manera estricta. No se renombra un documento abierto a «nuevo».
+- La selección real requiere un registro privado explícito `previouslyInspected: true/false` **para cada candidato elegible**; un valor ausente o desconocido detiene la operación. La herramienta no puede asegurar qué PDFs se abrieron históricamente por sí sola; el registro no debe subirse a GitHub ni a CI.
+- Nuevo self-test sintético que cubre exceso en transporte/tecnología, 17 inspeccionados, histórico excluido del holdout, falta de estado de inspección y ausencia real de archivos independientes. Sin nombres, PDFs o identificadores privados en las pruebas.
+- El objetivo final sigue siendo 16 desarrollo + 8 holdout, como **candidato privado** y no como certificación OCR. Los 8 reservados quedan sin abrir hasta la congelación del extractor.

@@ -37,9 +37,12 @@ export function selectPrivateOcrCorpus(files) {
       || !assertPrivateId(file.parentFolderId)
       || typeof file.name !== "string" || !ACCEPT_RECEIPTS.test(file.name)
       || REJECT_NON_RECEIPTS.test(file.name)) continue;
+    // Unknown inspection history must never be interpreted as unopened.
+    // This private field is supplied by the owner's local inspection ledger.
+    if (typeof file.previouslyInspected !== "boolean")
+      die("g5_private_inspection_state_required");
     choices.get(classOf(file.name)).push(file);
   }
-  if (inspected.size > 16) die("g5_private_inspection_exceeds_development_quota");
   for (const id of inspected) {
     if (!Array.from(choices.values()).some((bucket) => bucket.some((f) => f.id === id)))
       die("g5_private_inspected_document_ineligible");
@@ -50,19 +53,26 @@ export function selectPrivateOcrCorpus(files) {
   for (const f of allValid) folderCounts.set(f.parentFolderId, (folderCounts.get(f.parentFolderId) ?? 0) + 1);
   const selected = new Map();
   const usedFolders = new Set();
-  for (const f of allValid.filter((x) => inspected.has(x.id))) {
-    selected.set(f.id, { file: f, holdout: false, kind: classOf(f.name) });
-    usedFolders.add(f.parentFolderId);
-  }
-
   const ranked = (a, b) =>
     Number(usedFolders.has(b.parentFolderId)) - Number(usedFolders.has(a.parentFolderId))
     || (folderCounts.get(b.parentFolderId) ?? 0) - (folderCounts.get(a.parentFolderId) ?? 0)
     || a.sizeBytes - b.sizeBytes || a.id.localeCompare(b.id);
 
+  // A corrected merchant category can place multiple previously opened PDFs
+  // in a class with a development quota of one. Keep at most the class quota;
+  // unused opened PDFs stay excluded from BOTH sets, never enter holdout.
+  for (const spec of SPECS) {
+    const seen = choices.get(spec.key).filter((f) => inspected.has(f.id)).sort(ranked).slice(0, spec.dev);
+    for (const file of seen) {
+      selected.set(file.id, { file, holdout: false, kind: spec.key });
+      usedFolders.add(file.parentFolderId);
+    }
+  }
   const selectN = (spec, holdout, count) => {
     while ([...selected.values()].filter((x) => x.kind === spec.key && x.holdout === holdout).length < count) {
-      const candidate = choices.get(spec.key).filter((f) => !selected.has(f.id)).sort(ranked)[0];
+      const candidate = choices.get(spec.key)
+        .filter((f) => !selected.has(f.id) && (!holdout || f.previouslyInspected === false))
+        .sort(ranked)[0];
       if (!candidate) die("g5_private_quota_unreachable");
       selected.set(candidate.id, { file: candidate, kind: spec.key, holdout });
       usedFolders.add(candidate.parentFolderId);
@@ -81,8 +91,11 @@ export function selectPrivateOcrCorpus(files) {
     || holdout.some((x) => inspected.has(x.file.id))
     || new Set(values.map((x) => x.file.id)).size !== 24)
     die("g5_private_corpus_isolation_or_root_limit");
+  const excludedInspectedCount = inspected.size
+    - development.filter((x) => inspected.has(x.file.id)).length;
   return {
     development, holdout, folderCount: usedFolders.size,
+    excludedInspectedCount,
     counts: SPECS.map((x) => ({ kind: x.key,
       development: development.filter((v) => v.kind === x.key).length,
       holdout: holdout.filter((v) => v.kind === x.key).length })),
@@ -138,7 +151,7 @@ function testSynthetic() {
     name: "Factura MediaMarkt distinta.pdf",
     mimeType: "application/pdf",
     sizeBytes: 3500,
-    private: true,
+    private: true, previouslyInspected: false,
   });
   // REC-G5-304: check real-world vendor aliases with synthetic names only.
   assert.equal(classOf("2019-10-31 - FREE NOW - Factura ejemplo.pdf"), "transporte");
@@ -169,9 +182,40 @@ function testSynthetic() {
   assert.throws(() => selectPrivateOcrCorpus(samples.map((x, i) => ({
     ...x, parentFolderId: "folder_private_" + String(i).padStart(3, "0"),
   }))), /g5_private_corpus_isolation_or_root_limit/);
+  // REC-G5-307: overquota inspected PDFs are excluded, NEVER reclassified as holdout.
+  const overQuota = samples.map((x) => ({
+    ...x, previouslyInspected: x.previouslyInspected === true
+      || x.name === "Factura Cabify 1.pdf"
+      || x.name === "Factura Media Markt 1.pdf",
+  }));
+  const recovered = selectPrivateOcrCorpus(overQuota);
+  assert.equal(recovered.development.length, 16);
+  assert.equal(recovered.holdout.length, 8);
+  assert.equal(recovered.excludedInspectedCount, 2);
+  assert.equal(recovered.holdout.some((x) => x.file.previouslyInspected), false);
+  assert.equal(recovered.development.filter((x) => x.kind === "transporte").length, 1);
+  assert.equal(recovered.development.filter((x) => x.kind === "tecnologia").length, 1);
+  assert.equal(recovered.development.filter((x) => x.kind === "otros").length, 2);
+  // More than 16 inspected overall is acceptable IF holdout remains unopened.
+  const openedCounts = [4, 2, 6, 2, 2, 1];
+  const manyOpened = samples.map((x) => {
+    const group = tokens.findIndex((prefix) => x.name.startsWith(prefix + " "));
+    if (group < 0) return x;
+    const index = Number(x.name.slice(tokens[group].length + 1).split(".")[0]);
+    return { ...x, previouslyInspected: index < openedCounts[group] };
+  });
+  const manyResult = selectPrivateOcrCorpus(manyOpened);
+  assert.equal(manyResult.development.length, 16);
+  assert.equal(manyResult.holdout.length, 8);
+  assert.equal(manyResult.excludedInspectedCount, 2);
+  assert.equal(manyResult.holdout.some((x) => x.file.previouslyInspected), false);
+  // Missing explicit inspection state must fail closed, not silently enter holdout.
+  assert.throws(() => selectPrivateOcrCorpus(samples.map((x, i) =>
+    i === 1 ? { ...x, previouslyInspected: undefined } : x)), /g5_private_inspection_state_required/);
+  // If every candidate has been opened, an independent holdout is impossible.
   assert.throws(() => selectPrivateOcrCorpus(samples.map((x) => ({
     ...x, previouslyInspected: true,
-  }))), /g5_private_inspection_exceeds_development_quota/);
+  }))), /g5_private_quota_unreachable/);
   process.stdout.write("REC_G5_PRIVATE_CORPUS|status=ok|development=16|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false\n");
 }
 
