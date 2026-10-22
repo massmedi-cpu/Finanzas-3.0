@@ -18,6 +18,7 @@ on:
       - 'src/application/source-preflight.ts'
       - 'src/application/source-sync-service.ts'
       - 'src/domain/source-balance-continuity.ts'
+      - 'src/domain/source-postflight-reconciliation.ts'
       - 'app/configuration/source/**'
       - 'app/inicio-overview.tsx'
       - 'app/product-preferences.tsx'
@@ -28,6 +29,7 @@ on:
       - 'tests/e2e/sync-missing-persistence-contract.spec.ts'
       - 'tests/e2e/source-incident-trace.spec.ts'
       - 'tests/e2e/source-preflight-summary.spec.ts'
+      - 'tests/e2e/source-postflight-reconciliation.spec.ts'
       - 'tests/e2e/source-reader-revision.spec.ts'
       - 'tests/e2e/source-health-consistency.spec.ts'
       - 'tests/e2e/source-trust-app-shell.spec.ts'
@@ -64,6 +66,7 @@ jobs:
           npx playwright test
           tests/e2e/source-incident-trace.spec.ts
           tests/e2e/source-preflight-summary.spec.ts
+          tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-reader-revision.spec.ts
           tests/e2e/source-health-consistency.spec.ts
           tests/e2e/source-trust-app-shell.spec.ts
