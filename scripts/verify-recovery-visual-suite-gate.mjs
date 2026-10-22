@@ -10,6 +10,9 @@ const cases = [
     "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274",
     "REC-SYNC-276", "REC-SYNC-277", "REC-SYNC-278", "REC-SYNC-279",
   ]],
+  ["tests/e2e/source-postflight-boundary.spec.ts", [
+    "REC-POST-288", "REC-POST-289", "REC-POST-290", "REC-POST-291",
+  ]],
   ["tests/e2e/source-postflight-reconciliation.spec.ts", [
     "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",
     "REC-POST-285", "REC-POST-286", "REC-POST-287",
@@ -66,7 +69,7 @@ assert.ok(integrated.includes("--project=chromium-desktop --project=chromium-mob
  // do not hide regressions with retries or selective result parsing.
 const flakyGate = "--fail-on-flaky-tests";
 assert.ok(integrated.includes(flakyGate), "Integrated browser regressions must fail when any test is flaky");
-for (const path of ["src/application/source-*.ts", "src/domain/source-balance-continuity.ts", "tests/helpers/verified-source-fixture.ts"]) {
+for (const path of ["src/application/source-*.ts", "src/domain/source-balance-continuity.ts", "src/domain/source-postflight-reconciliation.ts", "tests/helpers/verified-source-fixture.ts"]) {
   assert.ok(workflow.includes("'" + path + "'"), `Source confirmation changes must retrigger browser certification: ${path}`);
 }
 
