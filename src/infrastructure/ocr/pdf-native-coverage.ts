@@ -12,6 +12,8 @@ function hasMoneyEvidence(text: string) {
   return decimals.test(text) || currencyBefore.test(text) || currencyAfter.test(text);
 }
 
+const NON_INVOICE_TOTAL_SUFFIX = /^\s+(?:(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)|(?:(?:de\s+)?(?:la|esta)\s+|de\s+)?(?:pag(?:ina)?\.?|hoja)|a\s+transportar|transportado|anterior)\b/;
+
 function hasInvoiceTotalEvidence(words: OcrWord[]) {
   const text = words.map((word) => word.text).join(" ")
     .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -21,7 +23,7 @@ function hasInvoiceTotalEvidence(words: OcrWord[]) {
     // is NOT evidence of an invoice grand total. Such tax-only overlays
     // must not hide the scanned document body below them. Continue to
     // later independent labels such as "TOTAL A PAGAR 22,10" on this line.
-    if (/^\s+(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)\b/.test(afterLabel)) continue;
+    if (NON_INVOICE_TOTAL_SUFFIX.test(afterLabel)) continue;
     const tail = afterLabel.slice(0, 56);
     // TOTAL without a value is not proved by an unrelated IVA, tax base,
     // reference number or unit price printed after the heading.
@@ -115,8 +117,9 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   // A tax/discount TOTAL is a false positive even in a large selectable
   // overlay. The actual invoice grand total may exist only in raster pixels.
   // If a separate genuine total exists, preserve the native-text fast path.
-  if (/\btotal\s+(?:de\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|descuentos?|ahorro|unidades|articulos|productos)\b/.test(
-    text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase(),
+  const normalizedTotalText = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  if ([...normalizedTotalText.matchAll(/\btotal\b/g)].some((label) =>
+    NON_INVOICE_TOTAL_SUFFIX.test(normalizedTotalText.slice(label.index + label[0].length)),
   ) && !hasInvoiceTotalEvidence(words)) return true;
 
   if (chars >= 210 && words.length >= 5) return false;

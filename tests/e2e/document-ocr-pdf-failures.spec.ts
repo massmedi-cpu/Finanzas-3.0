@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
+import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-financial-interpretation";
+import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 
 const documentId = "93000000-0000-4000-8000-000000000093";
 
@@ -64,6 +66,11 @@ test("REC-OCR-045 · página escaneada fallida conserva las demás páginas nati
   expect(result.plainText).toContain("FACTURA NATIVA PAGINA 1");
   expect(result.plainText).toContain("FACTURA NATIVA PAGINA 3");
   expect(result.warnings).toContain("pdf_page_visual_ocr_failed:2");
+  const financial = interpretDocumentOcrFinancially(result);
+  expect(financial.totalCents.value).toBe(5445);
+  expect(financial.totalCents.trust).toBe("doubtful");
+  expect(financial.warnings).toContain("ocr_document_incomplete");
+  expect(summarizeDocumentOcrReview(result).priorityReviewFields.some((field) => field.key === "totalCents")).toBe(true);
   expect(result.status).toBe("needs_review");
   expect(result.principles.requiresHumanReview).toBe(true);
   expect(result.principles.financialWrites).toBe(false);

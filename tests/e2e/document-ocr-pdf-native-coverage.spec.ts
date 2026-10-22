@@ -17,6 +17,17 @@ const boilerplate = [
   "la referencia y las condiciones generales de este emisor.",
 ].join(" ");
 
+test("REC-OCR-324 · selectable page subtotals cannot suppress the scanned invoice body", () => {
+  for (const label of ["TOTAL PÁGINA", "TOTAL DE LA PÁGINA", "TOTAL PÁG. 1", "TOTAL HOJA", "TOTAL A TRANSPORTAR", "TOTAL TRANSPORTADO", "TOTAL ANTERIOR"]) {
+    const overlay = words(`${label} 12,10 EUR ${boilerplate.repeat(3)}`);
+    expect(pdfNativeTextNeedsVisualOcr(overlay), label).toBe(true);
+    expect(pdfVisualOcrImprovesNative(overlay, words("FACTURA TOTAL A PAGAR 24,20 EUR")), label).toBe(true);
+    const actualTotal = words(`${label} 12,10 EUR TOTAL FACTURA 24,20 EUR ${boilerplate.repeat(3)}`);
+    expect(pdfNativeTextNeedsVisualOcr(actualTotal), label).toBe(false);
+    expect(pdfVisualOcrImprovesNative(actualTotal, words("FACTURA TOTAL 99,99 EUR")), label).toBe(false);
+  }
+});
+
 test("REC-OCR-043 · fully image-only PDF requires visual OCR", () => {
   expect(pdfNativeTextNeedsVisualOcr([])).toBe(true);
 });

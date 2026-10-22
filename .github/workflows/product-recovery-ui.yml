@@ -11,6 +11,7 @@ on:
       - 'src/domain/source-postflight-reconciliation.ts'
       - 'tests/helpers/verified-source-fixture.ts'
       - 'src/domain/document-ocr-financial-interpretation.ts'
+      - 'src/infrastructure/ocr/pdf-native-coverage.ts'
       - 'src/domain/private-document-content-address.ts'
       - 'src/domain/private-document-replay.ts'
       - 'src/domain/atomic-drive-document-batch.ts'
@@ -162,6 +163,7 @@ jobs:
           tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts
           tests/e2e/document-ocr-financial-interpretation.spec.ts
           tests/e2e/document-ocr-pdf-native-coverage.spec.ts
+          tests/e2e/document-ocr-pdf-hybrid-provider.spec.ts
           tests/e2e/gateway-request-body-limit.spec.ts
           tests/e2e/deployment-region-contract.spec.ts
           tests/e2e/dashboard-envelope-integrity.spec.ts

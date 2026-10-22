@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { buildDocumentOcrResult, reconstructOcrPage } from "../../src/domain/document-ocr";
 
 const documentId = "94000000-0000-4000-8000-000000000094";
 
@@ -28,6 +29,54 @@ const principles = {
   suggestionsPersisted: false,
   associationsRequireConfirmation: true,
 };
+
+test("REC-OCR-326 · incomplete PDFs show doubtful aggregates and an actionable Spanish warning without automatic confirmation", async ({ page }) => {
+  const text = ["Emisor: TIENDA EJEMPLO", "Fecha: 01/10/2026", "Base imponible 100,00", "IVA 21 % 21,00", "TOTAL A PAGAR 121,00"];
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-page-limit", extractedAt: "2026-10-22T12:00:00Z",
+    pages: [reconstructOcrPage(1, text.map((value, i) => ({
+      text: value, confidence: 0.99, box: { x: 0.1, y: 0.1 + i * 0.12, width: 0.8, height: 0.04 },
+    })))],
+    warnings: ["pdf_page_limit_reached"],
+  });
+  const writes: string[] = [];
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/documents/drive-sync" && request.method() === "POST") {
+      await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+      return;
+    }
+    if (request.method() !== "GET") {
+      writes.push(request.method() + " " + url.pathname);
+      await route.fulfill(url.pathname === "/api/documents/ocr" && request.method() === "POST"
+        ? { status: 200, json: result }
+        : { status: 409, json: { error: "unexpected_write" } });
+      return;
+    }
+    if (url.pathname === "/api/documents/ocr-review") {
+      await route.fulfill({ status: 200, json: {
+        documentId, runs: [{ id: "98000000-0000-4000-8000-000000000326", extractor: result.extractor, extractedAt: result.extractedAt }], reviews: [],
+      } });
+      return;
+    }
+    await route.fulfill({ status: 200, json: url.searchParams.has("id")
+      ? { contractVersion: 1, document, associations: [], principles }
+      : { contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  for (const field of ["taxBaseCents", "taxesCents", "totalCents"]) {
+    await expect(panel.getByTestId("ocr-field-" + field)).toContainText("Dudoso");
+    await expect(panel.getByTestId("ocr-field-" + field)).not.toContainText("Fiable");
+  }
+  await expect(panel.getByText("Faltan páginas por leer o recuperar. La base, los impuestos y el total necesitan revisión con el original completo.", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Revisa primero total con el original", { exact: true }).last()).toBeVisible();
+  expect(writes).toEqual(["POST /api/documents/ocr"]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
 
 test("Documentos convierte OCR en un recorrido de revisión humana sin escrituras automáticas", async ({ page }) => {
   const writes: string[] = [];

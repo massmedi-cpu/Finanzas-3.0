@@ -1526,3 +1526,104 @@ test("REC-OCR-198 · excluded tax headings preserve ordinary, explicit and adjac
     expect(parsed.taxesCents.value).toBe(-210);
   }
 });
+
+test("REC-OCR-320 · page subtotals and carried amounts never become invoice totals", () => {
+  for (const label of ["TOTAL PÁGINA", "TOTAL DE LA PÁGINA", "TOTAL PÁG. 1", "TOTAL HOJA", "TOTAL A TRANSPORTAR", "TOTAL TRANSPORTADO", "TOTAL ANTERIOR"]) {
+    const raw = result([line("page-subtotal", `${label} 12,10 €`, 0.99)]);
+    const before = JSON.stringify(raw);
+    const parsed = interpretDocumentOcrFinancially(raw);
+    expect(parsed.totalCents.value, label).toBeNull();
+    expect(parsed.totalCents.trust, label).toBe("not_detected");
+    expect(JSON.stringify(raw)).toBe(before);
+  }
+});
+
+test("REC-OCR-321 · page summaries cannot steal or contradict a separately owned grand total", () => {
+  for (const printed of [
+    "TOTAL PÁGINA 12,10 TOTAL FACTURA 24,20",
+    "TOTAL FACTURA 24,20 TOTAL PÁGINA 12,10",
+    "TOTAL ANTERIOR 12,10 TOTAL A PAGAR 24,20 TOTAL A TRANSPORTAR 18,15",
+  ]) {
+    const raw = result([line("merged-totals", printed, 0.99)]);
+    const parsed = interpretDocumentOcrFinancially(raw);
+    expect(parsed.totalCents.value, printed).toBe(2420);
+    expect(parsed.totalCents.rawValue, printed).toBe("24,20");
+    expect(parsed.totalCents.trust, printed).toBe("reliable");
+    expect(parsed.totalCents.evidence[0]?.rawText).toBe(printed);
+    expect(raw.plainText).toBe(printed);
+  }
+  const orphan = interpretDocumentOcrFinancially(result([
+    line("dangling-total", "TOTAL A PAGAR TOTAL PÁGINA 12,10", 0.99),
+  ]));
+  expect(orphan.totalCents.value).toBeNull();
+});
+
+test("REC-OCR-322 · known incomplete page coverage keeps all document amounts subject to review", () => {
+  for (const warning of ["incomplete_page_coverage", "pdf_page_limit_reached", "pdf_page_load_failed:2", "pdf_page_visual_ocr_failed:2", "pdf_page_visual_ocr_empty:2", "pdf_page_sparse_native_unverified:2"]) {
+    const raw = result([
+      line("base", "Base imponible 100,00", 0.99, 0.5),
+      line("tax", "IVA 21 % 21,00", 0.99, 0.6),
+      line("total", "TOTAL A PAGAR 121,00", 0.99, 0.7),
+    ]);
+    raw.warnings = [warning];
+    raw.status = "needs_review";
+    const before = JSON.stringify(raw);
+    const parsed = interpretDocumentOcrFinancially(raw);
+    for (const [key, amount] of [["taxBaseCents", 10000], ["taxesCents", 2100], ["totalCents", 12100]] as const) {
+      expect(parsed[key].value, warning).toBe(amount);
+      expect(parsed[key].trust, warning).toBe("doubtful");
+      expect(parsed[key].evidence).toHaveLength(1);
+    }
+    expect(parsed.warnings).toContain("ocr_document_incomplete");
+    const review = summarizeDocumentOcrReview(raw);
+    expect(review.nextAction).toBe("review");
+    expect(review.priorityReviewFields.some((field) => field.key === "totalCents")).toBe(true);
+    expect(JSON.stringify(raw)).toBe(before);
+  }
+});
+
+test("REC-OCR-323 · successful visual recovery does not falsely mark complete documents incomplete", () => {
+  for (const warning of ["pdf_page_native_text_failed:1", "pdf_page_sparse_native_recovered:1", "orientation_corrected"]) {
+    const raw = result([line("total", "TOTAL A PAGAR 121,00", 0.99)]);
+    raw.warnings = [warning];
+    raw.status = "needs_review";
+    const parsed = interpretDocumentOcrFinancially(raw);
+    expect(parsed.totalCents.value).toBe(12100);
+    expect(parsed.totalCents.trust).toBe("reliable");
+    expect(parsed.warnings).not.toContain("ocr_document_incomplete");
+  }
+});
+
+test("REC-OCR-327 · an incomplete invoice cannot supply invented aggregate sums from a partial VAT table", () => {
+  const raw = result([
+    line("vat-header", "IVA BASE IMPONIBLE CUOTA", 0.99, 0.2),
+    line("vat-row", "10% 10,00 1,00", 0.99, 0.3),
+    line("payable", "TOTAL FACTURA 11,00", 0.99, 0.8),
+  ]);
+  const complete = interpretDocumentOcrFinancially(raw);
+  expect(complete.taxBaseCents.value).toBe(1000);
+  expect(complete.taxesCents.value).toBe(100);
+  raw.warnings = ["pdf_page_limit_reached"];
+  raw.status = "needs_review";
+  const partial = interpretDocumentOcrFinancially(raw);
+  expect(partial.totalCents.value).toBe(1100);
+  expect(partial.totalCents.trust).toBe("doubtful");
+  expect(partial.taxBaseCents.value).toBeNull();
+  expect(partial.taxesCents.value).toBeNull();
+  expect(partial.taxLines.some((tax) => tax.baseCents === 1000 && tax.taxCents === 100)).toBe(true);
+});
+
+test("REC-OCR-328 · a final-page invoice total keeps its page evidence without conflict from earlier page sums", () => {
+  const raw = result([line("page-sum", "TOTAL PÁGINA 12,10", 0.99, 0.8)]);
+  raw.pages.push({ ...result([
+    line("carry", "TOTAL ANTERIOR 12,10", 0.99, 0.1),
+    line("payable", "TOTAL FACTURA 24,20", 0.99, 0.8),
+  ]).pages[0], pageNumber: 2 });
+  raw.plainText = raw.pages.map((page) => page.plainText).join("\n\n");
+  const before = JSON.stringify(raw);
+  const parsed = interpretDocumentOcrFinancially(raw);
+  expect(parsed.totalCents.value).toBe(2420);
+  expect(parsed.totalCents.trust).toBe("reliable");
+  expect(parsed.totalCents.evidence).toEqual([expect.objectContaining({ pageNumber: 2, lineId: "payable" })]);
+  expect(JSON.stringify(raw)).toBe(before);
+});

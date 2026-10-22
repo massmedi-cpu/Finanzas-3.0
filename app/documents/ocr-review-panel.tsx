@@ -83,6 +83,7 @@ const WARNING_LABELS: Record<string, string> = {
   receipt_structure_incomplete: "Hay filas de producto que no se han podido estructurar por completo: la lectura queda pendiente de revisión.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
+  ocr_document_incomplete: "Faltan páginas por leer o recuperar. La base, los impuestos y el total necesitan revisión con el original completo.",
   base_plus_tax_mismatch: "La base imponible y los impuestos detectados no cuadran con el total. No confirmes los importes sin revisar el original.",
   tax_rate_arithmetic_mismatch: "El porcentaje de IVA o IGIC no cuadra con la base imponible y la cuota detectadas. Comprueba los tres importes en el original antes de confirmarlos.",
   ocr_empty: "El OCR no ha recuperado texto utilizable.",

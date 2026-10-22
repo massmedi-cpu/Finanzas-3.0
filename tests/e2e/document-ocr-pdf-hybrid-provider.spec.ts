@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import { createCanvas } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
+import { runDocumentOcr } from "../../src/application/document-ocr-service";
+import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-financial-interpretation";
 
 const footer = "DOCUMENTO GENERADO AUTOMATICAMENTE POR EL SISTEMA DE ARCHIVO. "
   + "SE INFORMA QUE EL TEXTO SELECCIONABLE SOLO CONTIENE UNA REFERENCIA LEGAL "
@@ -70,6 +72,23 @@ function visualResult(confidence: number): Awaited<ReturnType<DocumentOcrProvide
     warnings: [],
   };
 }
+
+test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable total beneath a page subtotal overlay", async () => {
+  test.setTimeout(120_000);
+  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3));
+  const before = Buffer.from(bytes);
+  const result = await runDocumentOcr({
+    documentId: "93000000-0000-4000-8000-000000000325",
+    bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
+    provider: new PdfTextOcrProvider(),
+  });
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
+  expect(result.plainText).toMatch(/23[,.]45/);
+  expect(interpretDocumentOcrFinancially(result).totalCents.value).toBe(2345);
+  expect(result.principles.financialWrites).toBe(false);
+  expect(Buffer.from(bytes)).toEqual(before);
+});
 
 test("REC-OCR-065 · actual PDF.js page selects clear scanned total over invisible selectable boilerplate", async () => {
   let rasterReads=0;

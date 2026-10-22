@@ -297,10 +297,22 @@ function retailVatHeaderForRow(lines: LocatedLine[], index: number): LocatedLine
   return null;
 }
 
+// Page totals and amounts carried between pages are not invoice totals. Mask
+// each complete clause (including its money), stopping before another total
+// label so merged PDF rows retain the genuinely payable amount and evidence.
+function pageSubtotalSpans(text: string): Array<{ start: number; end: number }> {
+  const pageLabel = /\btotal\s+(?:(?:de\s+)?(?:la|esta)\s+|de\s+)?(?:pag(?:ina)?\.?|hoja)\b|\btotal\s+(?:a\s+transportar|transportado|anterior)\b/g;
+  return [...text.matchAll(pageLabel)].map((match) => {
+    const afterLabel = match.index + match[0].length;
+    const nextLabel = text.slice(afterLabel).search(/\b(?:total|importe\s+(?:total|(?:de\s+la\s+)?factura)|a\s+pagar)\b/);
+    return { start: match.index, end: nextLabel < 0 ? text.length : afterLabel + nextLabel };
+  });
+}
+
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean; skipExplanatoryParentheses?: boolean; skipShippingBase?: boolean; skipElectricityDuty?: boolean; preferVatQuota?: boolean } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean; skipExplanatoryParentheses?: boolean; skipShippingBase?: boolean; skipElectricityDuty?: boolean; preferVatQuota?: boolean; skipPageSubtotals?: boolean } = {},
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
@@ -311,13 +323,16 @@ function extractMoneyField(
     // line. Exclude only the misleading heading, not the entire row: blank
     // its characters to preserve the offsets of the real payable label.
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    const excludedSpans = options.skipPageSubtotals ? pageSubtotalSpans(searchable) : [];
+    const withoutPageSubtotals = excludedSpans.reduce((text, span) =>
+      text.slice(0, span.start) + " ".repeat(span.end - span.start) + text.slice(span.end), searchable);
     const labelSearch = options.exclude
-      ? searchable.replace(
+      ? withoutPageSubtotals.replace(
         new RegExp(options.exclude.source, options.exclude.flags.includes("g")
           ? options.exclude.flags : options.exclude.flags + "g"),
         (excluded) => " ".repeat(excluded.length),
       )
-      : searchable;
+      : withoutPageSubtotals;
     if (!labels.some((label) => label.test(labelSearch))) return [];
     if (options.skipTaxTableFooter && isTaxTableFooter(lines, index)) return [];
 
@@ -336,6 +351,7 @@ function extractMoneyField(
         // An explanatory VAT/discount figure inside parentheses is not owned
         // by the surrounding TOTAL label. Keep it available to tax parsing.
         const moneyStart = match.index ?? 0;
+        if (excludedSpans.some((span) => moneyStart >= span.start && moneyStart < span.end)) return [];
         if (options.skipExplanatoryParentheses && !match[0].startsWith("(")
           && item.line.text.lastIndexOf("(", moneyStart) > item.line.text.lastIndexOf(")", moneyStart)) return [];
         const value = parseMoneyCents(match[0]);
@@ -1179,8 +1195,20 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     adjacentAmount: true,
     skipTaxTableFooter: true,
     skipExplanatoryParentheses: true,
+    skipPageSubtotals: true,
   });
   const warnings: string[] = [];
+  // Reading a high-confidence amount on one page does not establish a whole
+  // invoice total when other pages were omitted or could not be recovered.
+  // Keep every observed cent and source line, but never certify aggregates or
+  // derive tax sums from a document known to be incomplete. Successful visual
+  // recovery and orientation corrections alone do not imply missing content.
+  if ((result.warnings ?? []).some((warning) => /^(?:incomplete_page_coverage|pdf_page_limit_reached)$|^pdf_page_(?:load_failed|visual_ocr_failed|visual_ocr_empty|sparse_native_unverified):[1-9]\d*$/.test(warning))) {
+    warnings.push("ocr_document_incomplete");
+    taxBaseCents = fieldRequiringReview(taxBaseCents);
+    taxesCents = fieldRequiringReview(taxesCents);
+    totalCents = fieldRequiringReview(totalCents);
+  }
   const taxLines = extractTaxLines(located);
   const rateContradiction = taxLines.some((row) => row.ratePercent !== null
     && row.baseCents !== null && row.taxCents !== null
