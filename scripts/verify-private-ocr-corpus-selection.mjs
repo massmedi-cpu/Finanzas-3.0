@@ -3,13 +3,14 @@ import { readFileSync } from "node:fs";
 
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,200}$/;
 const MAX_PRIVATE_ROOTS = 12;
+const ACCEPT_RECEIPTS = /facturas?|tickets?|recibos?|justificantes?|comprobantes?|invoices?|receipts?|compras?|pedidos?/i;
 const REJECT_NON_RECEIPTS = /\b(?:contratos?|condiciones|solicitudes?|p[oó]lizas?|ofertas?|certificados?|contracts?|terms\s+(?:and\s+)?conditions)\b/i;
 const SPECS = [
   { key: "suministros", match: /emasesa|endesa|energ[ií]a|electric|iberdrola|naturgy|factura\s+agua|luz/i, dev: 4, hold: 2 },
   { key: "telecom", match: /vodafone|movistar|orange|yoigo|digi|telefon|fibra|telecom/i, dev: 2, hold: 1 },
   { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 6, hold: 2 },
-  { key: "transporte", match: /renfe|uber|cabify|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 1, hold: 1 },
-  { key: "tecnologia", match: /amazon|media\s*markt|pccomponentes|fnac|aliexpress|tecnolog/i, dev: 1, hold: 1 },
+  { key: "transporte", match: /renfe|uber|cabify|free[\s-]*now|freenow|taxi|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 1, hold: 1 },
+  { key: "tecnologia", match: /amazon|media\s*markt|pccomponentes|fnac|aliexpress|samsung|xiaomi|tecnolog/i, dev: 1, hold: 1 },
   { key: "otros", match: /.*/, dev: 2, hold: 1 },
 ];
 const die = (code) => { throw new Error(code); };
@@ -34,7 +35,8 @@ export function selectPrivateOcrCorpus(files) {
     if (file.private !== true || file.mimeType !== "application/pdf"
       || !Number.isSafeInteger(file.sizeBytes) || file.sizeBytes < 1000
       || !assertPrivateId(file.parentFolderId)
-      || typeof file.name !== "string" || REJECT_NON_RECEIPTS.test(file.name)) continue;
+      || typeof file.name !== "string" || !ACCEPT_RECEIPTS.test(file.name)
+      || REJECT_NON_RECEIPTS.test(file.name)) continue;
     choices.get(classOf(file.name)).push(file);
   }
   if (inspected.size > 16) die("g5_private_inspection_exceeds_development_quota");
@@ -138,7 +140,21 @@ function testSynthetic() {
     sizeBytes: 3500,
     private: true,
   });
-  const good = selectPrivateOcrCorpus(samples);
+  // REC-G5-304: check real-world vendor aliases with synthetic names only.
+  assert.equal(classOf("2019-10-31 - FREE NOW - Factura ejemplo.pdf"), "transporte");
+  assert.equal(classOf("Factura FreeNow taxi ejemplo.pdf"), "transporte");
+  assert.equal(classOf("2024-07-31 - Samsung - Factura ejemplo.pdf"), "tecnologia");
+  assert.equal(classOf("Ticket Xiaomi ejemplo.pdf"), "tecnologia");
+  // REC-G5-305: a generic PDF is not a receipt just because its name matches a merchant.
+  const generic = {
+    id: "synthetic_not_a_receipt_0001", parentFolderId: "folder_private_05",
+    name: "Informe Santander sin justificante ni factura de compra.pdf",
+    mimeType: "application/pdf", sizeBytes: 2500, private: true,
+  };
+  // Explicitly non-receipt filenames stay out of the real sample.
+  const otherGeneric = { ...generic, id: "synthetic_non_invoice_000000", name: "Resumen de cuenta bancaria.pdf" };
+  const good = selectPrivateOcrCorpus([...samples, otherGeneric]);
+  assert.ok(![...good.development, ...good.holdout].some((entry) => entry.file.id === "synthetic_non_invoice_000000"));
   assert.equal(good.development.length, 16);
   assert.equal(good.holdout.length, 8);
   assert.equal(good.folderCount, 6);
