@@ -36,12 +36,18 @@ test("REC-POST-281 · la coincidencia exacta conserva nulos y no inventa saldo c
 });
 
 test("REC-POST-282 · 3188 importados y 20 pendientes NO acreditan sincronización terminada", () => {
-  const source = Array.from({ length: 3208 }, (_, i) => row(i, {
-    sourceSheetId: i % 1604 < 1595 ? "synthetic-checking" : "synthetic-savings",
-    accountExternalKey: i % 1604 < 1595 ? "checking" : "savings",
+  const checking = Array.from({ length: 3191 }, (_, i) => row(i, {
+    sourceSheetId: "synthetic-checking",
+    accountExternalKey: "checking",
     balanceAfterCents: i < 134 ? null : i * 100,
   }));
-  const stored = source.slice(0, 3188);
+  const savings = Array.from({ length: 17 }, (_, i) => row(i, {
+    sourceSheetId: "synthetic-savings",
+    accountExternalKey: "savings",
+    balanceAfterCents: i * 100,
+  }));
+  const source = [...checking, ...savings];
+  const stored = [...checking.slice(0, 3173), ...savings.slice(0, 15)];
   const report = reconcileOfficialSourcePostflight(source, stored);
   expect(report).toMatchObject({
     status: "pending", sourceRows: 3208, persistedRows: 3188,
@@ -50,6 +56,8 @@ test("REC-POST-282 · 3188 importados y 20 pendientes NO acreditan sincronizaci�
   });
   expect(report.matchingRows + report.pendingRows + report.differingRows).toBe(report.sourceRows);
   expect(report.accounts.reduce((n, x) => n + x.pendingRows, 0)).toBe(20);
+  expect(report.accounts.find(a => a.accountExternalKey === "checking")?.pendingRows).toBe(18);
+  expect(report.accounts.find(a => a.accountExternalKey === "savings")?.pendingRows).toBe(2);
 });
 
 test("REC-POST-283 · distintas cuentas, fechas, importes y saldos bloquean aceptación", () => {
