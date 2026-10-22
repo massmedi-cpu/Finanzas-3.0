@@ -17,6 +17,11 @@ on:
       - 'src/application/source-sync-client.ts'
       - 'src/application/source-preflight.ts'
       - 'src/application/source-sync-service.ts'
+      - 'src/application/source-postflight-report.ts'
+      - 'src/domain/source-postflight-reconciliation.ts'
+      - 'app/api/source/google/postflight/route.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
+      - 'supabase/functions/financial-app-db-gateway/index.ts'
       - 'src/domain/source-balance-continuity.ts'
       - 'src/domain/source-postflight-reconciliation.ts'
       - 'app/configuration/source/**'
@@ -30,6 +35,7 @@ on:
       - 'tests/e2e/source-incident-trace.spec.ts'
       - 'tests/e2e/source-preflight-summary.spec.ts'
       - 'tests/e2e/source-postflight-reconciliation.spec.ts'
+      - 'tests/e2e/source-postflight-boundary.spec.ts'
       - 'tests/e2e/source-reader-revision.spec.ts'
       - 'tests/e2e/source-health-consistency.spec.ts'
       - 'tests/e2e/source-trust-app-shell.spec.ts'
@@ -67,6 +73,7 @@ jobs:
           tests/e2e/source-incident-trace.spec.ts
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
+          tests/e2e/source-postflight-boundary.spec.ts
           tests/e2e/source-reader-revision.spec.ts
           tests/e2e/source-health-consistency.spec.ts
           tests/e2e/source-trust-app-shell.spec.ts
