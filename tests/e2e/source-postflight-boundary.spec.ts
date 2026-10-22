@@ -17,7 +17,7 @@ const bankRow = (key: string, product: "checking" | "savings"): SourceCellValue[
   row[10] = "PRUEBA DE CONTRATO SINTÉTICO";
   row[11] = "PRUEBA";
   row[13] = checking ? 2.5 : 1.5;
-  row[14] = checking ? 9 : null;
+  row[14] = checking ? 9 : 1.5;
   row[19] = "No";
   return row;
 };
@@ -50,20 +50,24 @@ const savingsName = "Cuenta ahorro Openbank · 2504";
 test("REC-POST-288 · decodificación de BIGINT exacta y errores sin datos privados", () => {
   const valid = { rows: [
     stored("S-CC-1", "725351515", checkingName, "250", "900"),
-    stored("S-AH-1", "2504001", savingsName, "150", null),
+    stored("S-AH-1", "2504001", savingsName, "150", "150"),
   ] };
   const before = JSON.stringify(valid);
   expect(decodePersistedSourcePostflight(valid, "synthetic-postflight-book")).toMatchObject([
-    { amountCents: 250, balanceAfterCents: 900 }, { amountCents: 150, balanceAfterCents: null },
+    { amountCents: 250, balanceAfterCents: 900 }, { amountCents: 150, balanceAfterCents: 150 },
   ]);
   expect(buildSourcePostflightReport(source(), valid)).toMatchObject({
     status: "verified", sourceRows: 2, persistedRows: 2, matchingRows: 2,
-    pendingRows: 0, differingRows: 0, orphanRows: 0, matchingUnknownBalances: 1,
+    pendingRows: 0, differingRows: 0, orphanRows: 0, matchingUnknownBalances: 0,
   });
   expect(buildSourcePostflightReport(source(), { rows: [valid.rows[0]] })).toMatchObject({
     status: "pending", sourceRows: 2, persistedRows: 1, pendingRows: 1,
   });
   expect(JSON.stringify(valid)).toBe(before);
+  expect(decodePersistedSourcePostflight({
+    rows: [{ ...valid.rows[1], balance_after_cents: null }],
+  }, "synthetic-postflight-book")[0].balanceAfterCents).toBeNull();
+
 
   for (const bad of [
     { ...valid, truncated: true }, { rows: "wrong" },
