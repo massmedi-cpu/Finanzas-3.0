@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync, readdirSync, lstatSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { assertInspectedG5Ledger } from "./support/g5-private-inspection-ledger";
 import { join, resolve } from "node:path";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
@@ -44,14 +45,18 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
     allowed.set(entry.name, entry.sha256);
   }
   const inspected: Array<{ name: string; bytes: Uint8Array }> = [];
+  const observed: Array<{ name: string; sha256: string }> = [];
   for (const name of filenames) {
     const filename = join(root, name);
     if (!lstatSync(filename).isFile()) reject();
     const bytes = readFileSync(filename);
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     if (bytes.length < 1000 || bytes.subarray(0, 5).toString("ascii") !== "%PDF-"
-        || createHash("sha256").update(bytes).digest("hex") !== allowed.get(name)) reject();
+        || sha256 !== allowed.get(name)) reject();
+    observed.push({ name, sha256 });
     inspected.push({ name, bytes: new Uint8Array(bytes) });
   }
+  assertInspectedG5Ledger(manifest, observed);
   const aggregate = {
     documents: filenames.length, extracted: 0, failed: 0,
     pdfNative: 0, pdfVisualOrHybrid: 0, totalDetected: 0, totalMissing: 0,
