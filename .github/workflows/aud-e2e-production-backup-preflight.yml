@@ -22,7 +22,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: aud-production-backup-upgrade-561
+  # PR #619 and PR #620 share one head branch but must never cancel each other.
+  group: aud-production-backup-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
