@@ -164,3 +164,64 @@ export function reconcileOfficialSourcePostflight(
       a.accountExternalKey.localeCompare(b.accountExternalKey)),
   };
 }
+
+
+/**
+ * REC-POST-295: refuse contradictory aggregates returned by a remote route.
+ * In particular, an HTTP 200 cannot call 20 pending movements "verified".
+ */
+export function isConfirmedSourcePostflightReport(value: unknown): value is SourcePostflightReport {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const r = value as Partial<SourcePostflightReport>;
+  if (r.scope !== "supplied_snapshots_only" || !["verified", "pending", "blocked"].includes(r.status ?? "")) return false;
+  const numeric = [
+    r.sourceRows, r.persistedRows, r.matchingRows, r.pendingRows,
+    r.orphanRows, r.differingRows, r.matchingUnknownBalances,
+  ];
+  if (numeric.some(n => !Number.isSafeInteger(n) || (n as number) < 0 || (n as number) > 10000)) return false;
+  const sourceRows = r.sourceRows!;
+  const persistedRows = r.persistedRows!;
+  if (sourceRows === 0 || r.matchingRows! + r.pendingRows! + r.differingRows! !== sourceRows
+    || r.matchingRows! + r.differingRows! + r.orphanRows! !== persistedRows
+    || r.matchingUnknownBalances! > r.matchingRows!) return false;
+
+  const diff = r.differences;
+  if (!diff || typeof diff !== "object") return false;
+  if ([diff.account, diff.bankDate, diff.amountCents, diff.balanceAfterCents].some(
+    n => !Number.isSafeInteger(n) || n < 0 || n > r.differingRows!,
+  )) return false;
+  if (r.differingRows! > 0
+    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents < r.differingRows!) return false;
+  if (r.differingRows === 0
+    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents !== 0) return false;
+
+  const expectedStatus = r.differingRows! || r.orphanRows! ? "blocked"
+    : r.pendingRows! ? "pending" : "verified";
+  if (r.status !== expectedStatus) return false;
+
+  if (!Array.isArray(r.accounts) || r.accounts.length < 1 || r.accounts.length > sourceRows + r.orphanRows!) {
+    return false;
+  }
+  const keys = new Set<string>();
+  const accountTotals = {
+    sourceRows: 0, persistedRows: 0, matchingRows: 0,
+    pendingRows: 0, orphanRows: 0, differingRows: 0,
+  };
+  for (const entry of r.accounts) {
+    if (!entry || typeof entry !== "object"
+      || typeof entry.accountExternalKey !== "string"
+      || entry.accountExternalKey.trim() !== entry.accountExternalKey
+      || entry.accountExternalKey.length < 1 || entry.accountExternalKey.length > 256
+      || keys.has(entry.accountExternalKey)) return false;
+    keys.add(entry.accountExternalKey);
+    for (const key of Object.keys(accountTotals) as Array<keyof typeof accountTotals>) {
+      const n = entry[key];
+      if (!Number.isSafeInteger(n) || n < 0 || n > 10000) return false;
+      accountTotals[key] += n;
+    }
+    if (entry.matchingRows + entry.pendingRows + entry.differingRows !== entry.sourceRows) return false;
+  }
+  return Object.keys(accountTotals).every(
+    key => accountTotals[key as keyof typeof accountTotals] === r[key as keyof typeof accountTotals],
+  );
+}
