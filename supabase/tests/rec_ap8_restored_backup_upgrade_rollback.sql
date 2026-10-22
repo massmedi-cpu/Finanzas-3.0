@@ -26,13 +26,14 @@ END $preflight$;
 -- Recreate only privileges confirmed by a live, READ ONLY catalog query.
 -- These GRANTs exist EXCLUSIVELY inside the isolated restored PostgreSQL.
 GRANT USAGE ON SCHEMA financial_app TO financial_app_gateway;
-GRANT SELECT, UPDATE ON financial_app.documents TO financial_app_gateway;
+GRANT SELECT, INSERT, UPDATE ON financial_app.documents TO financial_app_gateway;
 GRANT SELECT ON financial_app.transactions,
   financial_app.transaction_source_records TO financial_app_gateway;
 DO $acl_check$
 BEGIN
   IF NOT has_schema_privilege('financial_app_gateway','financial_app','USAGE')
     OR NOT has_table_privilege('financial_app_gateway','financial_app.documents','SELECT')
+    OR NOT has_table_privilege('financial_app_gateway','financial_app.documents','INSERT')
     OR NOT has_table_privilege('financial_app_gateway','financial_app.documents','UPDATE')
     OR NOT has_table_privilege('financial_app_gateway','financial_app.transactions','SELECT')
     OR NOT has_table_privilege('financial_app_gateway','financial_app.transaction_source_records','SELECT') THEN
