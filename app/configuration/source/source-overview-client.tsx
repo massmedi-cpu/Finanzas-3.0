@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
+import type { SourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
+import { SourcePostflightReportPanel } from "./source-postflight-report";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
 
@@ -118,10 +120,12 @@ export default function SourceOverviewClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
+  const [postflight, setPostflight] = useState<SourcePostflightReport | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
     setPreflight(null);
+    setPostflight(null);
     setLoading(true);
     setError(null);
     try {
@@ -190,6 +194,7 @@ export default function SourceOverviewClient() {
     if (!connected || !runtimeReady || busy) return;
     setBusy(true);
     setPreflight(null);
+    setPostflight(null);
     setNotice(null);
     setError(null);
     try {
@@ -202,12 +207,56 @@ export default function SourceOverviewClient() {
     }
   }
 
+  async function reconcileWithoutImporting() {
+    if (!connected || !runtimeReady || busy) return;
+    setBusy(true);
+    setPreflight(null);
+    setPostflight(null);
+    setNotice(null);
+    setError(null);
+    try {
+      const response = await fetch("/api/source/google/postflight", { cache: "no-store" });
+      const payload = await readJson<Partial<SourcePostflightReport>>(response);
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          setGoogle(null);
+          setRuntime(null);
+          setSyncStatus(EMPTY_SYNC_STATUS);
+          throw new Error(response.status === 401
+            ? "Inicia sesión para consultar la fuente bancaria."
+            : "Tu usuario no tiene acceso al espacio de trabajo de esta fuente.");
+        }
+        throw new Error("La conciliación no está disponible. No se han modificado datos.");
+      }
+      // A partial, malformed or empty result must never look reconciled.
+      if (!payload || !["verified", "pending", "blocked"].includes(payload.status ?? "")
+        || payload.scope !== "supplied_snapshots_only"
+        || !Number.isSafeInteger(payload.sourceRows) || (payload.sourceRows ?? 0) < 1
+        || !Number.isSafeInteger(payload.persistedRows)
+        || !Number.isSafeInteger(payload.matchingRows)
+        || !Number.isSafeInteger(payload.pendingRows)
+        || !Number.isSafeInteger(payload.orphanRows)
+        || !Number.isSafeInteger(payload.differingRows)
+        || !Array.isArray(payload.accounts)
+        || payload.matchingRows! + payload.pendingRows! + payload.differingRows! !== payload.sourceRows
+        || payload.matchingRows! + payload.differingRows! + payload.orphanRows! !== payload.persistedRows) {
+        throw new Error("La conciliación no ha devuelto resultados completos y verificables.");
+      }
+      setPostflight(payload as SourcePostflightReport);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se ha podido completar la conciliación sin importar.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function updateFromGoogle() {
     if (!connected || !runtimeReady || busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     setPreflight(null);
+    setPostflight(null);
     let syncWasRequested = false;
     try {
       const payload = await synchronizeOfficialSource();
@@ -333,6 +382,11 @@ export default function SourceOverviewClient() {
                   Comprobar sin importar
                 </button>
               )}
+              {connected && runtimeReady && (
+                <button className="secondary-button" type="button" disabled={busy} onClick={() => void reconcileWithoutImporting()}>
+                  Conciliar con datos guardados
+                </button>
+              )}
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
@@ -346,6 +400,7 @@ export default function SourceOverviewClient() {
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
             {preflight && <SourcePreflightReport summary={preflight} />}
+            {postflight && <SourcePostflightReportPanel report={postflight} />}
 
           </section>
 
