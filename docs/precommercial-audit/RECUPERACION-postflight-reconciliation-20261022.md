@@ -97,3 +97,61 @@ real de los 24 originales. Falta raíz autorizada para la identidad del servidor
 - Exigir sync real autorizada de 20 filas con preflight/postflight y rollback
   documentado antes de promover. Sin garantía de rollback después de respuesta
   incierta. Ninguna publicación ni merge de PR #619 hasta cierre de aceptación.
+
+
+## 6. Continuación implementada: REC-POST-288–295
+
+**Código añadido y versionado en la misma PR acumulativa** (la PR #619
+permanece DRAFT, sin merge ni actualización productiva):
+
+- **Gateway**: `source.postflight_rows` en `source-sync.ts`, exclusivamente
+  SELECT de las columnas autorizadas de `transaction_source_records`,
+  filtrado explícito por `source_file_id` y el workspace cuyo contexto fue
+  comprobado mediante token de usuario + membresía en `index.ts`. La
+  identidad de Vercel OIDC se verifica igualmente en el gateway. Límite
+  SQL real 10.001: rechaza más de 10.000 registros en lugar de truncar
+  discretamente. Fechas y BIGINT salen en texto exacto y sólo viajan al
+  servidor Next.js; la ruta pública no entrega listas de movimientos.
+- **Decodificación**: `source-postflight-report.ts` valida el origen de
+  cada registro, formato exacto de enteros en céntimos, NULL auténtico,
+  límite, completitud del array y campos permitidos. `buildSourcePostflightReport`
+  compara esas filas con el lote autoritativo recién leído y validado.
+- **API**: `GET /api/source/google/postflight` autentica la sesión y la
+  membresía ANTES de recuperar siquiera la conexión Google; lee una
+  instantánea actual, exige baseline histórico, invoca exclusivamente
+  `source.postflight_rows` y devuelve **solo agregados** con
+  `scope=supplied_snapshots_only` y
+  `readConsistency=sequential_non_atomic`. Si gateway/credenciales
+  fallan, contesta error estable HTTP 503/409/422 sin cifras inventadas.
+- **Interfaz**: botón «Conciliar con datos guardados» y panel claro con
+  filas oficiales, guardadas, coincidentes, pendientes, huérfanas y
+  discrepantes. Sin falsear un estado pendiente como completado; la sesión
+  caducada borra inmediatamente datos y botones. Un validador de dominio
+  único `isConfirmedSourcePostflightReport` comprueba cuentas, sumas,
+  estados y límites antes de mostrar el resultado.
+- **Regresiones nuevas**: REC-POST-288 a REC-POST-295, incluyendo lectura
+  BIGINT exacta, cruce sintético, contraseguridad anónima, orden
+  verificación usuario→fuente→DB, selección tenant, límite y ausencia
+  de SQL mutante, UI de pendientes y errores, revocación por 401 y
+  rechazo de agregados contradictorios. Se añadieron a la matriz
+  obligatoria Chromium desktop/móvil, `Source Trust CI Gates` y guard
+  de ejecución (no solamente existencia de los archivos).
+
+### Dependencia ineludible de activación cloud
+
+El gateway Supabase actualmente productivo NO incluye la nueva acción
+`source.postflight_rows` hasta que se despliegue la Edge Function
+correspondiente bajo el proceso de publicación con verificación de
+identidad y respaldo. La preview Next.js compila el código propuesto,
+pero **no debe anunciar la conciliación real como operativa** si devuelve
+503 por ausencia del nuevo gateway. No se actualizó Edge ni permisos en
+producción durante este bloque, para no adelantar AP1–AP8.
+
+Cada operación es de solo lectura: la ruta no ofrece POST mutante; no
+se ha importado ninguno de los 20 movimientos pendientes ni cambiado
+documentos, saldo inicial, migraciones ni ACL. Dos instantáneas
+secuenciales no garantizan una transacción atómica intersistema.
+
+**Estado de entrega**: implementado en GitHub; las nuevas suites y el
+nuevo SHA requieren evidencias terminales independientes; AP1–AP8
+siguen abiertas.
