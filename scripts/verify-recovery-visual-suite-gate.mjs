@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
 const cases = [
+  ["tests/e2e/ap8-readiness-contract.spec.ts", ["REC-AP8-308"]],
   ["tests/e2e/data-trust.spec.ts", ["REC-OWNER-300", "REC-OWNER-301", "REC-OWNER-302"]],
   ["tests/e2e/source-preflight-summary.spec.ts", [
     "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
@@ -143,6 +144,9 @@ process.stdout.write("PASS: release workflows pin actions, guard ancestry and do
 // rather than relying on green results from an earlier selector version.
 assert.ok(workflow.includes("'scripts/verify-private-ocr-corpus-selection.mjs'"),
   "G5 selector changes must retrigger the mandatory browser certification");
+
+assert.ok(workflow.includes("'scripts/rec-ap8-readiness-readonly.sql'"),
+  "Changes to the production AP8 read-only preflight must rerun the integrated browser gate");
 
 // G5 acceptance must NEVER rely on Drive originals in public CI. Run only
 // the selector's synthetic privacy/quotas regression, early in the existing

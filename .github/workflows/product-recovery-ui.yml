@@ -37,6 +37,7 @@ on:
       - 'scripts/test-drive-discovery-integrity.mjs'
       - 'scripts/verify-recovery-visual-suite-gate.mjs'
       - 'scripts/verify-private-ocr-corpus-selection.mjs'
+      - 'scripts/rec-ap8-readiness-readonly.sql'
       - 'tests/e2e/**'
       - 'playwright*.ts'
       - 'package*.json'
@@ -145,6 +146,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/ap8-readiness-contract.spec.ts
           tests/e2e/data-trust.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-api-json-limits.spec.ts
