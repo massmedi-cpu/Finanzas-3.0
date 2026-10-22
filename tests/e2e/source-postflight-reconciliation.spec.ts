@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
-  reconcileOfficialSourcePostflight, SourcePostflightError,
+  reconcileOfficialSourcePostflight, isConfirmedSourcePostflightReport, SourcePostflightError,
   type SourcePostflightRow,
 } from "../../src/domain/source-postflight-reconciliation";
 
@@ -140,4 +140,27 @@ test("REC-POST-287 · 10000 observaciones exactas siguen siendo deterministas", 
     status: "verified", sourceRows: 10000, persistedRows: 10000,
     matchingRows: 10000, pendingRows: 0, orphanRows: 0, differingRows: 0,
   });
+});
+
+
+test("REC-POST-295 · ninguna respuesta contradictoria acredita conciliación completa", () => {
+  const report = reconcileOfficialSourcePostflight([row(0), row(1)], [row(0)]);
+  expect(report.status).toBe("pending");
+  expect(isConfirmedSourcePostflightReport(report)).toBe(true);
+  const mismatchedStatus = { ...report, status: "verified" };
+  expect(isConfirmedSourcePostflightReport(mismatchedStatus)).toBe(false);
+  expect(isConfirmedSourcePostflightReport({ ...report, sourceRows: 1 })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({ ...report, matchingUnknownBalances: 5 })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({ ...report, accounts: [
+    { ...report.accounts[0], pendingRows: 0 },
+  ] })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({ ...report, accounts: [
+    report.accounts[0], report.accounts[0],
+  ] })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({ ...report, differences: {
+    ...report.differences, bankDate: 1,
+  } })).toBe(false);
+  expect(isConfirmedSourcePostflightReport(null)).toBe(false);
+  const allExact = reconcileOfficialSourcePostflight([row(0)], [row(0)]);
+  expect(isConfirmedSourcePostflightReport(allExact)).toBe(true);
 });
