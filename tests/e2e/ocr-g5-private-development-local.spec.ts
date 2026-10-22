@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync, readdirSync, lstatSync, realpathSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
@@ -8,7 +9,8 @@ import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-f
 // REC-G5-315: owner-local ONLY. Never read folders recursively or output
 // filenames, amounts, private PDFs, OCR text, individual errors or identifiers.
 const PRIVATE_DEV_DIR = process.env.FINANCIAL_APP_G5_DEVELOPMENT_DIR ?? "";
-test.skip(!PRIVATE_DEV_DIR || process.env.GITHUB_ACTIONS === "true",
+const PRIVATE_LEDGER = process.env.FINANCIAL_APP_G5_INSPECTION_LEDGER ?? "";
+test.skip(!PRIVATE_DEV_DIR || !PRIVATE_LEDGER || process.env.GITHUB_ACTIONS === "true",
   "Never open private owner documents on GitHub Actions, even if a variable is set");
 
 function referenceCents(name: string): number | null {
@@ -25,6 +27,31 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
     .filter((item) => item.isFile() && item.name.toLowerCase().endsWith(".pdf"))
     .map((item) => item.name).sort();
   expect(filenames.length, "private_g5_development_inventory").toBe(17);
+  // REC-G5-318: the manifest is private, never in GitHub or CI. Verify ALL
+  // already-opened files before submitting even the first PDF to OCR.
+  const reject = () => { throw new Error("g5_private_inspection_ledger_invalid"); };
+  let manifest: unknown;
+  try { manifest = JSON.parse(readFileSync(realpathSync(resolve(PRIVATE_LEDGER)), "utf8")); }
+  catch { reject(); }
+  const ledger = manifest as { schemaVersion?: unknown; documents?: unknown };
+  if (!ledger || ledger.schemaVersion !== 1 || !Array.isArray(ledger.documents)
+      || ledger.documents.length !== 17) reject();
+  const allowed = new Map<string,string>();
+  for (const entry of ledger.documents as Array<{ name?: unknown; previouslyInspected?: unknown; sha256?: unknown }>) {
+    if (!entry || typeof entry.name !== "string" || typeof entry.sha256 !== "string"
+        || !/^[0-9a-f]{64}$/.test(entry.sha256) || entry.previouslyInspected !== true
+        || !filenames.includes(entry.name) || allowed.has(entry.name)) reject();
+    allowed.set(entry.name, entry.sha256);
+  }
+  const inspected: Array<{ name: string; bytes: Uint8Array }> = [];
+  for (const name of filenames) {
+    const filename = join(root, name);
+    if (!lstatSync(filename).isFile()) reject();
+    const bytes = readFileSync(filename);
+    if (bytes.length < 1000 || bytes.subarray(0, 5).toString("ascii") !== "%PDF-"
+        || createHash("sha256").update(bytes).digest("hex") !== allowed.get(name)) reject();
+    inspected.push({ name, bytes: new Uint8Array(bytes) });
+  }
   const aggregate = {
     documents: filenames.length, extracted: 0, failed: 0,
     pdfNative: 0, pdfVisualOrHybrid: 0, totalDetected: 0, totalMissing: 0,
@@ -32,15 +59,13 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
     totalMatchesFilenameHint: 0, dateDetected: 0, issuerDetected: 0, warnings: 0,
   };
   const provider = new PdfTextOcrProvider();
-  for (const name of filenames) {
-    const path = join(root, name);
-    if (!lstatSync(path).isFile()) { aggregate.failed++; continue; }
-    const hint = referenceCents(name);
+  for (const document of inspected) {
+    const hint = referenceCents(document.name);
     if (hint !== null) aggregate.amountReferenceAvailable++;
     try {
       const result = await runDocumentOcr({
         documentId: "00000000-0000-4000-8000-000000000315",
-        bytes: new Uint8Array(readFileSync(path)),
+        bytes: document.bytes,
         mimeType: "application/pdf",
         originalFileName: "documento-privado.pdf",
         provider,
