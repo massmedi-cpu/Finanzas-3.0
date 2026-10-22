@@ -477,3 +477,13 @@ test("REC-OCR-331 · two-amount total without tax-table evidence is not discarde
   const original = words("FACTURA ORIGINAL TOTAL 25,37 3,81 " + boilerplate.repeat(2));
   expect(pdfNativeTextNeedsVisualOcr(original)).toBe(false);
 });
+
+
+test("REC-OCR-333 · an extra-long tax-table overlay still requires raster OCR before the native fast path", () => {
+  const footer = "TIPO % IMPUESTO BASE CUOTA IVA 21 25,37 3,81 TOTAL 25,37 3,81 ";
+  const longOnly = words(footer + boilerplate.repeat(8));
+  expect(longOnly.length).toBeGreaterThan(30);
+  expect(pdfNativeTextNeedsVisualOcr(longOnly)).toBe(true);
+  const withPayable = words(footer + "IMPORTE TOTAL FACTURA 29,18 € " + boilerplate.repeat(8));
+  expect(pdfNativeTextNeedsVisualOcr(withPayable)).toBe(false);
+});

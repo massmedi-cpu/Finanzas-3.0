@@ -57,7 +57,7 @@ const cases = [
   ]],
   ["tests/e2e/document-ocr-pdf-native-coverage.spec.ts", [
     "REC-OCR-162", "REC-OCR-163", "REC-OCR-164", "REC-OCR-165",
-    "REC-OCR-324", "REC-OCR-329", "REC-OCR-330", "REC-OCR-331",
+    "REC-OCR-324", "REC-OCR-329", "REC-OCR-330", "REC-OCR-331", "REC-OCR-333",
   ]],
   ["tests/e2e/document-ocr-pdf-hybrid-provider.spec.ts", ["REC-OCR-325", "REC-OCR-332"]],
   ["tests/e2e/private-document-content-address.spec.ts", ["REC-DOC-117", "REC-DOC-118", "REC-DOC-119"]],

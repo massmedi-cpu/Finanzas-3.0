@@ -131,13 +131,18 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
     return true;
   }
 
-  // A tax/discount TOTAL is a false positive even in a large selectable
-  // overlay. The actual invoice grand total may exist only in raster pixels.
-  // If a separate genuine total exists, preserve the native-text fast path.
+  // A tax/discount TOTAL, including a two-amount fiscal table footer, is
+  // a false positive even in a large selectable overlay. A long OCR text
+  // layer does not establish that the rasterized PAYABLE total was read.
+  // Run this before the 210/260-character native fast path. A separate
+  // genuine TOTAL A PAGAR still keeps the original selectable evidence.
   const normalizedTotalText = text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-  if ([...normalizedTotalText.matchAll(/\btotal\b/g)].some((label) =>
-    NON_INVOICE_TOTAL_SUFFIX.test(normalizedTotalText.slice(label.index + label[0].length)),
-  ) && !hasInvoiceTotalEvidence(words)) return true;
+  const unpayableTotal = [...normalizedTotalText.matchAll(/\btotal\b/g)].some((label) => {
+    const afterLabel = normalizedTotalText.slice(label.index + label[0].length);
+    return NON_INVOICE_TOTAL_SUFFIX.test(afterLabel)
+      || isTaxTableSubtotalLabel(normalizedTotalText, label.index, afterLabel);
+  });
+  if (unpayableTotal && !hasInvoiceTotalEvidence(words)) return true;
 
   if (chars >= 210 && words.length >= 5) return false;
   // A single enormous native text item can still be hidden PDF metadata,
