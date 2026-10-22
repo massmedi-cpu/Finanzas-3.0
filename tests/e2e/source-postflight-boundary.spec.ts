@@ -124,3 +124,77 @@ test("REC-POST-291 · el gateway limita filas, filtra tenant y previene exposici
   expect(edge.indexOf("await resolveWorkspaceContext(req, sql)"))
     .toBeLessThan(edge.indexOf("handleSourceSyncAction({ action, payload, sql"));
 });
+
+
+async function mockSourceOverviewForPostflight(page: import("@playwright/test").Page, response: {
+  status?: number; payload?: unknown;
+} = {}) {
+  let mutationCalls = 0;
+  await page.route("**/api/source/google/status", route => route.fulfill({ json: {
+    configured: true, authMode: "service-account",
+    connection: { connected: true, accountEmail: "synthetic@example.invalid",
+      sourceFileName: "Synthetic workbook", readonly: true, managed: true, lastVerifiedAt: null },
+  } }));
+  await page.route("**/api/health/source-runtime", route => route.fulfill({ json: {
+    status: "ok", compatible: true,
+  } }));
+  await page.route("**/api/source/google/sync", route => {
+    if (route.request().method() !== "GET") mutationCalls++;
+    return route.fulfill({ json: { run: null, cursors: [] } });
+  });
+  await page.route("**/api/source/google/postflight", route => {
+    if (route.request().method() !== "GET") mutationCalls++;
+    return route.fulfill({
+      status: response.status ?? 200,
+      json: response.payload ?? {
+        status: "pending", scope: "supplied_snapshots_only",
+        sourceRows: 3, persistedRows: 2, matchingRows: 2,
+        pendingRows: 1, orphanRows: 0, differingRows: 0,
+        matchingUnknownBalances: 1,
+        differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0 },
+        accounts: [{ accountExternalKey: "Cuenta de ensayo", sourceRows: 3,
+          persistedRows: 2, matchingRows: 2, pendingRows: 1, orphanRows: 0, differingRows: 0 }],
+      },
+    });
+  });
+  return { mutations: () => mutationCalls };
+}
+
+test("REC-POST-292 · la interfaz muestra pendientes reales como pendientes sin POST ni falsos éxitos", async ({ page }) => {
+  const source = await mockSourceOverviewForPostflight(page);
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
+  const report = page.getByRole("region", { name: "Conciliación con los movimientos guardados" });
+  await expect(report).toContainText("Hay movimientos pendientes de incorporar");
+  await expect(report).toContainText("Sin modificar datos");
+  await expect(report).toContainText("Coincidentes");
+  await expect(report).toContainText("Pendientes");
+  await expect(report).toContainText("saldos desconocidos");
+  await expect(report).toContainText("no a una transacción atómica");
+  expect(source.mutations()).toBe(0);
+});
+
+test("REC-POST-293 · un postflight inválido no se presenta como éxito", async ({ page }) => {
+  const state = await mockSourceOverviewForPostflight(page, { payload: {
+    status: "verified", scope: "supplied_snapshots_only",
+    sourceRows: 100, persistedRows: 2, matchingRows: 2, pendingRows: 0,
+    orphanRows: 0, differingRows: 0, accounts: [],
+  } });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
+  await expect(page.getByRole("alert")).toContainText("resultados completos y verificables");
+  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  expect(state.mutations()).toBe(0);
+});
+
+test("REC-POST-294 · sesión caducada revoca el reporte y los botones", async ({ page }) => {
+  const state = await mockSourceOverviewForPostflight(page, {
+    status: 401, payload: { error: "authentication_required" },
+  });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
+  await expect(page.getByRole("alert")).toContainText("Inicia sesión");
+  await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  expect(state.mutations()).toBe(0);
+});
