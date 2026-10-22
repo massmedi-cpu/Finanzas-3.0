@@ -154,7 +154,8 @@ export function reconcileOfficialSourcePostflight(
   }
 
   return {
-    status: differingRows || orphanRows ? "blocked" : pendingRows ? "pending" : "verified",
+    // Never certify an empty pair of snapshots as proof of financial coverage.
+    status: official.size === 0 || differingRows || orphanRows ? "blocked" : pendingRows ? "pending" : "verified",
     scope: "supplied_snapshots_only",
     sourceRows: official.size, persistedRows: stored.size,
     matchingRows, pendingRows, orphanRows, differingRows,
