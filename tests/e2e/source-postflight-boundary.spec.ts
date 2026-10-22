@@ -182,7 +182,7 @@ test("REC-POST-293 · un postflight inválido no se presenta como éxito", async
   } });
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
-  await expect(page.getByRole("alert")).toContainText("resultados completos y verificables");
+  await expect(page.locator(".config-message.error")).toContainText("resultados completos y verificables");
   await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
 });
@@ -193,7 +193,7 @@ test("REC-POST-294 · sesión caducada revoca el reporte y los botones", async (
   });
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
-  await expect(page.getByRole("alert")).toContainText("Inicia sesión");
+  await expect(page.locator(".config-message.error")).toContainText("Inicia sesión");
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
