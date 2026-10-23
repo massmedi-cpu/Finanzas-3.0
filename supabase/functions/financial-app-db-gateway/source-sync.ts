@@ -319,6 +319,36 @@ export async function handleSourceSyncAction(input: {
     return json(result);
   }
 
+  if (action === "source.original_rows") {
+    // REC-SYNC-400: private, complete original-only snapshot for server-side
+    // append-only reconciliation. Never expose this action to preview, browser
+    // routes, CI logs, or unauthenticated clients. OIDC and user membership
+    // are both established upstream; bind by the resolved workspace UUID.
+    if (environment !== "production") {
+      return json({ error: "source_originals_production_only" }, 403);
+    }
+    text(payload.sourceFileId, "source_file_id");
+    const workspace = await sql`
+      select nullif(pg_catalog.current_setting('financial_app.workspace_id',true),'') as workspace_id
+    `;
+    if (!workspace[0]?.workspace_id) return json({ error: "workspace_context_required" }, 403);
+    const rows = await sql`
+      select source_file_id,source_sheet_id,source_row_key,source_row_identity,
+        source_fingerprint,account_external_key,bank_date::text as bank_date,
+        amount_cents::text as amount_cents,balance_after_cents::text as balance_after_cents,
+        source_payload,concept_original
+      from financial_app.transaction_source_records
+      where source_file_id=${payload.sourceFileId}
+        and workspace_id=${workspace[0].workspace_id}::uuid
+      order by source_sheet_id,source_row_key
+      limit 10001
+    `;
+    if (rows.length > 10000) {
+      return json({ error: "source_originals_limit_exceeded" }, 413);
+    }
+    return json({ rows });
+  }
+
   if (action === "source.postflight_rows") {
     // REC-POST-288: workspace membership, Vercel OIDC and tenant GUC are
     // established upstream in index.ts. Read-only, bounded to one workbook,

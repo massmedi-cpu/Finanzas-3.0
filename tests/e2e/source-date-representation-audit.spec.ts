@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   auditOfficialSourceDateRepresentations, SourceDateRepresentationAuditError,
+  prepareVerifiedAppendOnlySourcePlan, verifyPlannedAppendOnlyPostflight,
 } from "../../src/application/source-date-representation-audit";
 import { buildSourcePostflightReport } from "../../src/application/source-postflight-report";
 import { isSafeAppendOnlySourceBaseline } from "../../src/application/source-sync-postflight-policy";
@@ -205,4 +206,116 @@ test("REC-SYNC-394 · orphaned originals and empty history remain blocked; input
   });
   expect(auditOfficialSourceDateRepresentations(source(), { rows: [...previous.rows].reverse() }))
     .toEqual(auditOfficialSourceDateRepresentations(source(), previous));
+});
+
+
+test("REC-SYNC-400 · canonical append-only plan keeps historical byte-level source payload and permits new rows", () => {
+  const original = source();
+  const base = stored(original);
+  const google = replaceCell(original, 1, SERIAL);
+  const incoming = { ...google, sheets: google.sheets.map((sheet, index) => index ? sheet : {
+    ...sheet, rows: [row("SYN-CC-NEW"), ...sheet.rows],
+  }) };
+  const originalBytes = JSON.stringify({ original, base, incoming });
+  const plan = prepareVerifiedAppendOnlySourcePlan(incoming, base);
+  expect(plan.audit).toMatchObject({
+    baselineClassification: "date_representation_only",
+    sourceRows: 5, persistedRows: 4, exactRows: 3,
+    dateRepresentationRows: 1, pendingRows: 1, changedRows: 0, orphanRows: 0,
+  });
+  expect(plan.preservedRepresentationRows).toBe(1);
+  const historical = plan.batch.observations.find(item => item.sourceRowKey === "SYN-CC-1");
+  const persistedHistorical = base.rows.find(item => item.source_row_key === "SYN-CC-1")!;
+  expect(historical?.sourceFingerprint).toBe(persistedHistorical.source_fingerprint);
+  expect(historical?.sourcePayload).toEqual(persistedHistorical.source_payload);
+  expect(historical?.sourcePayload.Fecha).toBe("21/10/2026");
+  expect(plan.batch.observations.find(item => item.sourceRowKey === "SYN-CC-NEW")?.sourcePayload.Fecha)
+    .toBe("21/10/2026");
+  expect(JSON.stringify({ original, base, incoming })).toBe(originalBytes);
+});
+
+test("REC-SYNC-401 · strict canonical postflight proves all rows and rejects revision, truncation, and extra fields", () => {
+  const sourceGoogle = replaceCell(source(), 1, SERIAL);
+  const original = stored(source());
+  const plan = prepareVerifiedAppendOnlySourcePlan(sourceGoogle, original);
+  const expected = { rows: plan.batch.observations.map(item => ({
+    source_file_id: plan.batch.sourceFileId,
+    source_sheet_id: item.sourceSheetId, source_row_key: item.sourceRowKey,
+    source_fingerprint: item.sourceFingerprint, account_external_key: item.accountExternalKey,
+    bank_date: item.bankDate, amount_cents: String(item.amountCents),
+    balance_after_cents: item.balanceAfterCents === null ? null : String(item.balanceAfterCents),
+  })) };
+  expect(verifyPlannedAppendOnlyPostflight(plan, expected)).toMatchObject({
+    status: "verified", sourceRows: 4, persistedRows: 4, matchingRows: 4,
+    differingRows: 0, orphanRows: 0, pendingRows: 0,
+  });
+  expect(verifyPlannedAppendOnlyPostflight(plan, { rows: expected.rows.slice(1) })).toMatchObject({
+    status: "pending", pendingRows: 1,
+  });
+  expect(verifyPlannedAppendOnlyPostflight(plan, {
+    rows: expected.rows.map((item, index) => index ? item : { ...item, source_fingerprint: "f".repeat(64) }),
+  })).toMatchObject({ status: "blocked", differingRows: 1 });
+  expect(() => verifyPlannedAppendOnlyPostflight(plan, { ...expected, hasMore: false }))
+    .toThrow("source_postflight_invalid_record");
+});
+
+test("REC-SYNC-402 · unexpected historical edits or an orphan fail closed before constructing any import plan", () => {
+  const original = source();
+  const previous = stored(original);
+  const changed = replaceCell(replaceCell(original, 1, SERIAL), 10, "ALTERACION");
+  expect(() => prepareVerifiedAppendOnlySourcePlan(changed, previous))
+    .toThrow("source_date_representation_audit_invalid_snapshot");
+  expect(() => prepareVerifiedAppendOnlySourcePlan(original, { rows: [ ...previous.rows,
+    { ...previous.rows[0], source_row_key: "ORPHAN", source_row_identity: "forged" },
+  ] })).toThrow("source_date_representation_audit_invalid_snapshot");
+  expect(() => prepareVerifiedAppendOnlySourcePlan(original, { rows: [] }))
+    .toThrow("source_date_representation_audit_invalid_snapshot");
+});
+
+test("REC-SYNC-403 · 3208/3188 synthetic reconciliation keeps 3188 immutable payloads and all 20 append candidates", () => {
+  const base = source();
+  const full = { ...base, sheets: base.sheets.map((sheet, index) => ({
+    ...sheet, rows: Array.from({ length: index ? 17 : 3191 }, (_, n) => row(`SYN-${index}-${n}`, !!index)),
+  })) };
+  const previous = stored(full);
+  previous.rows = previous.rows.filter(item => item.source_sheet_id === "725351515"
+    ? Number(item.source_row_key.split("-").at(-1)) < 3173
+    : Number(item.source_row_key.split("-").at(-1)) < 15);
+  const current = replaceCell(full, 1, SERIAL);
+  const plan = prepareVerifiedAppendOnlySourcePlan(current, previous);
+  expect(plan.audit).toMatchObject({
+    sourceRows: 3208, persistedRows: 3188, exactRows: 3187,
+    dateRepresentationRows: 1, pendingRows: 20, orphanRows: 0, changedRows: 0,
+  });
+  const prior = new Map(previous.rows.map(item => [item.source_row_identity, item]));
+  const newOnes = plan.batch.observations.filter(item => !prior.has(item.sourceRowIdentity));
+  expect(newOnes).toHaveLength(20);
+  for (const entry of plan.batch.observations) {
+    const old = prior.get(entry.sourceRowIdentity);
+    if (!old) continue;
+    expect(entry.sourceFingerprint).toBe(old.source_fingerprint);
+    expect(entry.sourcePayload).toEqual(old.source_payload);
+  }
+  expect(plan.preservedRepresentationRows).toBe(1);
+});
+
+test("REC-SYNC-404 · private original reads are production-only and workspace-scoped", () => {
+  const edge = readFileSync("supabase/functions/financial-app-db-gateway/source-sync.ts", "utf8");
+  const index = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
+  const start = edge.indexOf('if (action === "source.original_rows")');
+  const end = edge.indexOf('if (action === "source.postflight_rows")', start);
+  const sourceBlock = edge.slice(start, end);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  expect(sourceBlock).toContain('environment !== "production"');
+  expect(sourceBlock).toContain("financial_app.workspace_id");
+  expect(sourceBlock).toContain("source_file_id=${payload.sourceFileId}");
+  expect(sourceBlock).toContain("workspace_id=${workspace[0].workspace_id}::uuid");
+  expect(sourceBlock).toContain("limit 10001");
+  expect(sourceBlock).toContain("source_payload,concept_original");
+  expect(sourceBlock).not.toMatch(/insert into|update financial_app|delete from/i);
+  const previewAllowlist = index.slice(
+    index.indexOf("const PREVIEW_READ_ONLY_ACTIONS"), index.indexOf("function isPreviewProductionAccessAllowed"),
+  );
+  expect(previewAllowlist).not.toContain('"source.original_rows"');
 });

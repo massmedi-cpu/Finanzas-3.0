@@ -2,9 +2,17 @@ import {
   OFFICIAL_BANK_SOURCE_HEADERS, parseOfficialSourceRow,
   type OfficialBankSourceHeader, type SourceCellValue,
 } from "../domain/official-bank-source";
-import type { SourcePostflightRow } from "../domain/source-postflight-reconciliation";
+import {
+  reconcileOfficialSourcePostflight,
+  type SourcePostflightReport,
+  type SourcePostflightRow,
+} from "../domain/source-postflight-reconciliation";
 import { decodePersistedSourcePostflight } from "./source-postflight-report";
-import { prepareOfficialSourceSyncBatch, type OfficialSourceWorkbookSnapshot } from "./source-sync-service";
+import {
+  prepareOfficialSourceSyncBatch,
+  type OfficialSourceWorkbookSnapshot,
+  type PreparedSourceSyncBatch,
+} from "./source-sync-service";
 
 /** Release diagnostic only. It does not relax postflight or prepare a write batch. */
 export type SourceDateRepresentationAudit = {
@@ -168,4 +176,112 @@ export function auditOfficialSourceDateRepresentations(
   } catch {
     throw new SourceDateRepresentationAuditError();
   }
+}
+
+
+/**
+ * REC-SYNC-400: prepare an APPEND-ONLY candidate from independent, complete
+ * Google and persisted-original snapshots. This is a pure function: it never
+ * writes either source. Existing source fingerprints and their 22 original
+ * typed cells are preserved, even if Google now renders an equivalent date
+ * as an integer serial. Any other difference blocks the entire operation.
+ *
+ * This does not grant permission to import: caller must still verify fresh
+ * source preflight, auth, gateway compatibility, backup and SQL rollback.
+ */
+export type VerifiedAppendOnlySourcePlan = {
+  batch: PreparedSourceSyncBatch;
+  audit: SourceDateRepresentationAudit;
+  preservedRepresentationRows: number;
+};
+
+export function prepareVerifiedAppendOnlySourcePlan(
+  snapshot: OfficialSourceWorkbookSnapshot,
+  persistedOriginals: unknown,
+): VerifiedAppendOnlySourcePlan {
+  try {
+    const audit = auditOfficialSourceDateRepresentations(snapshot, persistedOriginals);
+    if (audit.baselineClassification === "blocked"
+      || audit.persistedRows === 0 || audit.orphanRows !== 0 || audit.changedRows !== 0
+      || audit.exactRows + audit.dateRepresentationRows !== audit.persistedRows
+      || audit.persistedRows + audit.pendingRows !== audit.sourceRows) {
+      throw new SourceDateRepresentationAuditError();
+    }
+
+    const stored = decodeStoredRows(persistedOriginals, snapshot);
+    const byIdentity = new Map(stored.map(row => [identity(row), row]));
+    const fresh = prepareOfficialSourceSyncBatch(snapshot);
+    let preservedRepresentationRows = 0;
+    const observations = fresh.observations.map(observation => {
+      const key = identity({ ...observation, sourceFileId: fresh.sourceFileId });
+      const previous = byIdentity.get(key);
+      if (!previous) return observation; // New row: preserve Google's exact 22 cells.
+      if (!sameFinancialFields(previous, observation)) {
+        throw new SourceDateRepresentationAuditError();
+      }
+      const exactCells = OFFICIAL_BANK_SOURCE_HEADERS.every(
+        name => Object.is(previous.sourcePayload[name], observation.sourcePayload[name]),
+      );
+      if (exactCells && previous.sourceFingerprint === observation.sourceFingerprint) {
+        return observation;
+      }
+      // The only approved divergence was already authenticated cell by cell
+      // by auditOfficialSourceDateRepresentations. Recheck it at row granularity
+      // before constructing the SQL batch; do not normalize other columns.
+      const originalDate = previous.sourcePayload.Fecha;
+      const renderedDate = observation.sourcePayload.Fecha;
+      if (typeof originalDate !== "string" || !/^\d{2}\/\d{2}\/\d{4}$/.test(originalDate)
+        || typeof renderedDate !== "number" || !Number.isInteger(renderedDate)
+        || renderedDate < 1 || renderedDate > 100_000
+        || OFFICIAL_BANK_SOURCE_HEADERS.some(name => name !== "Fecha"
+          && !Object.is(previous.sourcePayload[name], observation.sourcePayload[name]))) {
+        throw new SourceDateRepresentationAuditError();
+      }
+      preservedRepresentationRows++;
+      // Keep the EXACT immutable original, never replace it with the Google
+      // serial or weaken the ingestion function's fingerprint guard.
+      return {
+        ...observation,
+        sourceFingerprint: previous.sourceFingerprint,
+        sourcePayload: previous.sourcePayload,
+      };
+    });
+    if (preservedRepresentationRows !== audit.dateRepresentationRows) {
+      throw new SourceDateRepresentationAuditError();
+    }
+    return {
+      batch: { ...fresh, observations },
+      audit,
+      preservedRepresentationRows,
+    };
+  } catch {
+    throw new SourceDateRepresentationAuditError();
+  }
+}
+
+/**
+ * REC-SYNC-401: after the candidate SQL transaction, validate the complete
+ * independently read, eight-column gateway postflight against the CANONICAL
+ * append-only plan. This never accepts a missing row or silent revision.
+ * The raw Google snapshot may still have a representational date difference;
+ * that is explicitly counted by plan.audit rather than silently ignored.
+ */
+export function verifyPlannedAppendOnlyPostflight(
+  plan: VerifiedAppendOnlySourcePlan,
+  independentGatewayResult: unknown,
+): SourcePostflightReport {
+  const expected = plan.batch.observations.map(row => ({
+    sourceFileId: plan.batch.sourceFileId,
+    sourceSheetId: row.sourceSheetId,
+    sourceRowKey: row.sourceRowKey,
+    sourceFingerprint: row.sourceFingerprint,
+    accountExternalKey: row.accountExternalKey,
+    bankDate: row.bankDate,
+    amountCents: row.amountCents,
+    balanceAfterCents: row.balanceAfterCents,
+  }));
+  const persisted = decodePersistedSourcePostflight(
+    independentGatewayResult, plan.batch.sourceFileId,
+  );
+  return reconcileOfficialSourcePostflight(expected, persisted);
 }
