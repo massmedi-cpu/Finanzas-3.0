@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 test("REC-G5-316 · the private G5 runner never executes on public CI or leaks document evidence", () => {
   const source = readFileSync("tests/e2e/ocr-g5-private-development-local.spec.ts", "utf8");
@@ -21,4 +22,20 @@ test("REC-G5-316 · the private G5 runner never executes on public CI or leaks d
   expect(workflow).toContain("tests/e2e/ocr-g5-private-ledger.spec.ts");
   expect(workflow).toContain("tests/e2e/ocr-g5-private-expectations.spec.ts");
   expect(workflow).not.toContain("tests/e2e/ocr-g5-private-development-local.spec.ts");
+});
+
+
+test("REC-G5-362 · selector privado exige 17 desarrollos y 8 reservas, nunca 16+8", () => {
+  // Only synthetic fixtures; this test cannot enumerate, open or upload any
+  // user's original invoice. The selector itself rejects a 24-PDF inventory.
+  const contract = readFileSync("scripts/verify-private-ocr-corpus-selection.mjs", "utf8");
+  expect(contract).toContain("development.length !== 17");
+  expect(contract).toContain("holdout.length !== 8");
+  expect(contract).toContain("files.length < 25");
+  expect(contract).toContain("development=17|holdout=8");
+  expect(contract).not.toContain("development.length !== 16");
+  const output = execFileSync(process.execPath, [
+    "scripts/verify-private-ocr-corpus-selection.mjs", "--self-test",
+  ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
+  expect(output).toContain("REC_G5_PRIVATE_CORPUS|status=ok|development=17|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false");
 });

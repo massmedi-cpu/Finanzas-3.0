@@ -8,7 +8,7 @@ const REJECT_NON_RECEIPTS = /\b(?:contratos?|condiciones|solicitudes?|p[oó]liza
 const SPECS = [
   { key: "suministros", match: /emasesa|endesa|energ[ií]a|electric|iberdrola|naturgy|factura\s+agua|luz/i, dev: 4, hold: 2 },
   { key: "telecom", match: /vodafone|movistar|orange|yoigo|digi|telefon|fibra|telecom/i, dev: 2, hold: 1 },
-  { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 6, hold: 2 },
+  { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 7, hold: 2 },
   { key: "transporte", match: /renfe|uber|cabify|free[\s-]*now|freenow|taxi|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 1, hold: 1 },
   { key: "tecnologia", match: /amazon|media\s*markt|pccomponentes|fnac|aliexpress|samsung|xiaomi|tecnolog/i, dev: 1, hold: 1 },
   { key: "otros", match: /.*/, dev: 2, hold: 1 },
@@ -20,7 +20,7 @@ const classOf = (fileName) => SPECS.find((x) => x.match.test(fileName))?.key ?? 
 // Caller must provide owner-private Drive metadata obtained outside CI.
 // Do not print file names, IDs, document bytes, or identifiers in logs/errors.
 export function selectPrivateOcrCorpus(files) {
-  if (!Array.isArray(files) || files.length < 24 || files.length > 2000)
+  if (!Array.isArray(files) || files.length < 25 || files.length > 2000)
     die("g5_private_corpus_invalid_size");
   const byId = new Map();
   for (const f of files) {
@@ -48,6 +48,10 @@ export function selectPrivateOcrCorpus(files) {
       die("g5_private_inspected_document_ineligible");
   }
 
+  // REC-G5-362: 17 development originals and 8 untouched holdout PDFs.
+  // A 16/8 selector silently underfilled the separate 17-document runner.
+  assert.equal(SPECS.reduce((sum, spec) => sum + spec.dev, 0), 17);
+  assert.equal(SPECS.reduce((sum, spec) => sum + spec.hold, 0), 8);
   const allValid = [...choices.values()].flat();
   const folderCounts = new Map();
   for (const f of allValid) folderCounts.set(f.parentFolderId, (folderCounts.get(f.parentFolderId) ?? 0) + 1);
@@ -87,9 +91,9 @@ export function selectPrivateOcrCorpus(files) {
   const values = [...selected.values()];
   const development = values.filter((x) => !x.holdout);
   const holdout = values.filter((x) => x.holdout);
-  if (development.length !== 16 || holdout.length !== 8 || usedFolders.size > MAX_PRIVATE_ROOTS
+  if (development.length !== 17 || holdout.length !== 8 || usedFolders.size > MAX_PRIVATE_ROOTS
     || holdout.some((x) => inspected.has(x.file.id))
-    || new Set(values.map((x) => x.file.id)).size !== 24)
+    || new Set(values.map((x) => x.file.id)).size !== 25)
     die("g5_private_corpus_isolation_or_root_limit");
   const excludedInspectedCount = inspected.size
     - development.filter((x) => inspected.has(x.file.id)).length;
@@ -167,12 +171,12 @@ function testSynthetic() {
   };
   const good = selectPrivateOcrCorpus([...samples, otherGeneric]);
   assert.ok(![...good.development, ...good.holdout].some((entry) => entry.file.id === "synthetic_non_invoice_000000"));
-  assert.equal(good.development.length, 16);
+  assert.equal(good.development.length, 17);
   assert.equal(good.holdout.length, 8);
   assert.equal(good.folderCount, 6);
   assert.deepEqual(good.counts.map((x) => [x.development, x.holdout]),
-    [[4, 2], [2, 1], [6, 2], [1, 1], [1, 1], [2, 1]]);
-  assert.equal(new Set([...good.development, ...good.holdout].map((x) => x.file.id)).size, 24);
+    [[4, 2], [2, 1], [7, 2], [1, 1], [1, 1], [2, 1]]);
+  assert.equal(new Set([...good.development, ...good.holdout].map((x) => x.file.id)).size, 25);
   assert.equal(good.holdout.some((x) => x.file.previouslyInspected), false);
   assert.equal([...good.development, ...good.holdout].some((x) => REJECT_NON_RECEIPTS.test(x.file.name)), false);
   assert.equal([...good.development, ...good.holdout].some((x) => x.file.private !== true), false);
@@ -189,14 +193,14 @@ function testSynthetic() {
       || x.name === "Factura Media Markt 1.pdf",
   }));
   const recovered = selectPrivateOcrCorpus(overQuota);
-  assert.equal(recovered.development.length, 16);
+  assert.equal(recovered.development.length, 17);
   assert.equal(recovered.holdout.length, 8);
   assert.equal(recovered.excludedInspectedCount, 2);
   assert.equal(recovered.holdout.some((x) => x.file.previouslyInspected), false);
   assert.equal(recovered.development.filter((x) => x.kind === "transporte").length, 1);
   assert.equal(recovered.development.filter((x) => x.kind === "tecnologia").length, 1);
   assert.equal(recovered.development.filter((x) => x.kind === "otros").length, 2);
-  // More than 16 inspected overall is acceptable IF holdout remains unopened.
+  // More than 17 inspected overall is acceptable IF holdout remains unopened.
   const openedCounts = [4, 2, 6, 2, 2, 1];
   const manyOpened = samples.map((x) => {
     const group = tokens.findIndex((prefix) => x.name.startsWith(prefix + " "));
@@ -205,10 +209,14 @@ function testSynthetic() {
     return { ...x, previouslyInspected: index < openedCounts[group] };
   });
   const manyResult = selectPrivateOcrCorpus(manyOpened);
-  assert.equal(manyResult.development.length, 16);
+  assert.equal(manyResult.development.length, 17);
   assert.equal(manyResult.holdout.length, 8);
   assert.equal(manyResult.excludedInspectedCount, 2);
   assert.equal(manyResult.holdout.some((x) => x.file.previouslyInspected), false);
+  // A 24-document inventory can no longer masquerade as the 17+8 gate.
+  assert.throws(() => selectPrivateOcrCorpus(
+    [...good.development, ...good.holdout].slice(0, 24).map((entry) => entry.file),
+  ), /g5_private_corpus_invalid_size/);
   // Missing explicit inspection state must fail closed, not silently enter holdout.
   assert.throws(() => selectPrivateOcrCorpus(samples.map((x, i) =>
     i === 1 ? { ...x, previouslyInspected: undefined } : x)), /g5_private_inspection_state_required/);
@@ -223,7 +231,7 @@ function testSynthetic() {
       && ACCEPT_RECEIPTS.test(x.name) && !REJECT_NON_RECEIPTS.test(x.name)
       ? true : x.previouslyInspected,
   }))), /g5_private_quota_unreachable/);
-  process.stdout.write("REC_G5_PRIVATE_CORPUS|status=ok|development=16|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false\n");
+  process.stdout.write("REC_G5_PRIVATE_CORPUS|status=ok|development=17|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false\n");
 }
 
 if (process.argv[1]?.endsWith("verify-private-ocr-corpus-selection.mjs")) {
