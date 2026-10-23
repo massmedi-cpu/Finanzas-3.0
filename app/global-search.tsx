@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../src/application/release-document-scope";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -170,7 +171,8 @@ export default function GlobalSearch() {
             && payload?.error === "workspace_session_required") throw new Error("search_session_required");
           if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
           if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
-          setItems(payload.items);
+          setItems(payload.items.filter((item) => isReleaseHrefAvailable(item.href)
+            && (!isDocumentsDeferred() || item.kind !== "document")));
           setResultsQuery(preparedQuery);
           setPartial(payload.partial === true);
         })
@@ -280,7 +282,7 @@ export default function GlobalSearch() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="Comercio, factura, categoría, movimiento…"
+                placeholder={isDocumentsDeferred() ? "Comercio, categoría, movimiento…" : "Comercio, factura, categoría, movimiento…"}
                 autoComplete="off"
                 maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
@@ -299,7 +301,9 @@ export default function GlobalSearch() {
             ) : null}
             <div id={`${inputId}-results`} className={styles.results} role={hasResults ? "listbox" : "region"} aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
-                <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
+                <div className={styles.hint}><strong>Busca en toda la app</strong><span>{isDocumentsDeferred()
+                  ? "Prueba con un comercio, una categoría o el nombre de una sección."
+                  : "Prueba con un comercio, una factura, una categoría o el nombre de una sección."}</span></div>
               ) : searching ? (
                 <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (

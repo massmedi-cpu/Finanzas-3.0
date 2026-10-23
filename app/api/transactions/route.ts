@@ -1,3 +1,5 @@
+import { isDocumentsDeferred } from "../../../src/application/release-document-scope";
+import { isDocumentOcrDeferred } from "../../../src/application/release-ocr-scope";
 import { knownPublicErrorCode, publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 import { MAX_TRANSACTION_PATCH_SIZE } from "../../../src/core/transaction-limits";
@@ -278,6 +280,12 @@ function reviewBody(value: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    if ((isDocumentsDeferred() && ["hasDocument", "documentQuery"].some((key) => searchParams.has(key)))
+      || (isDocumentOcrDeferred() && searchParams.has("ocrQuery"))) {
+      return Response.json({ error: "feature_deferred", code: null }, {
+        status: 404, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+      });
+    }
     // A request with two bank account IDs, cursors, years or modes must not
     // silently use only the first value and certify the wrong financial view.
     if ([...searchParams.keys()].some((key) => searchParams.getAll(key).length > 1)) {

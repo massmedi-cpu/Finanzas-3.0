@@ -3,7 +3,20 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 
 const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
+const deferredJob = workflow.slice(workflow.indexOf("  deferred-document-release:"), workflow.indexOf("  synthetic-browser-matrix:"));
+for (const required of [
+  "NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DOCUMENTS: deferred",
+  "npm run build",
+  "--config=playwright.recovery.config.ts",
+  "tests/e2e/release-document-scope-ui.spec.ts",
+]) assert.ok(deferredJob.includes(required), `Deferred document build must execute ${required}`);
+const deferredUi = readFileSync("tests/e2e/release-document-scope-ui.spec.ts", "utf8");
+for (const id of ["REC-REL-383", "REC-REL-384", "REC-REL-385"]) {
+  assert.ok(deferredUi.includes(id), `Deferred document UI must retain ${id}`);
+}
 const cases = [
+  ["tests/e2e/release-ocr-scope.spec.ts", ["REC-REL-371", "REC-REL-372", "REC-REL-373", "REC-REL-374", "REC-REL-375"]],
+  ["tests/e2e/release-document-scope.spec.ts", ["REC-REL-379", "REC-REL-380", "REC-REL-381", "REC-REL-382"]],
   ["tests/e2e/ap8-readiness-contract.spec.ts", ["REC-AP8-308"]],
   ["tests/e2e/data-trust.spec.ts", ["REC-OWNER-300", "REC-OWNER-301", "REC-OWNER-302"]],
   ["tests/e2e/source-preflight-summary.spec.ts", [

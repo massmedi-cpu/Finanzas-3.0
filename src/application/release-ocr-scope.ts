@@ -6,10 +6,12 @@
  * Undefined preserves the current test/stable feature surface until the exact
  * candidate preview is rebuilt and exercised with this flag set.
  */
+import { isDocumentsDeferred } from "./release-document-scope";
+
 export function isDocumentOcrDeferred(
   value: string | undefined = process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR,
 ): boolean {
-  return value === "deferred";
+  return isDocumentsDeferred() || value === "deferred";
 }
 
 /**
@@ -20,5 +22,5 @@ export function isDocumentOcrDeferred(
 export function isDocumentDriveSyncDeferred(
   value: string | undefined = process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC,
 ): boolean {
-  return value === "deferred";
+  return isDocumentsDeferred() || value === "deferred";
 }

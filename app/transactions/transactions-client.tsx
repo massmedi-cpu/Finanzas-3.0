@@ -1,5 +1,7 @@
 "use client";
 
+import { isDocumentsDeferred } from "../../src/application/release-document-scope";
+import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MAX_TRANSACTION_PATCH_SIZE } from "../../src/core/transaction-limits";
@@ -678,11 +680,11 @@ export default function TransactionsClient() {
       reconciliation: reconciliation ? reconciliation.trim().slice(0, 120) : "",
       recurring: recurring === "true" ? "true" : "",
       internalTransfer: internalTransfer === "true" ? "true" : "",
-      hasDocument: hasDocument === "true" ? "true" : "",
-      documentQuery: (params.get("documentQuery") ?? "").trim().slice(0, 200),
+      hasDocument: !isDocumentsDeferred() && hasDocument === "true" ? "true" : "",
+      documentQuery: isDocumentsDeferred() ? "" : (params.get("documentQuery") ?? "").trim().slice(0, 200),
       splitLabel: (params.get("splitLabel") ?? "").trim().slice(0, 200),
       tag: tag ? tag.trim().slice(0, 40) : "",
-      ocrQuery: (params.get("ocrQuery") ?? "").trim().slice(0, 200),
+      ocrQuery: isDocumentOcrDeferred() ? "" : (params.get("ocrQuery") ?? "").trim().slice(0, 200),
       year: year && /^\d{4}$/.test(year) ? year : "",
       month: year && month && /^(?:[1-9]|1[0-2])$/.test(month) ? month : "",
       amountFrom,
@@ -1230,17 +1232,17 @@ async function saveEdit(row: TransactionRow) {
             <option value="true">Solo transferencias internas</option>
           </select>
         </label>
-        <label>
+        {!isDocumentsDeferred() && <label>
           <span>Documentos</span>
           <select value={draftFilters.hasDocument} onChange={(event) => updateFilter("hasDocument", event.target.value)}>
             <option value="">Todos</option>
             <option value="true">Con documento asociado</option>
           </select>
-        </label>
-        <label>
+        </label>}
+        {!isDocumentsDeferred() && <label>
           <span>Buscar en documento</span>
           <input value={draftFilters.documentQuery} maxLength={200} onChange={(event) => updateFilter("documentQuery", event.target.value)} placeholder="Archivo, emisor o nota" />
-        </label>
+        </label>}
         <label>
           <span>Etiqueta</span>
           <select data-testid="tag-filter" value={draftFilters.tag} onChange={(event) => updateFilter("tag", event.target.value)}>
@@ -1248,10 +1250,10 @@ async function saveEdit(row: TransactionRow) {
             {facets.tags.map((value) => <option key={value} value={value}>{value}</option>)}
           </select>
         </label>
-        <label>
+        {!isDocumentOcrDeferred() && <label>
           <span>Texto OCR</span>
           <input data-testid="ocr-filter" value={draftFilters.ocrQuery} maxLength={200} onChange={(event) => updateFilter("ocrQuery", event.target.value)} placeholder="Texto leído del documento" />
-        </label>
+        </label>}
         <label>
           <span>Etiqueta de reparto</span>
           <input value={draftFilters.splitLabel} maxLength={200} onChange={(event) => updateFilter("splitLabel", event.target.value)} placeholder="Persona o uso" />

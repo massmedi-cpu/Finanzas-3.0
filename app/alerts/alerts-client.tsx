@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isDocumentsDeferred } from "../../src/application/release-document-scope";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { isDashboardEnvelopeForScope } from "../../src/application/dashboard/dashboard-envelope-integrity";
 import { parseHomeBankFreshness, resolveHomeBankCoverage } from "../../src/application/dashboard/home-bank-coverage";
@@ -331,6 +332,7 @@ function documentCount(value: unknown): number {
 }
 
 async function loadDocumentSummary(signal: AbortSignal): Promise<DocumentSummary> {
+  if (isDocumentsDeferred()) return { unassociated: null, pendingReview: null };
   // El contrato document.list_filtered del gateway ya aplica scope=ordinary,
   // excluye archivados del filtro unassociated y calcula total ANTES de paginar.
   // No descargamos el listado entero para contar alertas.
@@ -389,7 +391,7 @@ export default function AlertsClient() {
     if (!uncategorized) degradedReads.push("movimientos sin categorizar");
     const hasDocumentEvidence = documents !== null
       && (documents.unassociated !== null || documents.pendingReview !== null);
-    if (!documents || documents.unassociated === null || documents.pendingReview === null) {
+    if (!isDocumentsDeferred() && (!documents || documents.unassociated === null || documents.pendingReview === null)) {
       degradedReads.push("documentos");
     }
     if (!freshness) degradedReads.push("cobertura bancaria");
@@ -511,7 +513,9 @@ export default function AlertsClient() {
             <strong>{snapshot.input.bankCoverageVerified
               ? "No hay alertas activas con las señales disponibles."
               : "No hay alertas verificables con la cobertura actual."}</strong>
-            <p>La pantalla volverá a evaluarlas cuando actualices los datos o cambien tus movimientos, presupuestos, previsiones o documentos.</p>
+            <p>{isDocumentsDeferred()
+              ? "La pantalla volverá a evaluarlas cuando actualices los datos o cambien tus movimientos, presupuestos o previsiones."
+              : "La pantalla volverá a evaluarlas cuando actualices los datos o cambien tus movimientos, presupuestos, previsiones o documentos."}</p>
           </div>
         ) : null}
 
@@ -538,7 +542,9 @@ export default function AlertsClient() {
 
       <aside className={styles.guardrail} aria-label="Cómo funcionan las alertas">
         <strong>Alertas de solo lectura</strong>
-        <p>Financial App agrupa señales ya calculadas o persistidas. Esta pantalla no corrige movimientos, no confirma documentos y no ejecuta OCR en segundo plano.</p>
+        <p>{isDocumentsDeferred()
+          ? "Financial App agrupa señales ya calculadas o persistidas. Las decisiones se guardan desde el módulo correspondiente."
+          : "Financial App agrupa señales ya calculadas o persistidas. Esta pantalla no corrige movimientos, no confirma documentos y no ejecuta OCR en segundo plano."}</p>
       </aside>
     </main>
   );

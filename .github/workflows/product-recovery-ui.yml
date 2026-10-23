@@ -7,6 +7,9 @@ on:
       - 'app/**'
       - 'src/design/**'
       - 'src/application/source-*.ts'
+      - 'src/application/release-*.ts'
+      - 'src/application/local-preferences.ts'
+      - 'src/infrastructure/http/deferred-document-response.ts'
       - 'src/domain/source-balance-continuity.ts'
       - 'src/domain/source-postflight-reconciliation.ts'
       - 'tests/helpers/verified-source-fixture.ts'
@@ -57,6 +60,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  deferred-document-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DOCUMENTS: deferred
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies and browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build the exact deferred document profile
+        run: npm run build
+      - name: Verify optimized UI, deep links and HTTP denials with synthetic data
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
+          tests/e2e/release-document-scope-ui.spec.ts
+          --project=chromium-desktop
+      - name: Retain synthetic release profile screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: financial-app-deferred-documents-${{ github.event.pull_request.head.sha }}
+          path: test-results/
+          retention-days: 7
+
   synthetic-browser-matrix:
     runs-on: ubuntu-latest
     # Full mobile + desktop integrated suite exceeded the 25-min previous limit.
@@ -140,6 +176,8 @@ jobs:
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/release-ocr-scope.spec.ts
+          tests/e2e/release-document-scope.spec.ts
           tests/e2e/document-test-designation.spec.ts
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts

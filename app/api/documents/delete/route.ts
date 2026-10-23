@@ -1,3 +1,4 @@
+import { deferredDocumentResponse } from "../../../../src/infrastructure/http/deferred-document-response";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -36,6 +37,8 @@ function documentId(request: Request) {
 }
 
 export async function GET(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const id = documentId(request);
     const result = await callPersistenceGateway("document.delete_preflight", { id });
@@ -46,6 +49,8 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const id = documentId(request);
     const result = await callPersistenceGateway("document.delete", { id });

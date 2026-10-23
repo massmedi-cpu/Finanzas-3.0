@@ -3,6 +3,7 @@ import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { prepareGlobalSearchQuery } from "../../global-search-policy";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../../src/application/release-document-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -71,6 +72,7 @@ const SECTIONS = [
 
 function sectionResults(normalizedQuery: string): SearchItem[] {
   return SECTIONS
+    .filter((section) => isReleaseHrefAvailable(section.href))
     .filter((section) => normalize(`${section.title} ${section.keywords}`).includes(normalizedQuery))
     .slice(0, 4)
     .map((section) => ({
@@ -267,16 +269,17 @@ export async function GET(request: Request) {
     }
 
     const normalizedQuery = normalize(query);
-    const [transactionResponse, documentResponse, facetResponse] = await callPersistenceGatewayBatch([
+    const documentsEnabled = !isDocumentsDeferred();
+    const [transactionResponse, facetResponse, documentResponse] = await callPersistenceGatewayBatch([
       { action: "transaction.query", payload: { query, limit: 6 } },
-      { action: "document.list", payload: { status: null, query, limit: 6, offset: 0 } },
       { action: "transaction.facets" },
+      ...(documentsEnabled ? [{ action: "document.list", payload: { status: null, query, limit: 6, offset: 0 } }] : []),
     ]);
 
     const transactions = verifiedGlobalSearchSource(transactionResponse, "transactions");
-    const documents = verifiedGlobalSearchSource(documentResponse, "documents");
+    const documents = documentsEnabled ? verifiedGlobalSearchSource(documentResponse, "documents") : null;
     const facets = verifiedGlobalSearchSource(facetResponse, "facets");
-    const sourceResults = [transactions, documents, facets];
+    const sourceResults = documents ? [transactions, documents, facets] : [transactions, facets];
     if (allGlobalSearchSourcesFailed(sourceResults)) {
       const sessionRequired = globalSearchNeedsSession(sourceResults);
       return Response.json(
@@ -294,14 +297,14 @@ export async function GET(request: Request) {
     const items = [
       ...sectionResults(normalizedQuery),
       ...(transactions.status === "fulfilled" ? transactionResults(transactions.value) : []),
-      ...(documents.status === "fulfilled" ? documentResults(documents.value, query) : []),
+      ...(documents?.status === "fulfilled" ? documentResults(documents.value, query) : []),
       ...(facets.status === "fulfilled" ? facetResults(facets.value, normalizedQuery) : []),
     ].slice(0, MAX_RESULTS);
 
     return Response.json({
       query,
       items,
-      partial: [transactions, documents, facets].some((result) => result.status === "rejected"),
+      partial: sourceResults.some((result) => result.status === "rejected"),
     }, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

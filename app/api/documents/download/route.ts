@@ -1,3 +1,4 @@
+import { deferredDocumentResponse } from "../../../../src/infrastructure/http/deferred-document-response";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -155,6 +156,8 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
 }
 
 export async function GET(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get("id");

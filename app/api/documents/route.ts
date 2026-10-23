@@ -1,4 +1,5 @@
 import { knownPublicErrorCode, publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
+import { deferredDocumentResponse } from "../../../src/infrastructure/http/deferred-document-response";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -164,6 +165,8 @@ function apiError(error: unknown) {
 }
 
 export async function GET(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const { searchParams } = new URL(request.url);
     // Never let URLSearchParams.get() silently pick the first of two
@@ -228,6 +231,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
@@ -327,6 +332,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
