@@ -15,7 +15,9 @@ export default defineConfig({
   },
   projects: [{ name: "chromium-desktop", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run dev -- --hostname localhost",
+    // Exercise the optimized release server, not the memory-heavy dev compiler.
+    // The test-only network interceptor remains active; cloud access is forbidden.
+    command: "NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run start -- --hostname localhost",
     url: "http://localhost:3000/login",
     reuseExistingServer: false,
     timeout: 120_000,
