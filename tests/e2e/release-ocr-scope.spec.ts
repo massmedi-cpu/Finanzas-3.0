@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
+import { isDocumentOcrDeferred, isDocumentDriveSyncDeferred } from "../../src/application/release-ocr-scope";
 
 test("REC-REL-371 · only explicit launch deferral disables advanced OCR", () => {
   expect(isDocumentOcrDeferred("deferred")).toBe(true);
@@ -54,5 +54,32 @@ test("REC-REL-373 · deferred OCR endpoints reject direct requests before any da
   } finally {
     if (original === undefined) delete process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR;
     else process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR = original;
+  }
+});
+
+test("REC-REL-374 · only explicit launch deferral disables automatic Drive document imports", () => {
+  expect(isDocumentDriveSyncDeferred("deferred")).toBe(true);
+  for (const value of ["enabled", "false", "", "1"]) {
+    expect(isDocumentDriveSyncDeferred(value)).toBe(false);
+  }
+});
+
+test("REC-REL-375 · Drive auto-import is cut in both UI and direct HTTP", async () => {
+  const root = process.cwd();
+  const page = readFileSync(join(root, "app/documents/page.tsx"), "utf8");
+  const route = readFileSync(join(root, "app/api/documents/drive-sync/route.ts"), "utf8");
+  expect(page).toContain("{!isDocumentDriveSyncDeferred() && <DriveAutoSync />}");
+  expect(route).toContain("if (isDocumentDriveSyncDeferred()) {");
+  const original = process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC;
+  process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC = "deferred";
+  try {
+    const { POST } = await import("../../app/api/documents/drive-sync/route");
+    const response = await POST();
+    expect(response.status).toBe(404);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(await response.json()).toEqual({error: "feature_deferred", code: null});
+  } finally {
+    if (original === undefined) delete process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC;
+    else process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC = original;
   }
 });
