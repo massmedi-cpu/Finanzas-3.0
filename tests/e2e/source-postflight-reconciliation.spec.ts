@@ -318,3 +318,28 @@ test("REC-POST-350 · reject fabricated account allocations and phantom accounts
   expect(orphan.status).toBe("blocked");
   expect(isConfirmedSourcePostflightReport(orphan)).toBe(true);
 });
+
+// REC-POST-351: never reject a real source/persistence account mismatch merely
+// because the stored account has no corresponding authoritative observations.
+test("REC-POST-351 · changed persisted account remains visible as BLOCKED evidence", () => {
+  const source = row(40, { accountExternalKey: "synthetic-owner-product-a" });
+  const stored = { ...source, accountExternalKey: "synthetic-owner-product-b" };
+  const report = reconcileOfficialSourcePostflight([source], [stored]);
+  expect(report).toMatchObject({
+    status: "blocked", sourceRows: 1, persistedRows: 1,
+    matchingRows: 0, pendingRows: 0, orphanRows: 0, differingRows: 1,
+    differences: { account: 1 },
+  });
+  const publicReport = toPublicSourcePostflightReport(report);
+  expect(publicReport.accounts).toHaveLength(2);
+  expect(isConfirmedSourcePostflightReport(publicReport)).toBe(true);
+  expect(JSON.stringify(publicReport)).not.toContain("synthetic-owner-product");
+
+  // Do not allow the additional account to become an arbitrary empty label.
+  expect(isConfirmedSourcePostflightReport({
+    ...publicReport, accounts: [
+      publicReport.accounts[0],
+      { ...publicReport.accounts[1], sourceRows: 0, persistedRows: 0 },
+    ],
+  })).toBe(false);
+});

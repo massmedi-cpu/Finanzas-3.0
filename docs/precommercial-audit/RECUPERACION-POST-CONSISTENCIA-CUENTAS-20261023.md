@@ -30,3 +30,23 @@ Supabase consultado con SELECT en transacción read-only el 23/10: 3.188 source 
 con 3.188 identidades distintas, cero huellas malformadas y 134 saldos NULL; 3.188
 transacciones financieras. Trigger `documents_private_original_rewrite_guard` productivo
 no instalado (0), gateway activo v86. Sin SQL mutante, sync real, merge o despliegue.
+
+## REC-POST-351 · Regresión real detectada por CI y reparada
+El workflow `Source Trust CI Gates` sobre SHA `0623626d` ejecutó REC-POST-350,
+que mostró un rechazo erróneo de informes `blocked` cuando una misma fila
+pasaba de la cuenta original A a una cuenta persistida B. El límite previo
+`accounts.length <= sourceRows + orphanRows` sólo contaba grupos de origen
+y filas huérfanas, ignorando que una fila discrepante puede generar una
+cuenta persistida adicional. **No** era evidencia de modificación bancaria.
+
+Se refuerza el límite matemático sin permitir cuentas fantasma:
+`accounts.length <= sourceRows + orphanRows + differingRows`. Se conservan
+los controles nuevos REC-POST-350: cuentas sin filas prohibidas, cada
+`matchingRows + orphanRows <= persistedRows`, etiquetas públicas consecutivas,
+sumas exactas e integridad de los estados. La regresión independiente
+REC-POST-351 exige un diagnóstico `blocked` genuino, dos grupos permitidos
+y ausencia de claves de cuenta en la respuesta pública.
+
+Nueva HEAD requiere CI completa; los resultados de `0623626d` no se
+atribuyen al nuevo commit. Producción, OCR reservado, SQL, fuente bancaria
+y gateway permanecen intactos.

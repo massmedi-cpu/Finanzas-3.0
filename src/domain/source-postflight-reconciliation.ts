@@ -264,7 +264,11 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Publ
     : r.pendingRows! ? "pending" : "verified";
   if (r.status !== expectedStatus) return false;
 
-  if (!Array.isArray(r.accounts) || r.accounts.length < 1 || r.accounts.length > sourceRows + r.orphanRows!) {
+  // A source row with a changed account can create TWO account groups:
+  // one for the authoritative source and one for the persisted row. Such a
+  // discrepancy must remain visible as BLOCKED, not discarded as malformed.
+  if (!Array.isArray(r.accounts) || r.accounts.length < 1
+    || r.accounts.length > sourceRows + r.orphanRows! + r.differingRows!) {
     return false;
   }
   const keys = new Set<string>();
