@@ -73,6 +73,14 @@ test("REC-G5-344 · freeze eight previously unopened PDFs before private OCR eva
     fail("g5_holdout_private_manifest_invalid");
   }
 
+  // REC-G5-348: fail closed on malformed independent truth *before* PDF reads.
+  // This precheck uses only names and declared hashes, NOT source content.
+  // Its self-declared hashes are never accepted as authenticity: the exact
+  // independently observed SHA256 match is required again after reading.
+  const declared = (manifest as { documents: Array<{ name: string; sha256: string }> })
+    .documents.map(row => ({ name: row.name, sha256: row.sha256 }));
+  assertG5HoldoutExpectations(manifest, declared);
+
   const documents: Array<{ name: string; sha256: string; bytes: Uint8Array }> = [];
   for (const name of names) {
     try {
