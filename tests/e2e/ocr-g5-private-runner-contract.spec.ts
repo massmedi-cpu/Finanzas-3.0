@@ -16,7 +16,7 @@ test("REC-G5-316 · the private G5 runner never executes on public CI or leaks d
     "toBe(17)", "No pass threshold", "names_logged=false",
     "amounts_logged=false", "holdout_opened=false", "financial_writes=false",
   ]) expect(source).toContain(requirement);
-  expect(source).not.toMatch(/\b(?:fetch\s*\(|axios|writeFileSync|uploadFile)\b/);
+  expect(source).not.toMatch(/\b(?:fetch\s*\(|axios\b|writeFileSync\b|uploadFile\b)/);
   expect(workflow).toContain("tests/e2e/ocr-g5-private-runner-contract.spec.ts");
   expect(workflow).toContain("tests/e2e/ocr-g5-private-ledger.spec.ts");
   expect(workflow).toContain("tests/e2e/ocr-g5-private-expectations.spec.ts");
