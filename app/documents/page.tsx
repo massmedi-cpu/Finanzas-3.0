@@ -1,5 +1,6 @@
 import { DocumentsClient } from "./documents-client";
 import { DriveAutoSync } from "./drive-auto-sync";
+import { isDocumentDriveSyncDeferred } from "../../src/application/release-ocr-scope";
 
 export default async function DocumentsPage({ searchParams }: { searchParams: Promise<{ status?: string | string[]; unassociated?: string | string[]; scope?: string | string[]; offset?: string | string[] }> }) {
   const params = await searchParams;
@@ -10,7 +11,7 @@ export default async function DocumentsPage({ searchParams }: { searchParams: Pr
   const initialOffset = Number.isInteger(offset) && offset >= 0 && offset <= 100000 ? offset : 0;
   return (
     <>
-      <DriveAutoSync />
+      {!isDocumentDriveSyncDeferred() && <DriveAutoSync />}
       <DocumentsClient initialStatusFilter={initialStatusFilter} initialUnassociatedFilter={initialUnassociatedFilter} initialScope={initialScope} initialOffset={initialOffset} />
     </>
   );
