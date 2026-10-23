@@ -13,6 +13,7 @@ import { useActionFeedback } from "../action-feedback";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
+import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import { SpanishDateField } from "./spanish-date-field";
@@ -1214,7 +1215,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setSelectedId(confirmed.document.id);
         setNotice(confirmed.contentDuplicate
           ? "Archivo idéntico ya registrado desde otro dispositivo. Se reutiliza el original existente, sin modificarlo."
-          : "Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. El OCR sólo se ejecutará si lo solicitas.");
+          : "Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. Podrás revisar sus datos manualmente.");
       }
     } catch {
       setUploadUnverified(true);
@@ -1429,7 +1430,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setSelectedId(id);
         setNotice(confirmedUpload.contentDuplicate
           ? "Archivo idéntico ya registrado. Hemos recuperado el original, sin sobrescribir datos ni crear otra copia."
-          : "Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+          : "Original guardado de forma privada. Abriendo su ficha. Podrás revisar los datos desde la ficha del documento.");
       }
     } catch (caught) {
       if (privatePutAttempted && attemptedPrivateUpload) {
@@ -1802,7 +1803,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <p className={styles.heroText}>Guarda facturas y tickets desde cámara, galería, archivos o Drive, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
           <a className={styles.archiveQuickLink} href="#archivo-documental">Ir al archivo documental ↓</a>
           <div className={styles.pills}>
-            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
+            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span>{!isDocumentOcrDeferred() && <span>OCR revisable · sin escrituras automáticas</span>}
           </div>
         </div>
         <a className={styles.driveLink} href={DRIVE_FOLDER_URL} target="_blank" rel="noreferrer">Abrir carpeta Documentos en Drive ↗</a>
@@ -1817,7 +1818,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <div>
             <p className={styles.sectionEyebrow}>IMPORTACIÓN SEGURA</p>
             <h2 id="upload-title">Añadir documento</h2>
-            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada y el OCR nunca se ejecuta automáticamente al subir.</p>
+            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada; podrás revisar sus datos desde la ficha.</p>
           </div>
           <form className={styles.uploadForm} onSubmit={uploadDocument}>
             <label>Tipo
@@ -1912,7 +1913,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : (
               <div className={styles.empty} data-testid="documents-repository-empty">
                 <strong>No hay documentos</strong>
-                <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
+                <p>Añade el primero con cámara, galería/archivo o Drive; podrás revisar su ficha y sus datos posteriormente.</p>
               </div>
             )}
             {!listLoadFailed && currentList && currentList.total > 0
@@ -1928,7 +1929,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           </aside>
 
           <section id="documento-seleccionado" className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : detailLoadFailed || !detail || detail.document.id !== selectedId ? (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : detailLoadFailed || !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
                 <p>No podemos verificar la ficha. Para proteger tus datos, se han desactivado la edición, el OCR y las asociaciones hasta que la consulta sea válida.</p>
@@ -1989,14 +1990,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy !== null || !metadataDirty}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
-                <OcrReviewBoundary key={detail.document.id}>
-                  <OcrReviewPanel
-                    documentId={detail.document.id}
-                    storageProvider={detail.document.storageProvider}
-                    mimeType={detail.document.mimeType}
-                    onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
-                  />
-                </OcrReviewBoundary>
+                {!isDocumentOcrDeferred() && (
+                  <OcrReviewBoundary key={detail.document.id}>
+                    <OcrReviewPanel
+                      documentId={detail.document.id}
+                      storageProvider={detail.document.storageProvider}
+                      mimeType={detail.document.mimeType}
+                      onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
+                    />
+                  </OcrReviewBoundary>
+                )}
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
@@ -2020,7 +2023,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                   {visibleTransactions ? visibleTransactions.rows.length ? <div className={styles.candidateList}>{visibleTransactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
-                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR persistente, revisable y trazable</span></div>
+                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span>{!isDocumentOcrDeferred() && <span>✓ OCR persistente, revisable y trazable</span>}</div>
               </>
             )}
           </section>
