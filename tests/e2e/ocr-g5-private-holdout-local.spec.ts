@@ -60,6 +60,19 @@ test("REC-G5-344 · freeze eight previously unopened PDFs before private OCR eva
   // commit BEFORE opening ANY of the eight reserved documents.
   assertG5HoldoutFreeze(privateJson(FREEZE), privateJson(HISTORY), names, head);
 
+  // REC-G5-347: validate the independently reviewed GOLD manifest's shape
+  // BEFORE opening holdout bytes. SHA matching follows after reading the files.
+  // The precheck intentionally uses only frozen names, never private contents.
+  const manifest = privateJson(TRUTH);
+  if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)
+      || !("documents" in manifest) || !Array.isArray(manifest.documents)
+      || manifest.documents.length !== 8
+      || manifest.documents.some((row: unknown) =>
+        !row || typeof row !== "object" || !("name" in row)
+        || typeof row.name !== "string" || !names.includes(row.name))) {
+    fail("g5_holdout_private_manifest_invalid");
+  }
+
   const documents: Array<{ name: string; sha256: string; bytes: Uint8Array }> = [];
   for (const name of names) {
     try {
@@ -78,7 +91,7 @@ test("REC-G5-344 · freeze eight previously unopened PDFs before private OCR eva
 
   // Gold references come from independent review after the code freeze:
   // never infer numbers from filenames or OCR output.
-  const gold = assertG5HoldoutExpectations(privateJson(TRUTH),
+  const gold = assertG5HoldoutExpectations(manifest,
     documents.map(({ name, sha256 }) => ({ name, sha256 })));
 
   const provider = new PdfTextOcrProvider();
