@@ -1430,7 +1430,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setSelectedId(id);
         setNotice(confirmedUpload.contentDuplicate
           ? "Archivo idéntico ya registrado. Hemos recuperado el original, sin sobrescribir datos ni crear otra copia."
-          : "Original guardado de forma privada. Abriendo su ficha. Podrás revisar los datos desde la ficha del documento.");
+          : isDocumentOcrDeferred()
+            ? "Original guardado de forma privada. Abriendo su ficha. Podrás revisar los datos desde la ficha del documento."
+            : "Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas. Revisa sus resultados antes de confirmar cualquier dato.");
       }
     } catch (caught) {
       if (privatePutAttempted && attemptedPrivateUpload) {

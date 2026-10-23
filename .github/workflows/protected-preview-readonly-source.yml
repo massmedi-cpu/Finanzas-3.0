@@ -175,6 +175,14 @@ jobs:
               throw new Error('preview_commit_mismatch_or_protection_not_bypassed');
             }
             console.log('SOURCE_BOUNDARY|build=exact_sha|environment=preview');
+            const features = build.body.releaseFeatures;
+            if (!features || typeof features !== 'object'
+                || ['documents', 'documentOcr', 'documentDriveSync'].some((key) => typeof features[key] !== 'boolean')
+                || (!features.documents && (features.documentOcr || features.documentDriveSync))) {
+              throw new Error('preview_release_profile_invalid');
+            }
+            console.log('SOURCE_BOUNDARY|documents=' + features.documents +
+              '|document_ocr=' + features.documentOcr + '|drive_sync=' + features.documentDriveSync);
             const paths = [
               '/api/source/google/status',
               '/api/source/google/sync',
@@ -211,9 +219,13 @@ jobs:
             for (const path of privateDocuments) {
               const { response, body } = await jsonGet(path);
               const privateHistory = path.startsWith('/api/documents/ocr-review?');
+              const deferred = !features.documents ||
+                (path.startsWith('/api/documents/ocr?') && !features.documentOcr);
               const denied = privateHistory
                 ? response.status === 401 && body.error === 'authentication_required'
-                : response.status === 403 && body.code === 'workspace_context_required';
+                : deferred
+                  ? response.status === 404 && body.error === 'feature_deferred' && body.code === null
+                  : response.status === 403 && body.code === 'workspace_context_required';
               if (!denied) {
                 // Diagnostic metadata only: never log a response body.
                 console.log('DOCUMENT_BOUNDARY|unexpected_http=' + response.status +

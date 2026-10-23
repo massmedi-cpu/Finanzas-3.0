@@ -17,6 +17,7 @@ for (const id of ["REC-REL-383", "REC-REL-384", "REC-REL-385"]) {
 const cases = [
   ["tests/e2e/release-ocr-scope.spec.ts", ["REC-REL-371", "REC-REL-372", "REC-REL-373", "REC-REL-374", "REC-REL-375"]],
   ["tests/e2e/release-document-scope.spec.ts", ["REC-REL-379", "REC-REL-380", "REC-REL-381", "REC-REL-382"]],
+  ["tests/e2e/protected-preview-release-profile.spec.ts", ["REC-REL-395", "REC-REL-396", "REC-REL-397", "REC-REL-398"]],
   ["tests/e2e/ap8-readiness-contract.spec.ts", ["REC-AP8-308"]],
   ["tests/e2e/data-trust.spec.ts", ["REC-OWNER-300", "REC-OWNER-301", "REC-OWNER-302"]],
   ["tests/e2e/source-preflight-summary.spec.ts", [
@@ -33,6 +34,10 @@ const cases = [
     "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",
     "REC-POST-285", "REC-POST-286", "REC-POST-287",
     "REC-POST-295", "REC-POST-296", "REC-POST-334", "REC-POST-335", "REC-POST-348", "REC-POST-350", "REC-POST-351", "REC-SYNC-354", "REC-SYNC-355",
+  ]],
+  ["tests/e2e/source-date-representation-audit.spec.ts", [
+    "REC-SYNC-387", "REC-SYNC-388", "REC-SYNC-389", "REC-SYNC-390",
+    "REC-SYNC-391", "REC-SYNC-392", "REC-SYNC-393", "REC-SYNC-394",
   ]],
   ["tests/e2e/ocr-g5-private-expectations.spec.ts", ["REC-G5-340", "REC-G5-341", "REC-G5-342"]],
   ["tests/e2e/ocr-g5-private-runner-contract.spec.ts", ["REC-G5-316", "REC-G5-362", "REC-G5-363"]],

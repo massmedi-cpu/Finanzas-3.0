@@ -51,6 +51,7 @@ on:
       - '.github/workflows/product-recovery-ui.yml'
       - '.github/workflows/production-backup-v2.yml'
       - '.github/workflows/production-postflight.yml'
+      - '.github/workflows/protected-preview-readonly-source.yml'
 
 permissions:
   contents: read
@@ -178,6 +179,7 @@ jobs:
           tests/e2e/documents.spec.ts
           tests/e2e/release-ocr-scope.spec.ts
           tests/e2e/release-document-scope.spec.ts
+          tests/e2e/protected-preview-release-profile.spec.ts
           tests/e2e/document-test-designation.spec.ts
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts
@@ -189,6 +191,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/source-date-representation-audit.spec.ts
           tests/e2e/ocr-g5-private-runner-contract.spec.ts
           tests/e2e/ocr-g5-private-ledger.spec.ts
           tests/e2e/ocr-g5-private-expectations.spec.ts

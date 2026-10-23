@@ -524,35 +524,38 @@ test("REC-SYNC-273 · actualización automática exige confirmación real y se l
   expect(state.sourceChecks()).toBe(1);
 });
 
-test("REC-BANK-274 · informe con discontinuidad legible en siete anchuras y ambos temas", async ({ page }, testInfo) => {
-  const source = snapshot();
-  const rows = [
-    ["CHAIN-NEW", "04/09/2026", -3, 7],
-    ["CHAIN-MIDDLE", "03/09/2026", 1, 10],
-    ["CHAIN-OLD", "02/09/2026", 1, 5],
-  ].map(([id, date, amount, balance]) => {
-    const row: unknown[] = [...currentRow];
-    row[0] = id; row[1] = date; row[13] = amount; row[14] = balance;
-    return row;
-  });
-  // El informe visual usa una fuente físicamente válida: en la misma
-  // pestaña las fechas se mantienen 04, 03, 03, 02 (no 04, 03, 02, 03).
-  // La discontinuidad contable de CHAIN-OLD debe seguir siendo visible.
-  source.sheets[0].rows = [rows[0], rows[1], [...prepaidRow], rows[2]];
-  const preflight = buildOfficialSourcePreflightSummary(source);
-  expect(preflight.cursors[0]).toMatchObject({ authoritativeRows: 4, lastSourceRowKey: "CHAIN-OLD" });
-  const state = await mockConfirmedSource(page, { summary: preflight });
-  await page.goto("/configuration/source");
-  await page.getByRole("button", { name: "Comprobar sin importar" }).click();
-  const report = page.getByRole("region", { name: "Prevalidación de la fuente bancaria" });
-  await expect(report).toContainText("1 de 2 enlaces entre saldos coinciden al céntimo");
-  await expect(report).toContainText("1 enlace no encadena");
-  await expect(report).toContainText("no demuestra que falten movimientos");
-  for (const theme of ["light", "dark"] as const) {
-    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
-    for (const width of [360, 390, 768, 1024, 1366, 1920, 2560]) {
+// Keep all 14 layout/accessibility scenarios independent: each gets a fresh
+// browser context and the unchanged per-test timeout, instead of accumulating
+// fourteen axe scans inside one 30-second test.
+for (const theme of ["light", "dark"] as const) {
+  for (const width of [360, 390, 768, 1024, 1366, 1920, 2560]) {
+    test(`REC-BANK-274 · informe con discontinuidad · ${width}px ${theme}`, async ({ page }, testInfo) => {
+      const source = snapshot();
+      const rows = [
+        ["CHAIN-NEW", "04/09/2026", -3, 7],
+        ["CHAIN-MIDDLE", "03/09/2026", 1, 10],
+        ["CHAIN-OLD", "02/09/2026", 1, 5],
+      ].map(([id, date, amount, balance]) => {
+        const row: unknown[] = [...currentRow];
+        row[0] = id; row[1] = date; row[13] = amount; row[14] = balance;
+        return row;
+      });
+      // El informe visual usa una fuente físicamente válida: en la misma
+      // pestaña las fechas se mantienen 04, 03, 03, 02 (no 04, 03, 02, 03).
+      // La discontinuidad contable de CHAIN-OLD debe seguir siendo visible.
+      source.sheets[0].rows = [rows[0], rows[1], [...prepaidRow], rows[2]];
+      const preflight = buildOfficialSourcePreflightSummary(source);
+      expect(preflight.cursors[0]).toMatchObject({ authoritativeRows: 4, lastSourceRowKey: "CHAIN-OLD" });
+      const state = await mockConfirmedSource(page, { summary: preflight });
       await page.setViewportSize({ width, height: 980 });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.goto("/configuration/source");
+      await page.getByRole("button", { name: "Comprobar sin importar" }).click();
+      const report = page.getByRole("region", { name: "Prevalidación de la fuente bancaria" });
+      await expect(report).toContainText("1 de 2 enlaces entre saldos coinciden al céntimo");
+      await expect(report).toContainText("1 enlace no encadena");
+      await expect(report).toContainText("no demuestra que falten movimientos");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(report).toBeVisible();
       // ResizeObserver-driven navigation and the CSS grid can settle on
       // different frames. Require the final layout to fit; never clip it.
@@ -571,11 +574,20 @@ test("REC-BANK-274 · informe con discontinuidad legible en siete anchuras y amb
       expect(dimensions, JSON.stringify(dimensions)).toMatchObject({ overflow: false });
       const axe = await new AxeBuilder({ page }).include('[aria-label="Prevalidación de la fuente bancaria"]').analyze();
       expect(axe.violations).toEqual([]);
-      if (width === 360 || width === 1366) await report.screenshot({ path: testInfo.outputPath(`source-preflight-${theme}-${width}.png`) });
-    }
+      // Capture the complete page: an element crop can put the long report
+      // behind fixed mobile chrome and wait indefinitely for its scroll position.
+      if (width === 360 || width === 1366) {
+        await page.evaluate(() => window.scrollTo({ top: 0, left: 0, behavior: "instant" }));
+        await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+        await page.screenshot({
+          path: testInfo.outputPath(`source-preflight-${theme}-${width}.png`),
+          fullPage: true, animations: "disabled",
+        });
+      }
+      expect(state.syncBodies).toHaveLength(0);
+    });
   }
-  expect(state.syncBodies).toHaveLength(0);
-});
+}
 
 
 function expectRejectedPhysicalSource(input: OfficialSourceWorkbookSnapshot, code: SourceWorkbookContractError["code"]) {

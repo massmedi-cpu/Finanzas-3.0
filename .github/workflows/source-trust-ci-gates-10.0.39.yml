@@ -18,6 +18,7 @@ on:
       - 'src/application/source-preflight.ts'
       - 'src/application/source-sync-service.ts'
       - 'src/application/source-postflight-report.ts'
+      - 'src/application/source-date-representation-audit.ts'
       - 'src/domain/source-postflight-reconciliation.ts'
       - 'app/api/source/google/postflight/route.ts'
       - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
@@ -36,6 +37,7 @@ on:
       - 'tests/e2e/source-preflight-summary.spec.ts'
       - 'tests/e2e/source-postflight-reconciliation.spec.ts'
       - 'tests/e2e/source-postflight-boundary.spec.ts'
+      - 'tests/e2e/source-date-representation-audit.spec.ts'
       - 'tests/e2e/source-reader-revision.spec.ts'
       - 'tests/e2e/source-health-consistency.spec.ts'
       - 'tests/e2e/source-trust-app-shell.spec.ts'
@@ -74,6 +76,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/source-date-representation-audit.spec.ts
           tests/e2e/source-reader-revision.spec.ts
           tests/e2e/source-health-consistency.spec.ts
           tests/e2e/source-trust-app-shell.spec.ts
