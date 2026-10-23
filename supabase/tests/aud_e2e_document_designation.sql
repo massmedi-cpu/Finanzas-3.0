@@ -135,8 +135,10 @@ begin
         'document_private_original_immutable'),
       ('update financial_app.documents set size_bytes = 4096 where id=$1',
         'document_private_original_immutable'),
+      -- REC-AP1-339: source ID is now a provider-agnostic identity field,
+      -- rejected by the first (storage identity) guard for Supabase too.
       ('update financial_app.documents set source_drive_file_id = ''untrusted-id'' where id=$1',
-        'document_private_original_immutable')
+        'document_original_storage_identity_immutable')
     ) as test(sql,expected)
   loop
     v_blocked := false;
@@ -162,6 +164,25 @@ begin
   end;
   if not v_blocked then
     raise exception 'AUD_AP1_drive_original_mutation_accepted';
+  end if;
+
+  -- REC-AP1-339: retain existing Drive storage_key while attempting to
+  -- substitute its authoritative source ID. This must also fail.
+  v_blocked := false;
+  begin
+    update financial_app.documents set source_drive_file_id='aud-forged-drive-id'
+    where id=v_drive_id;
+  exception when check_violation then
+    if sqlerrm <> 'document_original_storage_identity_immutable' then raise; end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'AUD_AP1_drive_source_id_mutation_accepted';
+  end if;
+  if not exists (select 1 from financial_app.documents
+      where id=v_drive_id and storage_key='aud-doc-ordinary'
+        and source_drive_file_id='aud-ordinary') then
+    raise exception 'AUD_AP1_drive_original_changed_after_denied_update';
   end if;
 
   select jsonb_build_object(
