@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync, readdirSync, lstatSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { assertInspectedG5Ledger } from "./support/g5-private-inspection-ledger";
+import { assertG5IndependentExpectations, matchesG5IndependentTruth } from "./support/g5-private-independent-expectations";
 import { join, resolve } from "node:path";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
@@ -11,7 +12,8 @@ import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-f
 // filenames, amounts, private PDFs, OCR text, individual errors or identifiers.
 const PRIVATE_DEV_DIR = process.env.FINANCIAL_APP_G5_DEVELOPMENT_DIR ?? "";
 const PRIVATE_LEDGER = process.env.FINANCIAL_APP_G5_INSPECTION_LEDGER ?? "";
-test.skip(!PRIVATE_DEV_DIR || !PRIVATE_LEDGER || process.env.GITHUB_ACTIONS === "true",
+const PRIVATE_EXPECTATIONS = process.env.FINANCIAL_APP_G5_EXPECTATIONS ?? "";
+test.skip(!PRIVATE_DEV_DIR || !PRIVATE_LEDGER || !PRIVATE_EXPECTATIONS || process.env.GITHUB_ACTIONS === "true",
   "Never open private owner documents on GitHub Actions, even if a variable is set");
 
 function referenceCents(name: string): number | null {
@@ -57,11 +59,18 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
     inspected.push({ name, bytes: new Uint8Array(bytes) });
   }
   assertInspectedG5Ledger(manifest, observed);
+  // Separate, independently reviewed fields are mandatory for accuracy G5.
+  // They are never inferred from filenames or populated by Financial App OCR.
+  let expectedManifest: unknown;
+  try { expectedManifest = JSON.parse(readFileSync(realpathSync(resolve(PRIVATE_EXPECTATIONS)), "utf8")); }
+  catch { throw new Error("g5_private_independent_expectations_invalid"); }
+  const expected = assertG5IndependentExpectations(expectedManifest, observed);
   const aggregate = {
     documents: filenames.length, extracted: 0, failed: 0,
     pdfNative: 0, pdfVisualOrHybrid: 0, totalDetected: 0, totalMissing: 0,
     totalReliable: 0, totalDoubtful: 0, amountReferenceAvailable: 0,
     totalMatchesFilenameHint: 0, dateDetected: 0, issuerDetected: 0, warnings: 0,
+    independentTruthMatches: 0, independentTruthMismatches: 0,
   };
   const provider = new PdfTextOcrProvider();
   for (const document of inspected) {
@@ -79,6 +88,9 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
       if (result.source === "pdf_text") aggregate.pdfNative++;
       else aggregate.pdfVisualOrHybrid++;
       const financial = interpretDocumentOcrFinancially(result);
+      if (matchesG5IndependentTruth(expected.get(document.name)!, financial))
+        aggregate.independentTruthMatches++;
+      else aggregate.independentTruthMismatches++;
       if (financial.totalCents.value === null) aggregate.totalMissing++;
       else {
         aggregate.totalDetected++;
@@ -101,5 +113,9 @@ test("REC-G5-315 · run actual Financial App PDF and financial interpreter on pr
   expect(aggregate.extracted + aggregate.failed).toBe(17);
   expect(aggregate.failed, "g5_real_pdf_engine_failures").toBe(0);
   // Filename amounts are hints, not audited ground truth. No pass threshold
-  // is applied to totalMatchesFilenameHint; holdout requires separate review.
+  // applies to totalMatchesFilenameHint. The separate independent GOLD manifest
+  // is required and must match on total, issuer, date, tax amounts and lines.
+  expect(aggregate.independentTruthMatches, "g5_independent_truth_matches").toBe(17);
+  expect(aggregate.independentTruthMismatches, "g5_independent_truth_mismatches").toBe(0);
+  // The eight unopened holdout documents must pass a separate, later gate.
 });
