@@ -89,6 +89,24 @@ test("REC-G5-346 · 8 expectativas GOLD independientes y detalle de línea sin t
   })).toBe(false);
 });
 
+test("REC-G5-348 · validar GOLD completo antes de leer los ocho PDF", () => {
+  const local = readFileSync("tests/e2e/ocr-g5-private-holdout-local.spec.ts", "utf8");
+  const freeze = local.indexOf("assertG5HoldoutFreeze(privateJson(FREEZE)");
+  const manifest = local.indexOf("const manifest = privateJson(TRUTH)");
+  const declared = local.indexOf("const declared = ");
+  const precheck = local.indexOf("assertG5HoldoutExpectations(manifest, declared)");
+  const firstRead = local.indexOf("const bytes = readFileSync(full)");
+  const observedCheck = local.indexOf("assertG5HoldoutExpectations(manifest,");
+  expect(freeze).toBeGreaterThan(0);
+  expect(manifest).toBeGreaterThan(freeze);
+  expect(declared).toBeGreaterThan(manifest);
+  expect(precheck).toBeGreaterThan(declared);
+  expect(firstRead).toBeGreaterThan(precheck);
+  expect(observedCheck).toBeGreaterThan(firstRead);
+  expect(local).toContain("documents.map(({ name, sha256 }) => ({ name, sha256 }))");
+  expect(local).not.toMatch(/\\b(?:fetch\\s*\\(|axios|writeFileSync|uploadFile)\\b/);
+});
+
 test("REC-G5-347 · prueba local excluida de CI pública y sin red ni salida privada", () => {
   const local = readFileSync("tests/e2e/ocr-g5-private-holdout-local.spec.ts", "utf8");
   const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
