@@ -11,3 +11,14 @@ export function isDocumentOcrDeferred(
 ): boolean {
   return value === "deferred";
 }
+
+/**
+ * Automatic Google Drive document ingestion is optional for a stable
+ * single-user launch. Disabling it removes the auto-started UI and must also
+ * deny its server mutation route, while preserving the official BANK source.
+ */
+export function isDocumentDriveSyncDeferred(
+  value: string | undefined = process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC,
+): boolean {
+  return value === "deferred";
+}
