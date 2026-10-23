@@ -254,3 +254,40 @@ test("REC-POST-349 · full source hash mismatch is never called verified by the 
     differences: { sourceFingerprint: 1, account: 0, amountCents: 0, bankDate: 0, balanceAfterCents: 0 },
   });
 });
+
+
+// REC-SYNC-352/353: hard gates for the server-side append-only precheck and
+// its independent read-after-write, without contacting private bank systems.
+test("REC-SYNC-352 · existing source divergence blocks the POST before any write", () => {
+  const source = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const auth = source.indexOf("await requireSourceSession()");
+  const confirmation = source.indexOf("matchesSourcePreflightConfirmation(confirmation, summary)");
+  const preRead = source.indexOf('callPersistenceGateway<unknown>("source.postflight_rows"');
+  const baseline = source.indexOf("isSafeAppendOnlySourceBaseline(beforeReport)");
+  const mutation = source.indexOf("await runtime.synchronization.synchronize(snapshot)");
+  expect(auth).toBeGreaterThan(-1);
+  expect(confirmation).toBeGreaterThan(auth);
+  expect(preRead).toBeGreaterThan(confirmation);
+  expect(baseline).toBeGreaterThan(preRead);
+  expect(mutation).toBeGreaterThan(baseline);
+  expect(source.slice(baseline, mutation)).toContain("google_source_existing_rows_changed");
+  expect(source.slice(baseline, mutation)).toContain("status: 409");
+  expect(source).not.toContain("ignoreSourceFingerprint");
+});
+
+test("REC-SYNC-353 · POST validates actual persisted rows after mutation and before success", () => {
+  const source = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const mutation = source.indexOf("await runtime.synchronization.synchronize(snapshot)");
+  const receipt = source.indexOf("isSourceSyncResultForPreflight(result, summary)");
+  const revised = source.indexOf("result.rowsRevised !== 0");
+  const afterRead = source.indexOf('callPersistenceGateway<unknown>("source.postflight_rows"', mutation);
+  const proof = source.indexOf("isCompleteSourceSyncPostflight(afterReport)");
+  const success = source.indexOf("return Response.json(\n      {\n        ...result");
+  expect(receipt).toBeGreaterThan(mutation);
+  expect(revised).toBeGreaterThan(receipt);
+  expect(afterRead).toBeGreaterThan(revised);
+  expect(proof).toBeGreaterThan(afterRead);
+  expect(success).toBeGreaterThan(proof);
+  expect(source.slice(mutation, success)).toContain("google_source_sync_unconfirmed");
+  expect(source.slice(mutation, success)).toContain("status: 502");
+});

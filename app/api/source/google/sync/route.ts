@@ -9,6 +9,11 @@ import {
 } from "../../../../../src/application/source-confirmation-contract";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../../src/infrastructure/http/limited-json-request";
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
+import { buildSourcePostflightReport } from "../../../../../src/application/source-postflight-report";
+import { SourcePostflightError } from "../../../../../src/domain/source-postflight-reconciliation";
+import {
+  isSafeAppendOnlySourceBaseline, isCompleteSourceSyncPostflight,
+} from "../../../../../src/application/source-sync-postflight-policy";
 import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import {
   SourceSyncRuntimeCompatibilityError,
@@ -179,12 +184,44 @@ export async function POST(request: Request) {
     if (!matchesSourcePreflightConfirmation(confirmation, summary)) {
       return Response.json({ error: "google_source_preflight_changed" }, { status: 409, headers: HEADERS });
     }
+    // REC-SYNC-352: never silently rewrite an already stored historical row
+    // while importing new official movements. A row hash difference, including
+    // a changed cell representation, is review evidence, not an auto-fix.
+    const persistedBefore = await callPersistenceGateway<unknown>("source.postflight_rows", {
+      sourceFileId: summary.sourceFileId,
+    });
+    const beforeReport = buildSourcePostflightReport(snapshot, persistedBefore);
+    if (!isSafeAppendOnlySourceBaseline(beforeReport)) {
+      return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
+    }
+
     const result = await runtime.synchronization.synchronize(snapshot);
     // The mutation may have committed. A malformed or unrelated receipt is
     // uncertain, never a promise of rollback and never retried automatically.
     if (!isSourceSyncResultForPreflight(result, summary)) {
       return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
     }
+    // REC-SYNC-353: a successful gateway receipt is not proof of complete
+    // persistence. Read the actual stored rows again before claiming success.
+    // This is a sequential comparison, NOT an atomic Google/Postgres snapshot.
+    // Any failed read or inconsistent result leaves the mutation UNCONFIRMED;
+    // callers must check status and never retry POST automatically.
+    if (result.rowsRevised !== 0) {
+      return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
+    }
+    try {
+      const persistedAfter = await callPersistenceGateway<unknown>("source.postflight_rows", {
+        sourceFileId: summary.sourceFileId,
+      });
+      const afterReport = buildSourcePostflightReport(snapshot, persistedAfter);
+      if (!isCompleteSourceSyncPostflight(afterReport)) {
+        return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
+      }
+    } catch {
+      // A write may already have committed. Never leak raw data or promise rollback.
+      return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
+    }
+
     if (runtime.authMode === "oauth" && runtime.oauth) {
       await runtime.oauth.markVerified();
     }
@@ -264,6 +301,12 @@ export async function POST(request: Request) {
         { error: "google_source_contract_invalid", code: error.code },
         { status: 422, headers: HEADERS },
       );
+    }
+    if (error instanceof SourcePostflightError) {
+      return Response.json({ error: "source_postflight_invalid_record" }, { status: 409, headers: HEADERS });
+    }
+    if (error instanceof PersistenceGatewayError) {
+      return Response.json({ error: "source_postflight_unavailable" }, { status: 503, headers: HEADERS });
     }
     console.error("google-source-sync", error instanceof Error ? error.name : "unknown_error");
     return Response.json(
