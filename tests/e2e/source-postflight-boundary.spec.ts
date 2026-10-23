@@ -208,3 +208,26 @@ test("REC-POST-297 · la ruta anonimiza cada cuenta y no expone huellas ni revis
   expect(route).not.toContain("sourceRevision: summary.sourceRevision");
   expect(route).not.toContain("snapshotFingerprint: summary.snapshotFingerprint");
 });
+
+test("REC-POST-336 · una respuesta paginada o con campos nuevos nunca se certifica como completa", () => {
+  const canonical = { rows: [
+    stored("S-CC-1", "725351515", checkingName, "250", "900"),
+    stored("S-AH-1", "2504001", savingsName, "150", "150"),
+  ] };
+  expect(buildSourcePostflightReport(source(), canonical).status).toBe("verified");
+
+  // Previously accepted despite an explicit indication of incomplete data.
+  for (const invalid of [
+    { ...canonical, hasMore: true },
+    { ...canonical, hasMore: false },
+    { ...canonical, nextCursor: "synthetic-private-cursor" },
+    { ...canonical, complete: false },
+    { ...canonical, truncated: false },
+    { ...canonical, rows: [{ ...canonical.rows[0], extra_private_column: "synthetic-secret" }] },
+    { ...canonical, rows: [{ ...canonical.rows[0], balance_after_cents: undefined }] },
+  ]) {
+    expect(() => buildSourcePostflightReport(source(), invalid))
+      .toThrow("source_postflight_invalid_record");
+  }
+  expect(decodePersistedSourcePostflight(canonical, "synthetic-postflight-book")).toHaveLength(2);
+});
