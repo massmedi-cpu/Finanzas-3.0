@@ -152,6 +152,7 @@ jobs:
           tests/e2e/ocr-g5-private-runner-contract.spec.ts
           tests/e2e/ocr-g5-private-ledger.spec.ts
           tests/e2e/ocr-g5-private-expectations.spec.ts
+          tests/e2e/ocr-g5-private-holdout-contract.spec.ts
           tests/e2e/ap8-readiness-contract.spec.ts
           tests/e2e/data-trust.spec.ts
           tests/e2e/document-download-byte-limit.spec.ts
