@@ -21,6 +21,14 @@ export type PersistencePostflightResponse = {
   rows: PersistencePostflightRow[];
 };
 
+// REC-POST-336: this endpoint is unpaginated and must return exactly the
+// seven reviewed columns. A future hasMore/nextCursor/complete field, even
+// when false, changes the completeness contract and requires a new audit.
+const POSTFLIGHT_ROW_KEYS = [
+  "source_file_id", "source_sheet_id", "source_row_key",
+  "account_external_key", "bank_date", "amount_cents", "balance_after_cents",
+] as const;
+
 function integerCents(value: unknown): number {
   // Postgres BIGINT is transmitted as decimal TEXT; never parse arbitrary
   // floating point/scientific notation or truncate an out-of-range bigint.
@@ -47,12 +55,19 @@ export function decodePersistedSourcePostflight(
 ): SourcePostflightRow[] {
   if (!expectedSourceFileId.trim() || !input || typeof input !== "object"
     || !("rows" in input) || !Array.isArray(input.rows)
-    || input.rows.length > 10_000 || Object.hasOwn(input, "truncated")) {
+    || input.rows.length > 10_000 || !Object.hasOwn(input, "rows")
+    || Object.keys(input).length !== 1) {
     throw new SourcePostflightError("source_postflight_invalid_record");
   }
   const rows: SourcePostflightRow[] = [];
   for (const value of input.rows) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new SourcePostflightError("source_postflight_invalid_record");
+    }
+    // Unknown or omitted gateway columns cannot be silently interpreted as
+    // a complete financial snapshot. Errors deliberately contain no bank data.
+    if (Object.keys(value).length !== POSTFLIGHT_ROW_KEYS.length
+      || POSTFLIGHT_ROW_KEYS.some(key => !Object.hasOwn(value, key))) {
       throw new SourcePostflightError("source_postflight_invalid_record");
     }
     const raw = value as PersistencePostflightRow;
