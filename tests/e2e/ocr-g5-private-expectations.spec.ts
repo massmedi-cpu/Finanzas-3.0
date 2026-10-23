@@ -11,7 +11,8 @@ const rows = Array.from({ length: 17 }, (_, i) => ({
   reviewedIndependently: true as const,
   totalCents: 1245 + i, date: "2026-10-23",
   issuer: "Comercio de Prueba", taxBaseCents: 1000, taxesCents: 245,
-  minimumLineItems: 1,
+  lineItems: [{ description: "Producto de prueba", quantity: 1,
+    unitPriceCents: 1245 + i, totalCents: 1245 + i }],
 }));
 const files = rows.map(({name, sha256}) => ({ name, sha256 }));
 const manifest = (documents: unknown) => ({ schemaVersion: 1, documents });
@@ -19,7 +20,9 @@ function actual(override: Record<string, unknown> = {}) {
   return {
     totalCents: { value: 1245 }, date: { value: "2026-10-23" },
     issuer: { value: "comercio DE prueba" }, taxBaseCents: { value: 1000 },
-    taxesCents: { value: 245 }, lines: [{ description: "sintético" }],
+    taxesCents: { value: 245 },
+    lines: [{ description: "producto DE   PRUEBA", quantity: 1,
+      unitPriceCents: 1245, totalCents: 1245 }],
     ...override,
   } as unknown as DocumentOcrFinancialInterpretation;
 }
@@ -40,7 +43,11 @@ test("REC-G5-340 · solo se aceptan 17 expectativas independientes con SHA y cob
   fails(rows.map((r, i) => i === 0 ? {...r, date: "2026-02-30"} : r));
   fails(rows.map((r, i) => i === 0 ? {...r, issuer: ""} : r));
   fails(rows.map((r, i) => i === 0 ? {...r, taxesCents: 4.2} : r));
-  fails(rows.map((r, i) => i === 0 ? {...r, minimumLineItems: -1} : r));
+  fails(rows.map((r, i) => i === 0 ? {...r, lineItems: null} : r));
+  fails(rows.map((r, i) => i === 0 ? {...r, lineItems: [{ ...r.lineItems[0], quantity: -1 }]} : r));
+  fails(rows.map((r, i) => i === 0 ? {...r, lineItems: [{ ...r.lineItems[0], totalCents: 12.25 }]} : r));
+  fails(rows.map((r, i) => i === 0 ? {...r, lineItems: [{ ...r.lineItems[0], description: "" }]} : r));
+  fails(rows.map((r, i) => i === 0 ? {...r, lineItems: [{ ...r.lineItems[0], privateNote: "never" }]} : r));
   fails(rows.map((r, i) => i === 0 ? {...r, bankIban: "private"} : r));
   fails(rows, files.slice(1));
   fails(rows, [...files.slice(1), {name:"unopened.pdf",sha256:sha(1)}]);
@@ -61,6 +68,17 @@ test("REC-G5-341 · datos OCR ausentes o distintos suspenden G5, aunque el PDF s
     { taxesCents: { value: 244 } },
     { taxBaseCents: { value: null } },
     { lines: [] },
+    { lines: [{ description: "producto diferente", quantity: 1,
+      unitPriceCents: 1245, totalCents: 1245 }] },
+    { lines: [{ description: "Producto de prueba", quantity: 2,
+      unitPriceCents: 1245, totalCents: 1245 }] },
+    { lines: [{ description: "Producto de prueba", quantity: 1,
+      unitPriceCents: 1244, totalCents: 1245 }] },
+    { lines: [{ description: "Producto de prueba", quantity: 1,
+      unitPriceCents: 1245, totalCents: 1244 }] },
+    { lines: [{ description: "Producto de prueba", quantity: 1,
+      unitPriceCents: 1245, totalCents: 1245 },
+      { description: "Extra", quantity: 1, unitPriceCents: 0, totalCents: 0 }] },
   ]) expect(matchesG5IndependentTruth(e, actual(wrong))).toBe(false);
   expect(matchesG5IndependentTruth(e, actual({
     issuer: { value: "  COMERCIO DE   PRUEBA " },

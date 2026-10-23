@@ -11,13 +11,18 @@ export type G5IndependentExpectation = Readonly<{
   issuer: string | null;
   taxBaseCents: number | null;
   taxesCents: number | null;
-  minimumLineItems: number;
+  // Each independently reviewed line must match the extracted OCR financial line.
+  // Zero lines is permitted only when the reviewer confirmed there were none.
+  lineItems: readonly Readonly<{
+    description: string; quantity: number | null;
+    unitPriceCents: number | null; totalCents: number | null;
+  }>[];
 }>;
 
 const SHA256 = /^[0-9a-f]{64}$/;
 const EXPECTATION_FIELDS = [
   "name", "sha256", "reviewedIndependently", "totalCents",
-  "date", "issuer", "taxBaseCents", "taxesCents", "minimumLineItems",
+  "date", "issuer", "taxBaseCents", "taxesCents", "lineItems",
 ] as const;
 
 function validDate(v: unknown): v is string {
@@ -27,6 +32,21 @@ function validDate(v: unknown): v is string {
 }
 function money(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v);
+}
+function validLineItems(value: unknown): value is G5IndependentExpectation["lineItems"] {
+  if (!Array.isArray(value) || value.length > 200) return false;
+  const required = ["description", "quantity", "unitPriceCents", "totalCents"];
+  return value.every(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const row = item as Record<string, unknown>;
+    return Object.keys(row).sort().join(",") === required.slice().sort().join(",")
+      && typeof row.description === "string"
+      && row.description.trim().length > 0 && row.description.length <= 500
+      && (row.quantity === null || (typeof row.quantity === "number"
+        && Number.isFinite(row.quantity) && row.quantity > 0 && row.quantity <= 1_000_000))
+      && (row.unitPriceCents === null || money(row.unitPriceCents))
+      && (row.totalCents === null || money(row.totalCents));
+  });
 }
 function fail(): never {
   // No document name, amount, account, path or OCR text in the error.
@@ -66,9 +86,7 @@ export function assertG5IndependentExpectations(
           && row.issuer.trim().length > 0 && row.issuer.length <= 240))
         || !(row.taxBaseCents === null || money(row.taxBaseCents))
         || !(row.taxesCents === null || money(row.taxesCents))
-        || !Number.isSafeInteger(row.minimumLineItems)
-        || (row.minimumLineItems as number) < 0
-        || (row.minimumLineItems as number) > 500) fail();
+        || !validLineItems(row.lineItems)) fail();
     byName.set(row.name, row as G5IndependentExpectation);
   }
   if (byName.size !== 17) fail();
@@ -90,5 +108,13 @@ export function matchesG5IndependentTruth(
     && normalizedIssuer(financial.issuer.value) === normalizedIssuer(expected.issuer)
     && financial.taxBaseCents.value === expected.taxBaseCents
     && financial.taxesCents.value === expected.taxesCents
-    && financial.lines.length >= expected.minimumLineItems;
+    && financial.lines.length === expected.lineItems.length
+    && expected.lineItems.every((line, index) => {
+      const actual = financial.lines[index];
+      return Boolean(actual)
+        && normalizedIssuer(actual.description) === normalizedIssuer(line.description)
+        && actual.quantity === line.quantity
+        && actual.unitPriceCents === line.unitPriceCents
+        && actual.totalCents === line.totalCents;
+    });
 }
