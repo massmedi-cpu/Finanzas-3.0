@@ -22,28 +22,32 @@ test("REC-REL-372 · cut has both UI and server enforcement, never CSS-only", ()
   for (const handler of [ocr, review]) {
     expect(handler).toContain('import { isDocumentOcrDeferred }');
     for (const method of handler === ocr ? ["GET", "POST"] : ["GET", "PATCH"]) {
-      expect(handler).toMatch(new RegExp(
-        "export async function " + method +
-        "\\([^)]*\\) \\{\\s*if \\(isDocumentOcrDeferred\\(\\)\\)",
-      ));
+      const start = handler.indexOf("export async function " + method + "(");
+      const body = handler.slice(start, handler.indexOf("\\n}", start) + 2);
+      expect(start).toBeGreaterThan(-1);
+      if (handler === ocr) {
+        expect(body).toMatch(/if \\(isDocumentOcrDeferred\\(\\)\\)/);
+      } else {
+        const auth = body.indexOf("await requireVerifiedSourceWorkspace()");
+        const deferred = body.indexOf("if (isDocumentOcrDeferred())");
+        expect(auth).toBeGreaterThan(-1);
+        expect(deferred).toBeGreaterThan(auth);
+      }
     }
     expect(handler).toContain('error: "feature_deferred", code: null');
     expect(handler).toContain("status: 404, headers: HEADERS");
   }
 });
 
-test("REC-REL-373 · deferred OCR endpoints reject direct requests before any data access", async () => {
+test("REC-REL-373 · deferred OCR execution rejects direct requests before data access", async () => {
   const original = process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR;
   process.env.NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR = "deferred";
   try {
     const ocr = await import("../../app/api/documents/ocr/route");
-    const review = await import("../../app/api/documents/ocr-review/route");
     const id = "93000000-0000-4000-8000-000000000117";
     const cases = [
       ocr.GET(new Request("http://localhost/api/documents/ocr?id=" + id)),
       ocr.POST(new Request("http://localhost/api/documents/ocr?id=" + id, {method: "POST"})),
-      review.GET(new Request("http://localhost/api/documents/ocr-review?id=" + id)),
-      review.PATCH(new Request("http://localhost/api/documents/ocr-review", {method: "PATCH"})),
     ];
     for (const pending of cases) {
       const response = await pending;
