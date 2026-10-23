@@ -53,7 +53,8 @@ node - "$private_log" <<'NODE'
 const fs = require('node:fs');
 const log = fs.readFileSync(process.argv[2], 'utf8');
 if (!log.includes('REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored')
- || !log.includes('REC_AP8_DELTA|rollback=passed')) {
+ || !log.includes('REC_AP8_DELTA|rollback=passed')
+ || !log.includes('REC_SYNC_AP5_REHEARSAL|status=ok|inserts=20|replay_skips=20|conflict_rolls_back=true|workspace_isolated=true|no_residue=true')) {
   process.exit(1);
 }
 NODE

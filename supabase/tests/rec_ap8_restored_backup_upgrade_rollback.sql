@@ -223,6 +223,7 @@ END $postflight$;
 \i supabase/tests/ap1_private_document_original_immutable.sql
 \i supabase/tests/transaction_category_label_batch_restored_103.sql
 \i supabase/tests/transaction_split_fact_batch_restored_103.sql
+\i supabase/tests/rec_sync_append_only_restored_103.sql
 
 \echo REC_AP8_DELTA|phase=rollback|target=disposable_only
 DO $restore$
