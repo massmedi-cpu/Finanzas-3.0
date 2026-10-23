@@ -309,7 +309,7 @@ export async function handleSourceSyncAction(input: {
     if (!workspaceId[0]?.workspace_id) return json({ error: "workspace_context_required" }, 403);
     const rows = await sql`
       select
-        source_file_id,source_sheet_id,source_row_key,account_external_key,
+        source_file_id,source_sheet_id,source_row_key,source_fingerprint,account_external_key,
         bank_date::text as bank_date,
         amount_cents::text as amount_cents,
         balance_after_cents::text as balance_after_cents

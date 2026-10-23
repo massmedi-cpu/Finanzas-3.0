@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/domain/official-bank-source";
 import type { OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
 import { buildSourcePostflightReport, decodePersistedSourcePostflight } from "../../src/application/source-postflight-report";
+import { prepareOfficialSourceSyncBatch } from "../../src/application/source-sync-service";
 
 const bankRow = (key: string, product: "checking" | "savings"): SourceCellValue[] => {
   const checking = product === "checking";
@@ -36,9 +37,12 @@ function source(): OfficialSourceWorkbookSnapshot {
 function stored(
   key: string, sheet: string, account: string, amount: string, balance: string | null,
 ) {
+  const sourceFingerprint = prepareOfficialSourceSyncBatch(source()).observations
+    .find(row => row.sourceSheetId === sheet && row.sourceRowKey === key)?.sourceFingerprint;
+  if (!sourceFingerprint) throw new Error("synthetic_postflight_row_missing");
   return {
     source_file_id: "synthetic-postflight-book",
-    source_sheet_id: sheet, source_row_key: key,
+    source_sheet_id: sheet, source_row_key: key, source_fingerprint: sourceFingerprint,
     account_external_key: account,
     bank_date: "2026-10-21", amount_cents: amount, balance_after_cents: balance,
   };
@@ -75,6 +79,8 @@ test("REC-POST-288 · decodificación de BIGINT exacta y errores sin datos priva
     { rows: [{ ...valid.rows[0], amount_cents: "2.5" }] },
     { rows: [{ ...valid.rows[0], amount_cents: "9007199254740992" }] },
     { rows: [{ ...valid.rows[0], balance_after_cents: "NaN" }] },
+    { rows: [{ ...valid.rows[0], source_fingerprint: "changed-private-row" }] },
+    { rows: [{ ...valid.rows[0], source_fingerprint: undefined }] },
     { rows: new Array(10001).fill(valid.rows[0]) },
   ]) {
     expect(() => decodePersistedSourcePostflight(bad, "synthetic-postflight-book"))
@@ -116,6 +122,7 @@ test("REC-POST-291 · el gateway limita filas, filtra tenant y previene exposici
     sourceSync.indexOf('if (action === "source.status")'),
   );
   expect(handler).toContain("financial_app.transaction_source_records");
+  expect(handler).toContain("source_fingerprint");
   expect(handler).toContain("workspace_id=${workspaceId[0].workspace_id}::uuid");
   expect(handler).toContain("limit 10001");
   expect(handler).toContain("rows.length > 10000");
@@ -151,7 +158,7 @@ async function mockSourceOverviewForPostflight(page: import("@playwright/test").
         sourceRows: 3, persistedRows: 2, matchingRows: 2,
         pendingRows: 1, orphanRows: 0, differingRows: 0,
         matchingUnknownBalances: 1,
-        differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0 },
+        differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0, sourceFingerprint: 0 },
         accounts: [{ accountLabel: "Cuenta 1", sourceRows: 3,
           persistedRows: 2, matchingRows: 2, pendingRows: 1, orphanRows: 0, differingRows: 0 }],
       },
@@ -230,4 +237,20 @@ test("REC-POST-336 · una respuesta paginada o con campos nuevos nunca se certif
       .toThrow("source_postflight_invalid_record");
   }
   expect(decodePersistedSourcePostflight(canonical, "synthetic-postflight-book")).toHaveLength(2);
+});
+
+test("REC-POST-349 · full source hash mismatch is never called verified by the gateway decoder", () => {
+  const valid = { rows: [
+    stored("S-CC-1", "725351515", checkingName, "250", "900"),
+    stored("S-AH-1", "2504001", savingsName, "150", "150"),
+  ] };
+  expect(buildSourcePostflightReport(source(), valid).status).toBe("verified");
+  const mutated = {
+    rows: [{ ...valid.rows[0], source_fingerprint: "f".repeat(64) }, valid.rows[1]],
+  };
+  const result = buildSourcePostflightReport(source(), mutated);
+  expect(result).toMatchObject({
+    status: "blocked", sourceRows: 2, matchingRows: 1, differingRows: 1,
+    differences: { sourceFingerprint: 1, account: 0, amountCents: 0, bankDate: 0, balanceAfterCents: 0 },
+  });
 });

@@ -11,6 +11,7 @@ export type PersistencePostflightRow = {
   source_file_id: unknown;
   source_sheet_id: unknown;
   source_row_key: unknown;
+  source_fingerprint: unknown;
   account_external_key: unknown;
   bank_date: unknown;
   amount_cents: unknown;
@@ -25,7 +26,7 @@ export type PersistencePostflightResponse = {
 // seven reviewed columns. A future hasMore/nextCursor/complete field, even
 // when false, changes the completeness contract and requires a new audit.
 const POSTFLIGHT_ROW_KEYS = [
-  "source_file_id", "source_sheet_id", "source_row_key",
+  "source_file_id", "source_sheet_id", "source_row_key", "source_fingerprint",
   "account_external_key", "bank_date", "amount_cents", "balance_after_cents",
 ] as const;
 
@@ -74,6 +75,7 @@ export function decodePersistedSourcePostflight(
     if (raw.source_file_id !== expectedSourceFileId
       || typeof raw.source_sheet_id !== "string"
       || typeof raw.source_row_key !== "string"
+      || typeof raw.source_fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(raw.source_fingerprint)
       || typeof raw.account_external_key !== "string"
       || typeof raw.bank_date !== "string") {
       throw new SourcePostflightError("source_postflight_invalid_record");
@@ -82,6 +84,7 @@ export function decodePersistedSourcePostflight(
       sourceFileId: expectedSourceFileId,
       sourceSheetId: raw.source_sheet_id,
       sourceRowKey: raw.source_row_key,
+      sourceFingerprint: raw.source_fingerprint,
       accountExternalKey: raw.account_external_key,
       bankDate: raw.bank_date,
       amountCents: integerCents(raw.amount_cents),
@@ -103,6 +106,7 @@ export function buildSourcePostflightReport(
       sourceFileId: prepared.sourceFileId,
       sourceSheetId: row.sourceSheetId,
       sourceRowKey: row.sourceRowKey,
+      sourceFingerprint: row.sourceFingerprint,
       accountExternalKey: row.accountExternalKey,
       bankDate: row.bankDate,
       amountCents: row.amountCents,

@@ -12,6 +12,7 @@ function row(
     sourceFileId: "synthetic-file-only",
     sourceSheetId: "synthetic-checking",
     sourceRowKey: "SYNTH-" + String(index).padStart(6, "0"),
+    sourceFingerprint: "a".repeat(64),
     accountExternalKey: "checking",
     bankDate: "2026-10-21",
     amountCents: index * 100 - 500,
@@ -29,7 +30,7 @@ test("REC-POST-281 · la coincidencia exacta conserva nulos y no inventa saldo c
     sourceRows: 3, persistedRows: 3, matchingRows: 3,
     pendingRows: 0, orphanRows: 0, differingRows: 0,
     matchingUnknownBalances: 1,
-    differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0 },
+    differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0, sourceFingerprint: 0 },
   });
   expect(JSON.stringify(source)).toBe(before);
   expect(report.accounts).toHaveLength(1);
@@ -72,7 +73,7 @@ test("REC-POST-283 · distintas cuentas, fechas, importes y saldos bloquean acep
   expect(report).toMatchObject({
     status: "blocked", sourceRows: 4, persistedRows: 4,
     matchingRows: 0, differingRows: 4, pendingRows: 0, orphanRows: 0,
-    differences: { account: 1, bankDate: 1, amountCents: 1, balanceAfterCents: 1 },
+    differences: { account: 1, bankDate: 1, amountCents: 1, balanceAfterCents: 1, sourceFingerprint: 0 },
   });
   expect(report.accounts.find(a => a.accountExternalKey === "checking")?.differingRows).toBe(4);
   expect(report.accounts.find(a => a.accountExternalKey === "savings")?.persistedRows).toBe(1);
@@ -91,7 +92,7 @@ test("REC-POST-284 · identidades repetidas, vacías e importes no enteros falla
     { sourceSheetId: "" }, { bankDate: "2026-02-30" },
     { amountCents: 0.25 }, { amountCents: Number.POSITIVE_INFINITY },
     { balanceAfterCents: Number.MAX_SAFE_INTEGER + 1 },
-    { accountExternalKey: " " },
+    { accountExternalKey: " " }, { sourceFingerprint: "not-a-valid-sha" },
   ]) {
     expect(() => reconcileOfficialSourcePostflight([{ ...a, ...invalid }], []))
       .toThrow("source_postflight_invalid_record");
@@ -107,7 +108,7 @@ test("REC-POST-285 · un huérfano o un cero inventado impiden certificación", 
   const report = reconcileOfficialSourcePostflight(source, persisted);
   expect(report).toMatchObject({
     status: "blocked", matchingRows: 1, orphanRows: 1, differingRows: 1,
-    differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 1 },
+    differences: { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 1, sourceFingerprint: 0 },
   });
   const extra = reconcileOfficialSourcePostflight([], [row(9)]);
   expect(extra).toMatchObject({ status: "blocked", sourceRows: 0, orphanRows: 1 });
@@ -209,7 +210,7 @@ test("REC-POST-334 · la serialización sólo publica métricas permitidas inclu
     "differences", "accounts",
   ].sort());
   expect(Object.keys(result.differences).sort()).toEqual([
-    "account", "bankDate", "amountCents", "balanceAfterCents",
+    "account", "bankDate", "amountCents", "balanceAfterCents", "sourceFingerprint",
   ].sort());
   expect(Object.keys(result.accounts[0]).sort()).toEqual([
     "accountLabel", "sourceRows", "persistedRows", "matchingRows",
@@ -240,5 +241,27 @@ test("REC-POST-335 · las respuestas que agregan metadatos no permitidos fallan 
   })).toBe(false);
   expect(isConfirmedSourcePostflightReport({
     ...clean, accounts: [{ ...clean.accounts[0], importCursor: 123 }],
+  })).toBe(false);
+});
+
+test("REC-POST-348 · same monetary fields but changed official source fingerprint must block", () => {
+  const original = [row(1), row(2)];
+  const altered = [
+    { ...row(1), sourceFingerprint: "b".repeat(64) },
+    row(2),
+  ];
+  const report = reconcileOfficialSourcePostflight(original, altered);
+  expect(report).toMatchObject({
+    status: "blocked", sourceRows: 2, persistedRows: 2,
+    matchingRows: 1, differingRows: 1, pendingRows: 0,
+    differences: { account: 0, bankDate: 0, amountCents: 0,
+      balanceAfterCents: 0, sourceFingerprint: 1 },
+  });
+  const serialized = toPublicSourcePostflightReport(report);
+  expect(isConfirmedSourcePostflightReport(serialized)).toBe(true);
+  expect(JSON.stringify(serialized)).not.toContain("a".repeat(64));
+  expect(JSON.stringify(serialized)).not.toContain("b".repeat(64));
+  expect(isConfirmedSourcePostflightReport({
+    ...serialized, differences: { ...serialized.differences, sourceFingerprint: 0 },
   })).toBe(false);
 });

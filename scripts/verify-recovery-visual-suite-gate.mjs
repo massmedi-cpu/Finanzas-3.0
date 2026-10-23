@@ -14,12 +14,12 @@ const cases = [
   ]],
   ["tests/e2e/source-postflight-boundary.spec.ts", [
     "REC-POST-288", "REC-POST-289", "REC-POST-290", "REC-POST-291",
-    "REC-POST-292", "REC-POST-293", "REC-POST-294", "REC-POST-297", "REC-POST-336",
+    "REC-POST-292", "REC-POST-293", "REC-POST-294", "REC-POST-297", "REC-POST-336", "REC-POST-349",
   ]],
   ["tests/e2e/source-postflight-reconciliation.spec.ts", [
     "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",
     "REC-POST-285", "REC-POST-286", "REC-POST-287",
-    "REC-POST-295", "REC-POST-296", "REC-POST-334", "REC-POST-335",
+    "REC-POST-295", "REC-POST-296", "REC-POST-334", "REC-POST-335", "REC-POST-348",
   ]],
   ["tests/e2e/ocr-g5-private-expectations.spec.ts", ["REC-G5-340", "REC-G5-341", "REC-G5-342"]],
   ["tests/e2e/ocr-g5-private-holdout-contract.spec.ts", ["REC-G5-345", "REC-G5-346", "REC-G5-347"]],

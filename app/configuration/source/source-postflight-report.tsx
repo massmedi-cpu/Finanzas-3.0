@@ -41,6 +41,11 @@ export function SourcePostflightReportPanel({ report }: { report: PublicSourcePo
           </article>
         ))}
       </div>
+      {report.differences.sourceFingerprint > 0 && (
+        <p className="config-message warning" role="status">
+          {formatInteger(report.differences.sourceFingerprint)} movimientos presentan cambios en su contenido original. Revisa el origen antes de importar.
+        </p>
+      )}
       {report.status === "blocked" && (
         <p className="config-message warning" role="status">
           No se puede certificar la conciliación hasta investigar las diferencias. No se corregirá ningún registro automáticamente.

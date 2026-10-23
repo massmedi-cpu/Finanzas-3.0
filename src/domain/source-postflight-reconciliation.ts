@@ -10,6 +10,7 @@ export type SourcePostflightRow = Readonly<{
   sourceFileId: string;
   sourceSheetId: string;
   sourceRowKey: string;
+  sourceFingerprint: string;
   accountExternalKey: string;
   bankDate: string;
   amountCents: number;
@@ -36,7 +37,7 @@ export type SourcePostflightReport = {
   orphanRows: number;
   differingRows: number;
   matchingUnknownBalances: number;
-  differences: { account: number; bankDate: number; amountCents: number; balanceAfterCents: number };
+  differences: { account: number; bankDate: number; amountCents: number; balanceAfterCents: number; sourceFingerprint: number };
   accounts: SourcePostflightAccount[];
 };
 
@@ -72,6 +73,7 @@ export function toPublicSourcePostflightReport(report: SourcePostflightReport): 
       bankDate: report.differences.bankDate,
       amountCents: report.differences.amountCents,
       balanceAfterCents: report.differences.balanceAfterCents,
+      sourceFingerprint: report.differences.sourceFingerprint,
     },
     accounts: report.accounts.map((account, index) => ({
       accountLabel: `Cuenta ${index + 1}`,
@@ -111,6 +113,7 @@ function identity(row: SourcePostflightRow): string {
     || typeof row.sourceFileId !== "string" || !row.sourceFileId.trim()
     || typeof row.sourceSheetId !== "string" || !row.sourceSheetId.trim()
     || typeof row.sourceRowKey !== "string" || !row.sourceRowKey.trim()
+    || typeof row.sourceFingerprint !== "string" || !/^[a-f0-9]{64}$/.test(row.sourceFingerprint)
     || typeof row.accountExternalKey !== "string" || !row.accountExternalKey.trim()
     || !validDate(row.bankDate)
     || !Number.isSafeInteger(row.amountCents)
@@ -157,7 +160,7 @@ export function reconcileOfficialSourcePostflight(
   for (const row of official.values()) accountFor(row.accountExternalKey).sourceRows += 1;
   for (const row of stored.values()) accountFor(row.accountExternalKey).persistedRows += 1;
 
-  const differences = { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0 };
+  const differences = { account: 0, bankDate: 0, amountCents: 0, balanceAfterCents: 0, sourceFingerprint: 0 };
   let matchingRows = 0;
   let matchingUnknownBalances = 0;
   let pendingRows = 0;
@@ -178,11 +181,15 @@ export function reconcileOfficialSourcePostflight(
     // null means unknown; never coerce it to zero or treat it as mismatch
     // when both sides faithfully preserve the unknown balance.
     const b = other.balanceAfterCents !== row.balanceAfterCents;
-    if (a || d || m || b) {
+    // REC-POST-348: equal dates and amounts do not prove unchanged source
+    // concepts, categories or document metadata. Compare the complete row hash.
+    const f = other.sourceFingerprint !== row.sourceFingerprint;
+    if (a || d || m || b || f) {
       if (a) differences.account += 1;
       if (d) differences.bankDate += 1;
       if (m) differences.amountCents += 1;
       if (b) differences.balanceAfterCents += 1;
+      if (f) differences.sourceFingerprint += 1;
       differingRows += 1;
       group.differingRows += 1;
     } else {
@@ -244,14 +251,14 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Publ
 
   const diff = r.differences;
   if (!diff || typeof diff !== "object"
-    || !publicKeysOnly(diff, ["account", "bankDate", "amountCents", "balanceAfterCents"])) return false;
-  if ([diff.account, diff.bankDate, diff.amountCents, diff.balanceAfterCents].some(
+    || !publicKeysOnly(diff, ["account", "bankDate", "amountCents", "balanceAfterCents", "sourceFingerprint"])) return false;
+  if ([diff.account, diff.bankDate, diff.amountCents, diff.balanceAfterCents, diff.sourceFingerprint].some(
     n => !Number.isSafeInteger(n) || n < 0 || n > r.differingRows!,
   )) return false;
   if (r.differingRows! > 0
-    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents < r.differingRows!) return false;
+    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents + diff.sourceFingerprint < r.differingRows!) return false;
   if (r.differingRows === 0
-    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents !== 0) return false;
+    && diff.account + diff.bankDate + diff.amountCents + diff.balanceAfterCents + diff.sourceFingerprint !== 0) return false;
 
   const expectedStatus = r.differingRows! || r.orphanRows! ? "blocked"
     : r.pendingRows! ? "pending" : "verified";
