@@ -113,13 +113,22 @@ for attempt in $(seq 1 90); do
   sleep 1
 done
 curl -fs --max-time 2 http://127.0.0.1:54330/jwks >/dev/null
+# REC-AUTH-364: Share one optimized build contract between acceptance and
+# capacity. Next dev may compile route bundles while the disposable DB/Auth,
+# Storage and Deno gateway are already resident; a CI resource crash then
+# appears as dozens of unrelated HTTP 500s. Test the production server.
+NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run build
+if ! kill -0 "$gateway_pid" 2>/dev/null ||
+  ! curl -s --max-time 3 -o /dev/null http://127.0.0.1:54331; then
+  echo "AUD_AUTH|stage=post_build|local_gateway_unavailable=true"
+  exit 1
+fi
 if [[ "$suite" == capacity ]]; then
   npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
     --allow-read --allow-write="$workdir" \
     --config supabase/functions/financial-app-db-gateway/deno.json \
     supabase/tests/aud_e2e_capacity.ts prepare
   # Measure the optimized application, never next dev or an external preview.
-  NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run build
   capacity_status=0
   npx playwright test --config=playwright.authenticated-capacity.config.ts || capacity_status=$?
   npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
@@ -129,7 +138,13 @@ if [[ "$suite" == capacity ]]; then
   echo "AUD_CAPACITY|status=ok|optimized_next=true|auth_gateway_postgres=true|cloud_access=false|sha=$AUD_VALIDATION_SHA"
   exit 0
 fi
-npx playwright test --config=playwright.authenticated-isolation.config.ts
+auth_status=0
+npx playwright test --config=playwright.authenticated-isolation.config.ts || auth_status=$?
+if ! kill -0 "$gateway_pid" 2>/dev/null; then
+  echo "AUD_AUTH|stage=post_browser|local_gateway_exited=true"
+  exit 1
+fi
+[[ "$auth_status" == 0 ]] || exit "$auth_status"
 npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
   --allow-read --allow-write="$workdir" \
   --config supabase/functions/financial-app-db-gateway/deno.json \
