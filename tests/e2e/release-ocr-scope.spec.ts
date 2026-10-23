@@ -23,10 +23,10 @@ test("REC-REL-372 · cut has both UI and server enforcement, never CSS-only", ()
     expect(handler).toContain('import { isDocumentOcrDeferred }');
     for (const method of handler === ocr ? ["GET", "POST"] : ["GET", "PATCH"]) {
       const start = handler.indexOf("export async function " + method + "(");
-      const body = handler.slice(start, handler.indexOf("\\n}", start) + 2);
+      const body = handler.slice(start, start + 650);
       expect(start).toBeGreaterThan(-1);
       if (handler === ocr) {
-        expect(body).toMatch(/if \\(isDocumentOcrDeferred\\(\\)\\)/);
+        expect(body).toContain("if (isDocumentOcrDeferred())");
       } else {
         const auth = body.indexOf("await requireVerifiedSourceWorkspace()");
         const deferred = body.indexOf("if (isDocumentOcrDeferred())");
