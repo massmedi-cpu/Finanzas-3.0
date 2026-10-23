@@ -5,6 +5,7 @@ import type { OfficialSourceWorkbookSnapshot } from "../../src/application/sourc
 import { buildSourcePostflightReport, decodePersistedSourcePostflight } from "../../src/application/source-postflight-report";
 import { prepareOfficialSourceSyncBatch } from "../../src/application/source-sync-service";
 import { requireAppendOnlySourceDisposition } from "../../supabase/functions/financial-app-db-gateway/source-sync";
+import { prepareStableReplayProofRows } from "../../src/application/source-stable-replay-proof";
 
 const bankRow = (key: string, product: "checking" | "savings"): SourceCellValue[] => {
   const checking = product === "checking";
@@ -322,4 +323,77 @@ test("REC-SYNC-357 · atomic source batch rolls back every historic revision inc
   const api = readFileSync("app/api/source/google/sync/route.ts", "utf8");
   expect(api).toContain('error.code === "google_source_existing_rows_changed"');
   expect(api).toContain('{ error: "google_source_existing_rows_changed" }');
+});
+
+test("REC-SYNC-358 · replay refuses invalid, duplicate, cross-account and excessive observations", () => {
+  const bank = source();
+  const prepared = prepareOfficialSourceSyncBatch(bank);
+  const batch = { ...prepared, sourceRevision: "synthetic-stable-replay-v1" };
+  const expected = prepareStableReplayProofRows(batch);
+  expect(expected).toHaveLength(2);
+  expect(expected![0]).toMatchObject({
+    source_row_identity: prepared.observations[0].sourceRowIdentity,
+    source_fingerprint: prepared.observations[0].sourceFingerprint,
+    amount_cents: prepared.observations[0].amountCents,
+  });
+  const mutate = (patch: Record<string, unknown>) => ({
+    ...batch,
+    observations: [{ ...batch.observations[0], ...patch }, batch.observations[1]],
+  });
+  for (const invalid of [
+    mutate({ amountCents: Number.NaN }),
+    mutate({ balanceAfterCents: 0.25 }),
+    mutate({ bankDate: "2026-02-30" }),
+    mutate({ accountExternalKey: "unmapped-synthetic-account" }),
+    mutate({ sourceFingerprint: "invalid" }),
+    mutate({ sourceRowIdentity: "unrelated::source::row" }),
+    { ...batch, observations: [batch.observations[0], batch.observations[0]] },
+    { ...batch, observations: new Array(10001).fill(batch.observations[0]) },
+    { ...batch, accounts: [...batch.accounts, batch.accounts[0]] },
+    { ...batch, sourceRevision: null },
+  ]) {
+    expect(prepareStableReplayProofRows(invalid)).toBeNull();
+  }
+  expect(JSON.stringify(batch)).toBe(JSON.stringify({
+    ...prepared, sourceRevision: "synthetic-stable-replay-v1",
+  }));
+});
+
+test("REC-SYNC-359 · replay requires all persisted records and exact financial metadata", () => {
+  const router = readFileSync("supabase/functions/financial-app-db-gateway/source-sync-router.ts", "utf8");
+  const start = router.indexOf("async function tryStableRevisionReplay(");
+  const validation = router.indexOf("prepareStableReplayProofRows(batch)", start);
+  const stored = router.indexOf("as persisted", validation);
+  const matching = router.indexOf("sr.source_fingerprint=expected.source_fingerprint", stored);
+  const check = router.indexOf("snapshotRows[0]?.persisted !== proofRows.length", matching);
+  const audit = router.indexOf("insert into financial_app.sync_runs", check);
+  expect(start).toBeGreaterThan(-1);
+  expect(validation).toBeGreaterThan(start);
+  expect(stored).toBeGreaterThan(validation);
+  expect(matching).toBeGreaterThan(stored);
+  expect(check).toBeGreaterThan(matching);
+  expect(audit).toBeGreaterThan(check);
+  expect(router.slice(stored, check)).toContain("sr.account_external_key=expected.account_external_key");
+  expect(router.slice(stored, check)).toContain("sr.bank_date=expected.bank_date");
+  expect(router.slice(stored, check)).toContain("sr.amount_cents=expected.amount_cents");
+  expect(router.slice(stored, check)).toContain("sr.balance_after_cents is not distinct from expected.balance_after_cents");
+});
+
+test("REC-SYNC-360 · import and replay share advisory lock before writing and rerun on edits", () => {
+  const normal = readFileSync("supabase/functions/financial-app-db-gateway/source-sync.ts", "utf8");
+  const router = readFileSync("supabase/functions/financial-app-db-gateway/source-sync-router.ts", "utf8");
+  const flow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
+  const lock = "pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(";
+  const start = normal.indexOf('if (action === "source.sync_batch")');
+  const transaction = normal.indexOf("await sql.begin(async (tx: any) => {", start);
+  const acquired = normal.indexOf(lock, transaction);
+  const run = normal.indexOf("insert into financial_app.sync_runs", acquired);
+  expect(transaction).toBeGreaterThan(start);
+  expect(acquired).toBeGreaterThan(transaction);
+  expect(run).toBeGreaterThan(acquired);
+  expect(router).toContain(lock);
+  expect(normal).toContain("'financial_app.source_sync:' + batch.sourceFileId");
+  expect(router).toContain("'financial_app.source_sync:' + batch.sourceFileId");
+  expect(flow).toContain("'supabase/functions/financial-app-db-gateway/source-sync-router.ts'");
+  expect(flow).toContain("'src/application/source-stable-replay-proof.ts'");
 });

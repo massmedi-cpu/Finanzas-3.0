@@ -172,6 +172,10 @@ export async function handleSourceSyncAction(input: {
 
     try {
       await sql.begin(async (tx: any) => {
+        // REC-SYNC-360: serialize ordinary imports with the stable replay path
+        // under the SAME transaction-scoped lock before the first DB write.
+        // A competing historical revision still fails closed under REC-SYNC-357.
+        await tx`select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(${'financial_app.source_sync:' + batch.sourceFileId}))`;
         const runRows = await tx`
           insert into financial_app.sync_runs (
             source_file_id,source_revision,status,rows_seen,schema_fingerprint

@@ -14,7 +14,7 @@ const cases = [
   ]],
   ["tests/e2e/source-postflight-boundary.spec.ts", [
     "REC-POST-288", "REC-POST-289", "REC-POST-290", "REC-POST-291",
-    "REC-POST-292", "REC-POST-293", "REC-POST-294", "REC-POST-297", "REC-POST-336", "REC-POST-349", "REC-SYNC-352", "REC-SYNC-353",
+    "REC-POST-292", "REC-POST-293", "REC-POST-294", "REC-POST-297", "REC-POST-336", "REC-POST-349", "REC-SYNC-352", "REC-SYNC-353", "REC-SYNC-357", "REC-SYNC-358", "REC-SYNC-359", "REC-SYNC-360",
   ]],
   ["tests/e2e/source-postflight-reconciliation.spec.ts", [
     "REC-POST-281", "REC-POST-282", "REC-POST-283", "REC-POST-284",

@@ -23,6 +23,8 @@ on:
       - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
       - 'supabase/functions/financial-app-db-gateway/index.ts'
       - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync-router.ts'
+      - 'src/application/source-stable-replay-proof.ts'
       - 'src/application/document-drive-inventory.ts'
       - 'src/application/document-drive-folder-scope.ts'
       - 'src/application/private-document-original-detail.ts'
