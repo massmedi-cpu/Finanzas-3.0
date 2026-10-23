@@ -54,3 +54,18 @@ test("REC-G5-363 · preserves all 17 previously inspected documents across their
   ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
   expect(output).toContain("development=17|holdout=8");
 });
+
+
+test("REC-G5-364 · every eligible PDF requires verified owner-private ancestor folder chain", () => {
+  const selector = readFileSync("scripts/verify-private-ocr-corpus-selection.mjs", "utf8");
+  expect(selector).toContain("file.privateAncestorsVerified !== true");
+  expect(selector).toContain("g5_private_ancestor_access_unverified");
+  expect(selector).toContain("privateAncestorsVerified: false");
+  expect(selector).toContain("privateAncestorsVerified: undefined");
+  // Run the synthetic negative controls on both missing and explicitly false
+  // ancestor attestations. No Drive metadata or private PDF enters public CI.
+  const output = execFileSync(process.execPath, [
+    "scripts/verify-private-ocr-corpus-selection.mjs", "--self-test",
+  ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
+  expect(output).toContain("synthetic_only=true|document_values_logged=false");
+});

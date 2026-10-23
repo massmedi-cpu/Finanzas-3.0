@@ -41,6 +41,11 @@ export function selectPrivateOcrCorpus(files) {
     // This private field is supplied by the owner's local inspection ledger.
     if (typeof file.previouslyInspected !== "boolean")
       die("g5_private_inspection_state_required");
+    // A file marked unshared is not necessarily private when its parent or
+    // another ancestor grants wider access. Require a separately audited
+    // owner-private folder chain for every eligible PDF, not just its parent.
+    if (file.privateAncestorsVerified !== true)
+      die("g5_private_ancestor_access_unverified");
     choices.get(classOf(file.name)).push(file);
   }
   for (const id of inspected) {
@@ -169,7 +174,16 @@ function testSynthetic() {
     name: "Resumen de cuenta bancaria.pdf",
     mimeType: "application/pdf", sizeBytes: 2500, private: true,
   };
+  // Synthetic owner attestation: all eligible fixture folders and ancestors
+  // have been checked. Real catalogs must derive this from Drive ACL metadata.
+  for (const sample of samples) sample.privateAncestorsVerified = true;
   const good = selectPrivateOcrCorpus([...samples, otherGeneric]);
+  assert.throws(() => selectPrivateOcrCorpus(samples.map((file, index) =>
+    index === 1 ? { ...file, privateAncestorsVerified: false } : file)),
+  /g5_private_ancestor_access_unverified/);
+  assert.throws(() => selectPrivateOcrCorpus(samples.map((file, index) =>
+    index === 1 ? { ...file, privateAncestorsVerified: undefined } : file)),
+  /g5_private_ancestor_access_unverified/);
   assert.ok(![...good.development, ...good.holdout].some((entry) => entry.file.id === "synthetic_non_invoice_000000"));
   assert.equal(good.development.length, 17);
   assert.equal(good.holdout.length, 8);
