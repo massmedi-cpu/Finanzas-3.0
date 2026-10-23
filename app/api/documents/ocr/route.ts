@@ -1,3 +1,4 @@
+import { isDocumentOcrDeferred } from "../../../../src/application/release-ocr-scope";
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
 import type { OcrWord } from "../../../../src/domain/document-ocr";
 import { interpretDocumentOcrFinancially } from "../../../../src/domain/document-ocr-financial-interpretation";
@@ -455,6 +456,9 @@ async function executeOcr(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   try {
     const { result } = await executeOcr(request);
     return Response.json(result, { headers: HEADERS });
@@ -464,6 +468,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   try {
     const { id, result } = await executeOcr(request);
     const interpretation = interpretDocumentOcrFinancially(result);
