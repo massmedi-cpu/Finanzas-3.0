@@ -11,7 +11,10 @@ BEGIN
   -- No document may silently change provider/storage key. Associations,
   -- metadata and audit history still point to the original source.
   IF NEW.storage_provider IS DISTINCT FROM OLD.storage_provider
-     OR NEW.storage_key IS DISTINCT FROM OLD.storage_key THEN
+     OR NEW.storage_key IS DISTINCT FROM OLD.storage_key
+     -- Drive also has a separately stored authoritative file ID. A retry
+     -- on the SAME storage_key must never silently relabel its provenance.
+     OR NEW.source_drive_file_id IS DISTINCT FROM OLD.source_drive_file_id THEN
     RAISE EXCEPTION 'document_original_storage_identity_immutable'
       USING ERRCODE = '23514';
   END IF;
@@ -22,8 +25,7 @@ BEGIN
   IF OLD.storage_provider = 'supabase'
      AND (NEW.original_file_name IS DISTINCT FROM OLD.original_file_name
        OR NEW.mime_type IS DISTINCT FROM OLD.mime_type
-       OR NEW.size_bytes IS DISTINCT FROM OLD.size_bytes
-       OR NEW.source_drive_file_id IS DISTINCT FROM OLD.source_drive_file_id)
+       OR NEW.size_bytes IS DISTINCT FROM OLD.size_bytes)
   THEN
     RAISE EXCEPTION 'document_private_original_immutable'
       USING ERRCODE = '23514';
