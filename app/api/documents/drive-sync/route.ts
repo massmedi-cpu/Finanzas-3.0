@@ -1,3 +1,4 @@
+import { isDocumentDriveSyncDeferred } from "../../../../src/application/release-ocr-scope";
 import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
@@ -191,6 +192,9 @@ function apiError(error: unknown) {
 }
 
 export async function POST() {
+  if (isDocumentDriveSyncDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   // The canonical gateway deliberately blocks Preview writes to production.
   // Refuse before contacting Drive or the persistence gateway; reporting the
   // barrier as an ordinary sync error would invite unsafe retries.
