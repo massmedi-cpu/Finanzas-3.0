@@ -265,3 +265,56 @@ test("REC-POST-348 · same monetary fields but changed official source fingerpri
     ...serialized, differences: { ...serialized.differences, sourceFingerprint: 0 },
   })).toBe(false);
 });
+
+
+// REC-POST-350: totals alone cannot certify contradictory per-account evidence.
+test("REC-POST-350 · reject fabricated account allocations and phantom accounts", () => {
+  const a = row(10, { accountExternalKey: "synthetic-account-a" });
+  const b = row(11, { accountExternalKey: "synthetic-account-b" });
+  const c = row(12, { accountExternalKey: "synthetic-account-a" });
+  const verified = toPublicSourcePostflightReport(
+    reconcileOfficialSourcePostflight([a, b, c], [a, b, c]),
+  );
+  expect(isConfirmedSourcePostflightReport(verified)).toBe(true);
+  expect(verified.accounts).toHaveLength(2);
+
+  // Sum of persistedRows remains 3, yet account A falsely claims its two
+  // matched rows live in account B. Previously this was accepted as verified.
+  const misplaced = structuredClone(verified);
+  misplaced.accounts[0].persistedRows = 0;
+  misplaced.accounts[1].persistedRows = 3;
+  expect(isConfirmedSourcePostflightReport(misplaced)).toBe(false);
+
+  // A phantom zero-count account must not appear merely because its counts
+  // happen to preserve every global total.
+  const empty = { accountLabel: "Cuenta 3", sourceRows: 0,
+    persistedRows: 0, matchingRows: 0, pendingRows: 0,
+    orphanRows: 0, differingRows: 0 };
+  expect(isConfirmedSourcePostflightReport({
+    ...verified, accounts: [...verified.accounts, empty],
+  })).toBe(false);
+  expect(isConfirmedSourcePostflightReport({
+    ...verified, accounts: [
+      verified.accounts[0], { ...verified.accounts[1], accountLabel: "Cuenta 99" },
+    ],
+  })).toBe(false);
+
+  // A genuinely changed account is still a valid BLOCKED diagnostic:
+  // source-side differingRows may be accounted under its original product,
+  // while the persisted row is now in a different product.
+  const migrated = toPublicSourcePostflightReport(
+    reconcileOfficialSourcePostflight([a], [
+      { ...a, accountExternalKey: "synthetic-account-b" },
+    ]),
+  );
+  expect(migrated.status).toBe("blocked");
+  expect(isConfirmedSourcePostflightReport(migrated)).toBe(true);
+
+  const orphan = toPublicSourcePostflightReport(
+    reconcileOfficialSourcePostflight([a], [
+      a, row(13, { accountExternalKey: "synthetic-account-b" }),
+    ]),
+  );
+  expect(orphan.status).toBe("blocked");
+  expect(isConfirmedSourcePostflightReport(orphan)).toBe(true);
+});

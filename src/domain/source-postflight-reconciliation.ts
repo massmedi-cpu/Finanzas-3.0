@@ -282,14 +282,20 @@ export function isConfirmedSourcePostflightReport(value: unknown): value is Publ
       || !/^Cuenta [1-9][0-9]*$/.test(entry.accountLabel)
       || entry.accountLabel.length > 20
       || Object.hasOwn(entry, "accountExternalKey")
-      || keys.has(entry.accountLabel)) return false;
+      || keys.has(entry.accountLabel)
+      || entry.accountLabel !== `Cuenta ${keys.size + 1}`) return false;
     keys.add(entry.accountLabel);
     for (const key of Object.keys(accountTotals) as Array<keyof typeof accountTotals>) {
       const n = entry[key];
       if (!Number.isSafeInteger(n) || n < 0 || n > 10000) return false;
       accountTotals[key] += n;
     }
-    if (entry.matchingRows + entry.pendingRows + entry.differingRows !== entry.sourceRows) return false;
+    // A source-side disagreement may be stored under another bank account;
+    // matching and orphan rows, however, must belong to THIS persisted account.
+    // Do not trust a plausible grand total that fabricates per-account evidence.
+    if (entry.matchingRows + entry.pendingRows + entry.differingRows !== entry.sourceRows
+      || entry.matchingRows + entry.orphanRows > entry.persistedRows
+      || entry.sourceRows + entry.persistedRows === 0) return false;
   }
   return Object.keys(accountTotals).every(
     key => accountTotals[key as keyof typeof accountTotals] === r[key as keyof typeof accountTotals],
