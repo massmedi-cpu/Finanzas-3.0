@@ -39,3 +39,18 @@ test("REC-G5-362 · selector privado exige 17 desarrollos y 8 reservas, nunca 16
   ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
   expect(output).toContain("REC_G5_PRIVATE_CORPUS|status=ok|development=17|holdout=8|roots_limit=12|synthetic_only=true|document_values_logged=false");
 });
+
+
+test("REC-G5-363 · preserves all 17 previously inspected documents across their audited classes", () => {
+  const selector = readFileSync("scripts/verify-private-ocr-corpus-selection.mjs", "utf8");
+  expect(selector).toContain("const inspectedCounts = [4, 2, 6, 3, 1, 1]");
+  expect(selector).toContain("historicalSelection.excludedInspectedCount, 0");
+  expect(selector).toContain("historicalSelection.development.every((x) => x.file.previouslyInspected)");
+  expect(selector).toContain("historicalSelection.holdout.every((x) => !x.file.previouslyInspected)");
+  // This invokes only the synthetic self-test. Real historical PDFs, filenames,
+  // SHA-256 ledgers and eight sealed documents remain private and untouched.
+  const output = execFileSync(process.execPath, [
+    "scripts/verify-private-ocr-corpus-selection.mjs", "--self-test",
+  ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
+  expect(output).toContain("development=17|holdout=8");
+});

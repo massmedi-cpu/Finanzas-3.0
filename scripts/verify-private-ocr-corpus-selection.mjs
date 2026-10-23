@@ -8,10 +8,10 @@ const REJECT_NON_RECEIPTS = /\b(?:contratos?|condiciones|solicitudes?|p[oó]liza
 const SPECS = [
   { key: "suministros", match: /emasesa|endesa|energ[ií]a|electric|iberdrola|naturgy|factura\s+agua|luz/i, dev: 4, hold: 2 },
   { key: "telecom", match: /vodafone|movistar|orange|yoigo|digi|telefon|fibra|telecom/i, dev: 2, hold: 1 },
-  { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 7, hold: 2 },
-  { key: "transporte", match: /renfe|uber|cabify|free[\s-]*now|freenow|taxi|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 1, hold: 1 },
+  { key: "supermercado", match: /carrefour|mercadona|lidl|\bdia\b|supermerc|aldi/i, dev: 6, hold: 2 },
+  { key: "transporte", match: /renfe|uber|cabify|free[\s-]*now|freenow|taxi|parking|combustible|gasolina|repsol|cepsa|bp\s/i, dev: 3, hold: 1 },
   { key: "tecnologia", match: /amazon|media\s*markt|pccomponentes|fnac|aliexpress|samsung|xiaomi|tecnolog/i, dev: 1, hold: 1 },
-  { key: "otros", match: /.*/, dev: 2, hold: 1 },
+  { key: "otros", match: /.*/, dev: 1, hold: 1 },
 ];
 const die = (code) => { throw new Error(code); };
 const assertPrivateId = (value) => typeof value === "string" && DRIVE_ID.test(value);
@@ -175,7 +175,7 @@ function testSynthetic() {
   assert.equal(good.holdout.length, 8);
   assert.equal(good.folderCount, 6);
   assert.deepEqual(good.counts.map((x) => [x.development, x.holdout]),
-    [[4, 2], [2, 1], [7, 2], [1, 1], [1, 1], [2, 1]]);
+    [[4, 2], [2, 1], [6, 2], [3, 1], [1, 1], [1, 1]]);
   assert.equal(new Set([...good.development, ...good.holdout].map((x) => x.file.id)).size, 25);
   assert.equal(good.holdout.some((x) => x.file.previouslyInspected), false);
   assert.equal([...good.development, ...good.holdout].some((x) => REJECT_NON_RECEIPTS.test(x.file.name)), false);
@@ -195,13 +195,33 @@ function testSynthetic() {
   const recovered = selectPrivateOcrCorpus(overQuota);
   assert.equal(recovered.development.length, 17);
   assert.equal(recovered.holdout.length, 8);
-  assert.equal(recovered.excludedInspectedCount, 2);
+  assert.equal(recovered.excludedInspectedCount, 1);
   assert.equal(recovered.holdout.some((x) => x.file.previouslyInspected), false);
-  assert.equal(recovered.development.filter((x) => x.kind === "transporte").length, 1);
+  assert.equal(recovered.development.filter((x) => x.kind === "transporte").length, 3);
   assert.equal(recovered.development.filter((x) => x.kind === "tecnologia").length, 1);
-  assert.equal(recovered.development.filter((x) => x.kind === "otros").length, 2);
+  assert.equal(recovered.development.filter((x) => x.kind === "otros").length, 1);
+  // REC-G5-363: match the owner-private, anonymized 22/10 audit: exactly
+  // 17 ALREADY-INSPECTED PDFs in six classes (4,2,6,3,1,1).
+  // The selector must preserve all seventeen and allocate eight untouched
+  // holdout documents; it may not replace inspected transport with a fresh
+  // supermarket development sample merely to satisfy a synthetic quota.
+  const inspectedCounts = [4, 2, 6, 3, 1, 1];
+  const historic = samples.map((file) => {
+    const group = tokens.findIndex((prefix) => file.name.startsWith(prefix + " "));
+    if (group < 0) return file;
+    const index = Number(file.name.slice(tokens[group].length + 1).split(".")[0]);
+    return { ...file, previouslyInspected: index < inspectedCounts[group] };
+  });
+  const historicalSelection = selectPrivateOcrCorpus(historic);
+  assert.equal(historicalSelection.development.length, 17);
+  assert.equal(historicalSelection.holdout.length, 8);
+  assert.equal(historicalSelection.excludedInspectedCount, 0);
+  assert.equal(historicalSelection.development.every((x) => x.file.previouslyInspected), true);
+  assert.equal(historicalSelection.holdout.every((x) => !x.file.previouslyInspected), true);
+  assert.deepEqual(historicalSelection.counts.map((x) => [x.development, x.holdout]),
+    [[4, 2], [2, 1], [6, 2], [3, 1], [1, 1], [1, 1]]);
   // More than 17 inspected overall is acceptable IF holdout remains unopened.
-  const openedCounts = [4, 2, 6, 2, 2, 1];
+  const openedCounts = [4, 2, 6, 3, 2, 1];
   const manyOpened = samples.map((x) => {
     const group = tokens.findIndex((prefix) => x.name.startsWith(prefix + " "));
     if (group < 0) return x;
@@ -211,7 +231,7 @@ function testSynthetic() {
   const manyResult = selectPrivateOcrCorpus(manyOpened);
   assert.equal(manyResult.development.length, 17);
   assert.equal(manyResult.holdout.length, 8);
-  assert.equal(manyResult.excludedInspectedCount, 2);
+  assert.equal(manyResult.excludedInspectedCount, 1);
   assert.equal(manyResult.holdout.some((x) => x.file.previouslyInspected), false);
   // A 24-document inventory can no longer masquerade as the 17+8 gate.
   assert.throws(() => selectPrivateOcrCorpus(

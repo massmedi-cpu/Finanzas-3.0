@@ -22,7 +22,7 @@ const cases = [
     "REC-POST-295", "REC-POST-296", "REC-POST-334", "REC-POST-335", "REC-POST-348", "REC-POST-350", "REC-POST-351", "REC-SYNC-354", "REC-SYNC-355",
   ]],
   ["tests/e2e/ocr-g5-private-expectations.spec.ts", ["REC-G5-340", "REC-G5-341", "REC-G5-342"]],
-  ["tests/e2e/ocr-g5-private-runner-contract.spec.ts", ["REC-G5-316", "REC-G5-362"]],
+  ["tests/e2e/ocr-g5-private-runner-contract.spec.ts", ["REC-G5-316", "REC-G5-362", "REC-G5-363"]],
   ["tests/e2e/ocr-g5-private-holdout-contract.spec.ts", ["REC-G5-345", "REC-G5-346", "REC-G5-347", "REC-G5-348"]],
   ["tests/e2e/documents.spec.ts", ["REC-DOC-139", "REC-DOC-140", "REC-TIME-001"]],
   ["tests/e2e/comparison-ui.spec.ts", ["REC-VIS-002", "REC-SYNC-004"]],

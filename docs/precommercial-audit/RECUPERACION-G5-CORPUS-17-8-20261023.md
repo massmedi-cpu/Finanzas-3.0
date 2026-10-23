@@ -17,3 +17,11 @@ El runner de evaluación privada requiere **17 documentos de desarrollo previame
 ## Qué no certifica
 
 Esta corrección **no** genera ni valida por sí misma los 17 documentos originales, sus valores GOLD humanos o los 8 holdout sin abrir. El selector acepta metadatos privados aportados por el propietario y sigue sin reemplazar el ledger real del runner de G5. La CI del nuevo SHA debe concluir antes de declarar su prueba técnica verde. Sin publicación, sincronización bancaria ni modificación en producción.
+
+## Complemento REC-G5-363: distribución real del grupo previamente examinado
+
+La auditoría privada **anonimizada de 22/10/2026**, recuperada en el espacio de archivos del usuario, acredita **17 PDF ya inspeccionados, 35 páginas y 17 huellas SHA-256 verificadas localmente**. Su distribución real fue: 4 suministros, 2 telecomunicaciones, 6 supermercados, **3 transporte**, 1 tecnología y **1 otros**. El primer commit REC-G5-362 corrigió el total 16→17, pero asignó la unidad adicional a supermercados por disponibilidad de metadatos: eso no preservaba la cohorte histórica, pues mantenía sólo un documento de transporte en desarrollo. No se ha afirmado ejecución de la cadena OCR financiera.
+
+REC-G5-363 rectifica las cuotas de DESARROLLO a [4,2,6,3,1,1] (17 exactos), sin cambiar el HOLDOUT [2,1,2,1,1,1] (8). Añade auto-test sintético donde esos 17 están marcados previamente inspeccionados: se deben conservar **17/17 en desarrollo**, **0 excluidos**, con ocho reserva estrictamente sin abrir. Añade prueba de contrato Playwright y su exigencia en el guard obligatorio. No se publican ni abren originales; el registro SHA-256 histórico verificado en otro entorno no está disponible para su cotejo en esta ejecución y por eso G5 real sigue pendiente.
+
+La preselección de Drive de 40 posibles documentos por metadatos permanece válida como inventario amplio, pero la asignación preliminar de 11 carpetas calculada para las CUOTAS anteriores no debe presentarse como validación de las nuevas cuotas. El límite físico de 12 carpetas exige comprobarse otra vez con la distribución real y el ledger privado.
