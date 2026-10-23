@@ -7,6 +7,7 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/tests/aud_e2e_production_upgrade_rollback.sql'
       - 'supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql'
+      - 'supabase/tests/ap1_private_document_original_immutable.sql'
       - 'supabase/tests/aud_e2e_budget_balance.sql'
       - 'supabase/tests/aud_e2e_document_designation.sql'
       - 'supabase/tests/fixtures/production-10.0.102-permissions-20261009.json'
