@@ -5,7 +5,10 @@ test("REC-G5-316 · the private G5 runner never executes on public CI or leaks d
   const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
   for (const requirement of [
     "FINANCIAL_APP_G5_DEVELOPMENT_DIR", "FINANCIAL_APP_G5_INSPECTION_LEDGER",
-    "test.skip(!PRIVATE_DEV_DIR || !PRIVATE_LEDGER || process.env.GITHUB_ACTIONS === \"true\"",
+    "FINANCIAL_APP_G5_EXPECTATIONS", "assertG5IndependentExpectations(expectedManifest, observed)",
+    "matchesG5IndependentTruth(expected.get(document.name)!, financial)",
+    "independentTruthMatches", "independentTruthMismatches",
+    "test.skip(!PRIVATE_DEV_DIR || !PRIVATE_LEDGER || !PRIVATE_EXPECTATIONS || process.env.GITHUB_ACTIONS === \"true\"",
     "new PdfTextOcrProvider()", "runDocumentOcr({",
     "interpretDocumentOcrFinancially(result)", "readdirSync(root, { withFileTypes: true })",
     "createHash(\"sha256\")", "entry.previouslyInspected !== true", "for (const document of inspected)",
@@ -16,5 +19,6 @@ test("REC-G5-316 · the private G5 runner never executes on public CI or leaks d
   expect(source).not.toMatch(/\b(?:fetch\s*\(|axios|writeFileSync|uploadFile)\b/);
   expect(workflow).toContain("tests/e2e/ocr-g5-private-runner-contract.spec.ts");
   expect(workflow).toContain("tests/e2e/ocr-g5-private-ledger.spec.ts");
+  expect(workflow).toContain("tests/e2e/ocr-g5-private-expectations.spec.ts");
   expect(workflow).not.toContain("tests/e2e/ocr-g5-private-development-local.spec.ts");
 });
