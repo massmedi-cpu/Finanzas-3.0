@@ -17,6 +17,66 @@ const die = (code) => { throw new Error(code); };
 const assertPrivateId = (value) => typeof value === "string" && DRIVE_ID.test(value);
 const classOf = (fileName) => SPECS.find((x) => x.match.test(fileName))?.key ?? "otros";
 
+// REC-G5-365: bounded, deterministic folder multi-cover. Selecting a frequent
+// merchant first can use 13+ folders even when a shared eligible root solves
+// all remaining category quotas within the 12-folder privacy review budget.
+// Plan at the FOLDER level before choosing individual unopened PDFs.
+function minimumPrivateFolderCoverage(choices, selected, mandatoryFolders) {
+  if (mandatoryFolders.size > MAX_PRIVATE_ROOTS)
+    die("g5_private_corpus_isolation_or_root_limit");
+  const needs = SPECS.map((spec) =>
+    spec.dev - [...selected.values()].filter((entry) =>
+      entry.kind === spec.key && !entry.holdout).length + spec.hold);
+  const byFolder = new Map();
+  const available = Array(SPECS.length).fill(0);
+  for (let category = 0; category < SPECS.length; category++) {
+    for (const file of choices.get(SPECS[category].key)) {
+      // Opened-but-excluded documents must never contribute to a holdout.
+      if (file.previouslyInspected !== false) continue;
+      const coverage = byFolder.get(file.parentFolderId) ?? Array(SPECS.length).fill(0);
+      coverage[category]++;
+      byFolder.set(file.parentFolderId, coverage);
+      available[category]++;
+    }
+  }
+  if (needs.some((need, index) => available[index] < need))
+    die("g5_private_quota_unreachable");
+
+  const initial = Array(SPECS.length).fill(0);
+  for (const folder of mandatoryFolders) {
+    const counts = byFolder.get(folder) ?? [];
+    for (let i = 0; i < SPECS.length; i++)
+      initial[i] = Math.min(needs[i], initial[i] + (counts[i] ?? 0));
+  }
+  const coverageScore = (counts) => counts.reduce((sum, count) => sum + count, 0);
+  const extraFolders = [...byFolder.entries()]
+    .filter(([folder]) => !mandatoryFolders.has(folder))
+    .sort(([left, a], [right, b]) =>
+      coverageScore(b) - coverageScore(a) || left.localeCompare(right));
+  const remainingRoots = MAX_PRIVATE_ROOTS - mandatoryFolders.size;
+  let states = new Map([[initial.join(","), { counts: initial, folders: [] }]]);
+  for (const [folder, coverage] of extraFolders) {
+    const next = new Map(states);
+    for (const state of states.values()) {
+      if (state.folders.length >= remainingRoots) continue;
+      const counts = needs.map((need, index) =>
+        Math.min(need, state.counts[index] + coverage[index]));
+      if (counts.every((count, index) => count === state.counts[index])) continue;
+      const key = counts.join(",");
+      const previous = next.get(key);
+      if (!previous || previous.folders.length > state.folders.length + 1)
+        next.set(key, { counts, folders: [...state.folders, folder] });
+    }
+    states = next;
+    // Fail closed on unexpectedly adversarial, large private inventories.
+    // A partial or approximate solution must NEVER certify G5.
+    if (states.size > 150_000) die("g5_private_folder_plan_too_large");
+  }
+  const solution = states.get(needs.join(","));
+  if (!solution) die("g5_private_corpus_isolation_or_root_limit");
+  return new Set([...mandatoryFolders, ...solution.folders]);
+}
+
 // Caller must provide owner-private Drive metadata obtained outside CI.
 // Do not print file names, IDs, document bytes, or identifiers in logs/errors.
 export function selectPrivateOcrCorpus(files) {
@@ -77,10 +137,12 @@ export function selectPrivateOcrCorpus(files) {
       usedFolders.add(file.parentFolderId);
     }
   }
+  const allowedFolders = minimumPrivateFolderCoverage(choices, selected, usedFolders);
   const selectN = (spec, holdout, count) => {
     while ([...selected.values()].filter((x) => x.kind === spec.key && x.holdout === holdout).length < count) {
       const candidate = choices.get(spec.key)
-        .filter((f) => !selected.has(f.id) && (!holdout || f.previouslyInspected === false))
+        .filter((f) => !selected.has(f.id) && allowedFolders.has(f.parentFolderId)
+          && (!holdout || f.previouslyInspected === false))
         .sort(ranked)[0];
       if (!candidate) die("g5_private_quota_unreachable");
       selected.set(candidate.id, { file: candidate, kind: spec.key, holdout });
@@ -247,6 +309,42 @@ function testSynthetic() {
   assert.equal(manyResult.holdout.length, 8);
   assert.equal(manyResult.excludedInspectedCount, 1);
   assert.equal(manyResult.holdout.some((x) => x.file.previouslyInspected), false);
+
+  // REC-G5-365: greedy would use 14 folders: 11 mandatory inspected folders,
+  // two high-count decoy folders and one mixed 8-document hub. Only the hub
+  // is needed to satisfy all six holdout quotas in exactly 12 roots.
+  const challenging = [];
+  let nextSynthetic = 0;
+  const syntheticFile = (group, folder, opened) => ({
+    id: "synthetic_cover_" + String(nextSynthetic++).padStart(9, "0"),
+    parentFolderId: folder,
+    name: tokens[group] + " coverage-" + nextSynthetic + ".pdf",
+    mimeType: "application/pdf",
+    sizeBytes: 3100 + nextSynthetic,
+    private: true,
+    privateAncestorsVerified: true,
+    previouslyInspected: opened,
+  });
+  for (let group = 0; group < SPECS.length; group++) {
+    for (let index = 0; index < SPECS[group].dev; index++)
+      challenging.push(syntheticFile(group,
+        "folder_forced_" + String(challenging.length % 11).padStart(2, "0"), true));
+  }
+  for (let group = 0; group < SPECS.length; group++)
+    for (let index = 0; index < SPECS[group].hold; index++)
+      challenging.push(syntheticFile(group, "folder_common_0000", false));
+  for (let index = 0; index < 9; index++) {
+    challenging.push(syntheticFile(0, "folder_decoy_energy", false));
+    challenging.push(syntheticFile(1, "folder_decoy_telecom", false));
+  }
+  const better = selectPrivateOcrCorpus(challenging);
+  assert.equal(better.folderCount, 12);
+  assert.equal(better.excludedInspectedCount, 0);
+  assert.equal(better.development.filter((entry) => entry.file.previouslyInspected).length, 17);
+  assert.equal(better.holdout.length, 8);
+  assert.ok(better.holdout.every((entry) =>
+    entry.file.parentFolderId === "folder_common_0000"
+    && entry.file.previouslyInspected === false));
   // A 24-document inventory can no longer masquerade as the 17+8 gate.
   assert.throws(() => selectPrivateOcrCorpus(
     [...good.development, ...good.holdout].slice(0, 24).map((entry) => entry.file),

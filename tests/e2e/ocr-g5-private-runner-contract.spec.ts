@@ -69,3 +69,17 @@ test("REC-G5-364 · every eligible PDF requires verified owner-private ancestor 
   ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
   expect(output).toContain("synthetic_only=true|document_values_logged=false");
 });
+
+test("REC-G5-365 · bounded folder multi-cover preserves all inspected PDFs and 8 untouched holdouts", () => {
+  const selector = readFileSync("scripts/verify-private-ocr-corpus-selection.mjs", "utf8");
+  expect(selector).toContain("minimumPrivateFolderCoverage(choices, selected, usedFolders)");
+  expect(selector).toContain("allowedFolders.has(f.parentFolderId)");
+  expect(selector).toContain("folder_common_0000");
+  expect(selector).toContain("better.folderCount, 12");
+  // The synthetic fixture has a valid 12-root plan and greedy decoys needing
+  // more than twelve. No personal PDF, filenames or Drive IDs reach public CI.
+  const output = execFileSync(process.execPath, [
+    "scripts/verify-private-ocr-corpus-selection.mjs", "--self-test",
+  ], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 });
+  expect(output).toContain("synthetic_only=true|document_values_logged=false");
+});
