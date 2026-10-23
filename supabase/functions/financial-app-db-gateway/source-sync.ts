@@ -91,6 +91,18 @@ function validateBatch(batch: any) {
   }
 }
 
+/**
+ * REC-SYNC-357: the official bank import may only add or skip identical rows.
+ * ingest_source_observation may internally append a revision before returning;
+ * throwing here, inside sql.begin, rolls back that revision AND all earlier
+ * inserts, mappings and cursors in this batch.
+ */
+export function requireAppendOnlySourceDisposition(action: unknown): "insert" | "skip" {
+  if (action === "insert" || action === "skip") return action;
+  if (action === "append_revision") throw new Error("source_existing_rows_changed");
+  throw new Error("source_ingestion_unknown_action");
+}
+
 function validateFailure(failure: any) {
   object(failure, "source_failure");
   text(failure.sourceFileId, "source_file_id");
@@ -196,10 +208,9 @@ export async function handleSourceSyncAction(input: {
           const row = rows[0];
           if (!row?.transaction_id) throw new Error("source_ingestion_missing_transaction");
           touchedTransactionIds.push(row.transaction_id);
-          if (row.action === "insert") rowsInserted += 1;
-          else if (row.action === "append_revision") rowsRevised += 1;
-          else if (row.action === "skip") rowsSkipped += 1;
-          else throw new Error("source_ingestion_unknown_action");
+          const disposition = requireAppendOnlySourceDisposition(row.action);
+          if (disposition === "insert") rowsInserted += 1;
+          else rowsSkipped += 1;
         }
 
         const duplicateRows = touchedTransactionIds.length
@@ -292,7 +303,13 @@ export async function handleSourceSyncAction(input: {
           ${JSON.stringify({ rows: failedRows })}::jsonb
         )
       `;
-      return json({ error: "source_sync_failed", syncRunId }, 400);
+      // A concurrent historic change must never be committed by this batch.
+      // The entire sql.begin has rolled back; the failure receipt is audit-only.
+      const historicConflict = code === "source_existing_rows_changed";
+      return json(
+        { error: historicConflict ? "google_source_existing_rows_changed" : "source_sync_failed", syncRunId },
+        historicConflict ? 409 : 400,
+      );
     }
 
     return json(result);

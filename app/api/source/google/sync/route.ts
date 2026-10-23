@@ -263,6 +263,13 @@ export async function POST(request: Request) {
         { status: 503, headers: HEADERS },
       );
     }
+    if (error instanceof PersistenceGatewayError && error.code === "google_source_existing_rows_changed") {
+      // The Edge transaction rolled back a concurrent historical revision.
+      return Response.json(
+        { error: "google_source_existing_rows_changed" },
+        { status: 409, headers: HEADERS },
+      );
+    }
     if (error instanceof PersistenceGatewayError && error.code === "google_oauth_not_connected") {
       return Response.json(
         { error: "google_oauth_not_connected" },

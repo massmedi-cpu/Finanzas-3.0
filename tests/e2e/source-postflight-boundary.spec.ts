@@ -4,6 +4,7 @@ import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/do
 import type { OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
 import { buildSourcePostflightReport, decodePersistedSourcePostflight } from "../../src/application/source-postflight-report";
 import { prepareOfficialSourceSyncBatch } from "../../src/application/source-sync-service";
+import { requireAppendOnlySourceDisposition } from "../../supabase/functions/financial-app-db-gateway/source-sync";
 
 const bankRow = (key: string, product: "checking" | "savings"): SourceCellValue[] => {
   const checking = product === "checking";
@@ -290,4 +291,35 @@ test("REC-SYNC-353 · POST validates actual persisted rows after mutation and be
   expect(success).toBeGreaterThan(proof);
   expect(source.slice(mutation, success)).toContain("google_source_sync_unconfirmed");
   expect(source.slice(mutation, success)).toContain("status: 502");
+});
+
+test("REC-SYNC-357 · atomic source batch rolls back every historic revision including races", () => {
+  expect(requireAppendOnlySourceDisposition("insert")).toBe("insert");
+  expect(requireAppendOnlySourceDisposition("skip")).toBe("skip");
+  expect(() => requireAppendOnlySourceDisposition("append_revision"))
+    .toThrow("source_existing_rows_changed");
+  expect(() => requireAppendOnlySourceDisposition("unexpected_action"))
+    .toThrow("source_ingestion_unknown_action");
+
+  const edge = readFileSync("supabase/functions/financial-app-db-gateway/source-sync.ts", "utf8");
+  const start = edge.indexOf('if (action === "source.sync_batch")');
+  const transaction = edge.indexOf("await sql.begin(async (tx: any) => {", start);
+  const ingestion = edge.indexOf("select * from financial_app.ingest_source_observation(", transaction);
+  const guard = edge.indexOf("requireAppendOnlySourceDisposition(row.action)", ingestion);
+  const completion = edge.indexOf("set status='success'", guard);
+  const catchBlock = edge.indexOf("} catch (error) {", completion);
+  expect(start).toBeGreaterThan(-1);
+  expect(transaction).toBeGreaterThan(start);
+  expect(ingestion).toBeGreaterThan(transaction);
+  expect(guard).toBeGreaterThan(ingestion);
+  expect(completion).toBeGreaterThan(guard);
+  expect(catchBlock).toBeGreaterThan(completion);
+  expect(edge.slice(start, catchBlock)).not.toContain("rowsRevised += 1");
+  expect(edge.slice(catchBlock)).toContain('historicConflict ? 409 : 400');
+
+  // API converts only the exact domain code into a conflict; neither secrets
+  // nor the legacy generic SQL error are reflected to the browser.
+  const api = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  expect(api).toContain('error.code === "google_source_existing_rows_changed"');
+  expect(api).toContain('{ error: "google_source_existing_rows_changed" }');
 });
