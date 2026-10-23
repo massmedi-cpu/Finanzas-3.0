@@ -96,7 +96,7 @@ test("REC-G5-348 · validar GOLD completo antes de leer los ocho PDF", () => {
   const declared = local.indexOf("const declared = ");
   const precheck = local.indexOf("assertG5HoldoutExpectations(manifest, declared)");
   const firstRead = local.indexOf("const bytes = readFileSync(full)");
-  const observedCheck = local.indexOf("assertG5HoldoutExpectations(manifest,");
+  const observedCheck = local.lastIndexOf("assertG5HoldoutExpectations(manifest,");
   expect(freeze).toBeGreaterThan(0);
   expect(manifest).toBeGreaterThan(freeze);
   expect(declared).toBeGreaterThan(manifest);
