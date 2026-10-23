@@ -20,10 +20,20 @@ WITH document_columns AS (
       JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='financial_app' AND c.relname='documents'
       AND t.tgname='documents_private_original_rewrite_guard'
-      AND t.tgenabled='O' AND NOT t.tgisinternal) AS original_guards,
+      AND t.tgenabled='O' AND NOT t.tgisinternal
+      -- REC-AP1-338: an enabled trigger with the expected name is insufficient
+      -- if it is wired to a different function or not a BEFORE UPDATE ROW trigger.
+      AND t.tgfoid=to_regprocedure('financial_app.prevent_private_original_rewrite()')
+      AND (t.tgtype & 1)=1 AND (t.tgtype & 2)=2 AND (t.tgtype & 16)=16) AS original_guards,
    (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
       WHERE n.nspname='financial_app' AND p.proname='prevent_private_original_rewrite'
-      AND NOT p.prosecdef) AS invoker_guard_functions,
+      AND NOT p.prosecdef
+      -- Read-only catalogue check: the required source ID invariant must be
+      -- present as well as the private object/key invariants.
+      AND pg_get_functiondef(p.oid) LIKE '%NEW.storage_provider IS DISTINCT FROM OLD.storage_provider%'
+      AND pg_get_functiondef(p.oid) LIKE '%NEW.storage_key IS DISTINCT FROM OLD.storage_key%'
+      AND pg_get_functiondef(p.oid) LIKE '%NEW.source_drive_file_id IS DISTINCT FROM OLD.source_drive_file_id%'
+      ) AS invoker_guard_functions,
    (SELECT count(*)::int FROM financial_app.transaction_source_records) AS source_records,
    (SELECT count(*)::int FROM financial_app.transactions) AS transactions,
    (SELECT count(*)::int FROM financial_app.transactions t
