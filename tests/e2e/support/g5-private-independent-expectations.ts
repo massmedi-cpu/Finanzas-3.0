@@ -57,15 +57,16 @@ function fail(): never {
  * Strict one-to-one linkage with the verified development ledger.
  * Holdout documents must never occur in either argument.
  */
-export function assertG5IndependentExpectations(
+function assertExpectationSet(
   manifest: unknown,
   verifiedDevelopment: readonly { name: string; sha256: string }[],
+  expectedCount: 17 | 8,
 ): Map<string, G5IndependentExpectation> {
   if (!manifest || typeof manifest !== "object" || Array.isArray(manifest)) fail();
   const payload = manifest as Record<string, unknown>;
   if (Object.keys(payload).sort().join(",") !== "documents,schemaVersion"
       || payload.schemaVersion !== 1 || !Array.isArray(payload.documents)
-      || payload.documents.length !== 17 || verifiedDevelopment.length !== 17) fail();
+      || payload.documents.length !== expectedCount || verifiedDevelopment.length !== expectedCount) fail();
   const byName = new Map<string, G5IndependentExpectation>();
   const reviewed = new Map<string, string>();
   for (const file of verifiedDevelopment) {
@@ -89,8 +90,24 @@ export function assertG5IndependentExpectations(
         || !validLineItems(row.lineItems)) fail();
     byName.set(row.name, row as G5IndependentExpectation);
   }
-  if (byName.size !== 17) fail();
+  if (byName.size !== expectedCount) fail();
   return byName;
+}
+
+/** The already-inspected private development corpus, never exported to CI. */
+export function assertG5IndependentExpectations(
+  manifest: unknown,
+  verifiedDevelopment: readonly { name: string; sha256: string }[],
+): Map<string, G5IndependentExpectation> {
+  return assertExpectationSet(manifest, verifiedDevelopment, 17);
+}
+
+/** The eight frozen private holdout PDFs, verified only on the owner's machine. */
+export function assertG5HoldoutExpectations(
+  manifest: unknown,
+  observedHoldout: readonly { name: string; sha256: string }[],
+): Map<string, G5IndependentExpectation> {
+  return assertExpectationSet(manifest, observedHoldout, 8);
 }
 
 function normalizedIssuer(value: string | null) {
