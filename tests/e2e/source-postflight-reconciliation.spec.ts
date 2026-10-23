@@ -3,6 +3,9 @@ import {
   reconcileOfficialSourcePostflight, isConfirmedSourcePostflightReport, toPublicSourcePostflightReport, SourcePostflightError,
   type SourcePostflightRow,
 } from "../../src/domain/source-postflight-reconciliation";
+import {
+  isSafeAppendOnlySourceBaseline, isCompleteSourceSyncPostflight,
+} from "../../src/application/source-sync-postflight-policy";
 
 function row(
   index: number,
@@ -342,4 +345,42 @@ test("REC-POST-351 · changed persisted account remains visible as BLOCKED evide
       { ...publicReport.accounts[1], sourceRows: 0, persistedRows: 0 },
     ],
   })).toBe(false);
+});
+
+
+test("REC-SYNC-354 · pending new rows permit append-only; exact postflight proves completion", () => {
+  const source = [row(601), row(602), row(603)];
+  const before = JSON.stringify(source);
+  const pending = reconcileOfficialSourcePostflight(source, [source[0]]);
+  expect(pending).toMatchObject({
+    status: "pending", sourceRows: 3, persistedRows: 1,
+    matchingRows: 1, pendingRows: 2, differingRows: 0, orphanRows: 0,
+  });
+  expect(isSafeAppendOnlySourceBaseline(pending)).toBe(true);
+  expect(isCompleteSourceSyncPostflight(pending)).toBe(false);
+  const exact = reconcileOfficialSourcePostflight(source, structuredClone(source));
+  expect(isSafeAppendOnlySourceBaseline(exact)).toBe(true);
+  expect(isCompleteSourceSyncPostflight(exact)).toBe(true);
+  expect(JSON.stringify(source)).toBe(before);
+});
+
+test("REC-SYNC-355 · past edits, orphans and zero evidence never authorize mutation or success", () => {
+  const source = [row(610), row(611)];
+  const same = structuredClone(source);
+  const fingerprintDrift = reconcileOfficialSourcePostflight(source, [
+    { ...same[0], sourceFingerprint: "f".repeat(64) }, same[1],
+  ]);
+  expect(fingerprintDrift).toMatchObject({status: "blocked", differingRows: 1});
+  expect(isSafeAppendOnlySourceBaseline(fingerprintDrift)).toBe(false);
+  expect(isCompleteSourceSyncPostflight(fingerprintDrift)).toBe(false);
+  const changedAccount = reconcileOfficialSourcePostflight(source, [
+    { ...same[0], accountExternalKey: "different-synthetic-product" }, same[1],
+  ]);
+  expect(isSafeAppendOnlySourceBaseline(changedAccount)).toBe(false);
+  const orphaned = reconcileOfficialSourcePostflight(source, [...same, row(612)]);
+  expect(isSafeAppendOnlySourceBaseline(orphaned)).toBe(false);
+  expect(isCompleteSourceSyncPostflight(orphaned)).toBe(false);
+  const empty = reconcileOfficialSourcePostflight([], []);
+  expect(isSafeAppendOnlySourceBaseline(empty)).toBe(false);
+  expect(isCompleteSourceSyncPostflight(empty)).toBe(false);
 });

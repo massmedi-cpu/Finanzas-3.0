@@ -101,6 +101,8 @@ function actionError(code: string | undefined) {
   if (code === "google_source_preflight_changed") return "La fuente ha cambiado desde la comprobación previa. Vuelve a comprobarla antes de importar. No se ha guardado ningún cambio.";
   if (code === "google_source_preflight_required") return "Vuelve a comprobar la fuente antes de importar movimientos.";
   if (code === "source_preflight_invalid") return "La validación previa no devolvió resultados completos. No se ha iniciado la importación.";
+  if (code === "google_source_existing_rows_changed") return "Se han detectado diferencias en movimientos ya guardados. La actualización no se ha iniciado; revisa la conciliación antes de incorporar movimientos nuevos.";
+  if (code === "source_postflight_invalid_record" || code === "source_postflight_unavailable") return "No se ha podido verificar íntegramente el histórico guardado. No se ha iniciado la importación.";
   if (code === "google_source_sync_unconfirmed") return "No se puede confirmar la actualización con la respuesta recibida. Consulta el estado antes de repetirla.";
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a conectar la fuente.";
   if (code === "source_runtime_incompatible") return "La actualización está temporalmente bloqueada para proteger tus datos.";
