@@ -44,6 +44,8 @@ jobs:
         uses: actions/github-script@v8
         env:
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         with:
           script: |
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
@@ -83,8 +85,41 @@ jobs:
             // The NEXT step strictly requires /api/build SHA === PR HEAD and
             // environment === preview before testing any protected route.
             if (trustedOwnerPR) {
-              core.setOutput('url', 'https://finanzas-3-0-git-chat-integrated-6ec953-massmedi-9832s-projects.vercel.app');
-              core.info('Using Vercel-verified branch alias; /api/build must match the exact PR SHA');
+              // REC-PREVIEW-367: an alias can lag behind a freshly pushed SHA.
+              // Poll the protected /api/build over GET ONLY until it serves the
+              // precise PR commit. Never treat an older alias as an eligible run.
+              const alias = 'https://finanzas-3-0-git-chat-integrated-6ec953-massmedi-9832s-projects.vercel.app';
+              const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+              const oidc = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+              if (!bypass && !oidc) {
+                core.setFailed('preview_proof_credentials_unavailable');
+                return;
+              }
+              const headers = {
+                ...(bypass ? { 'x-vercel-protection-bypass': bypass }
+                  : { 'x-vercel-trusted-oidc-idp-token': oidc }),
+                'accept': 'application/json',
+                'cache-control': 'no-store',
+              };
+              for (let attempt = 0; attempt < 24; attempt++) {
+                try {
+                  const response = await fetch(alias + '/api/build', {
+                    method: 'GET', redirect: 'manual', headers,
+                    signal: AbortSignal.timeout(15000),
+                  });
+                  const build = response.status === 200
+                    ? await response.json().catch(() => null) : null;
+                  if (build?.commit === wanted && build?.environment === 'preview') {
+                    core.setOutput('url', alias);
+                    core.info('Source boundary preview matched exact PR SHA and preview environment');
+                    return;
+                  }
+                } catch {
+                  // Protected preview not READY yet; never print tokens or data.
+                }
+                if (attempt < 23) await new Promise((resolve) => setTimeout(resolve, 10000));
+              }
+              core.setFailed('No SHA-matching protected Vercel preview became ready');
               return;
             }
             core.setFailed('No successful Vercel preview deployment for the exact PR commit');
