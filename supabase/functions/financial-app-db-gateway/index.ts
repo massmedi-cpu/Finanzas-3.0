@@ -198,7 +198,12 @@ Deno.serve(async (req) => {
     void workspaceContext;
 
     if (action === "source.capabilities") {
-      return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
+      return json({
+        contractVersion: 3,
+        sourceAccountLifecycle: true,
+        canonicalProductSelection: true,
+        sourcePostflightRows: true,
+      });
     }
 
     if (action === "test.cleanup") {

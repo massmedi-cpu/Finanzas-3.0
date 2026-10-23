@@ -7,6 +7,10 @@ import {
 } from "../../src/application/source-confirmation-contract";
 import { summarizeSourceBalanceContinuity } from "../../src/domain/source-balance-continuity";
 import { readOfficialSourcePreflight, synchronizeOfficialSource } from "../../src/application/source-sync-client";
+import {
+  assertSourceSyncRuntimeCapabilities,
+  SourceSyncRuntimeCompatibilityError,
+} from "../../src/application/source-sync-runtime-contract";
 import AxeBuilder from "@axe-core/playwright";
 import { prepareOfficialSourceSyncBatch, SourceWorkbookContractError, type OfficialSourceWorkbookSnapshot } from "../../src/application/source-sync-service";
 import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/domain/official-bank-source";
@@ -237,7 +241,7 @@ test("REC-SYNC-241 · prevalidación inválida y relectura de estado impiden tod
     body: JSON.stringify({
       status: "ok",
       compatible: true,
-      capabilities: { contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true },
+      capabilities: { contractVersion: 3, sourceAccountLifecycle: true, canonicalProductSelection: true, sourcePostflightRows: true },
     }),
   }));
   await page.route("**/api/source/google/sync", (route) => {
@@ -660,4 +664,29 @@ test("REC-SYNC-279 · fechas coincidentes y cuentas mezcladas válidas preservan
   expect(preflight.cursors.map((cursor) => cursor.authoritativeRows)).toEqual([2, 1]);
   expect(isConfirmedSourcePreflight(preflight)).toBe(true);
   expect(JSON.stringify(fixture)).toBe(before);
+});
+
+
+test("REC-SYNC-356 · the UI and POST must reject older gateways without read-only postflight", () => {
+  const ready = {
+    contractVersion: 3, sourceAccountLifecycle: true,
+    canonicalProductSelection: true, sourcePostflightRows: true,
+  };
+  expect(() => assertSourceSyncRuntimeCapabilities(ready)).not.toThrow();
+  for (const unsupported of [
+    { ...ready, contractVersion: 2 },
+    { ...ready, sourcePostflightRows: false },
+    { contractVersion: 3, sourceAccountLifecycle: true, canonicalProductSelection: true },
+    { ...ready, sourceAccountLifecycle: false },
+  ]) {
+    expect(() => assertSourceSyncRuntimeCapabilities(unsupported))
+      .toThrow(SourceSyncRuntimeCompatibilityError);
+  }
+  const liveEdge = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
+  expect(liveEdge).toContain('"source.postflight_rows"');
+  expect(liveEdge).toContain('sourcePostflightRows: true');
+  const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  expect(route.indexOf('assertSourceSyncRuntimeCapabilities(capabilities)')).toBeGreaterThan(-1);
+  expect(route.indexOf('assertSourceSyncRuntimeCapabilities(capabilities)'))
+    .toBeLessThan(route.indexOf('await runtime.synchronization.synchronize(snapshot)'));
 });
