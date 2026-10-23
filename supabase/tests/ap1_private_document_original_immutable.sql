@@ -78,6 +78,36 @@ BEGIN
     WHERE storage_provider='google_drive' AND storage_key='AP1-GOOGLE-FILE-ID'
     AND original_file_name='Drive v2.pdf' AND size_bytes=1200
   ) THEN RAISE EXCEPTION 'AP1 valid Drive revision was blocked'; END IF;
+
+  -- REC-AP1-337: register_document keys its UPSERT by storage_key. A
+  -- different source_drive_file_id with the SAME key previously passed the
+  -- migration trigger, silently replacing the authoritative Drive identity.
+  BEGIN
+    PERFORM financial_app.register_document(
+      'other','Drive forged.pdf','application/pdf','google_drive',
+      'AP1-GOOGLE-FILE-ID','AP1-DIFFERENT-FILE-ID',1200,null
+    );
+    RAISE EXCEPTION 'AP1 Drive upsert changed authoritative identity';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'document_original_storage_identity_immutable' THEN RAISE; END IF;
+  END;
+
+  -- Direct gateway or legacy SQL must not bypass the same invariant.
+  BEGIN
+    UPDATE financial_app.documents
+      SET source_drive_file_id='AP1-DIFFERENT-FILE-ID'
+      WHERE storage_provider='google_drive' AND storage_key='AP1-GOOGLE-FILE-ID';
+    RAISE EXCEPTION 'AP1 Drive SQL update changed authoritative identity';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM <> 'document_original_storage_identity_immutable' THEN RAISE; END IF;
+  END;
+
+  IF NOT EXISTS(
+    SELECT 1 FROM financial_app.documents
+    WHERE storage_provider='google_drive' AND storage_key='AP1-GOOGLE-FILE-ID'
+      AND source_drive_file_id='AP1-GOOGLE-FILE-ID'
+      AND original_file_name='Drive v2.pdf' AND size_bytes=1200
+  ) THEN RAISE EXCEPTION 'AP1 Drive rejected replay changed existing metadata'; END IF;
 END $verify$;
 RESET ROLE;
 ROLLBACK;
