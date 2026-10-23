@@ -203,6 +203,7 @@ Deno.serve(async (req) => {
         sourceAccountLifecycle: true,
         canonicalProductSelection: true,
         sourcePostflightRows: true,
+        sourceImmutableOriginalRows: identity.environment === "production",
       });
     }
 

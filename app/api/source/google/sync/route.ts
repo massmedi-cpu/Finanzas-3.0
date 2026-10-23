@@ -9,6 +9,11 @@ import {
 } from "../../../../../src/application/source-confirmation-contract";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../../src/infrastructure/http/limited-json-request";
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
+import {
+  SourceDateRepresentationAuditError, prepareVerifiedAppendOnlySourcePlan,
+  verifyPlannedAppendOnlyPostflight,
+  type VerifiedAppendOnlySourcePlan,
+} from "../../../../../src/application/source-date-representation-audit";
 import { buildSourcePostflightReport } from "../../../../../src/application/source-postflight-report";
 import { SourcePostflightError } from "../../../../../src/domain/source-postflight-reconciliation";
 import {
@@ -191,11 +196,44 @@ export async function POST(request: Request) {
       sourceFileId: summary.sourceFileId,
     });
     const beforeReport = buildSourcePostflightReport(snapshot, persistedBefore);
+    let verifiedPlan: VerifiedAppendOnlySourcePlan | null = null;
     if (!isSafeAppendOnlySourceBaseline(beforeReport)) {
-      return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
+      // Only fingerprint-only differences are candidates for independent full
+      // original verification. All other changes fail closed without mutation.
+      const representationCandidate =
+        beforeReport.orphanRows === 0 && beforeReport.differingRows > 0
+        && beforeReport.differences.sourceFingerprint === beforeReport.differingRows
+        && Object.entries(beforeReport.differences).every(
+          ([field, count]) => field === "sourceFingerprint" || count === 0,
+        )
+        && beforeReport.persistedRows === beforeReport.matchingRows + beforeReport.differingRows
+        && beforeReport.sourceRows === beforeReport.persistedRows + beforeReport.pendingRows;
+      if (!representationCandidate) {
+        return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
+      }
+      if (capabilities.sourceImmutableOriginalRows !== true) {
+        return Response.json({ error: "source_runtime_incompatible" }, { status: 503, headers: HEADERS });
+      }
+      const persistedOriginals = await callPersistenceGateway<unknown>("source.original_rows", {
+        sourceFileId: summary.sourceFileId,
+      });
+      verifiedPlan = prepareVerifiedAppendOnlySourcePlan(snapshot, persistedOriginals);
+      // The separate eight-column persisted read must agree with the private
+      // full-payload read. A race between reads rejects before SQL mutation.
+      const canonicalBefore = verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedBefore);
+      if (!isSafeAppendOnlySourceBaseline(canonicalBefore)
+        || canonicalBefore.matchingRows !== verifiedPlan.audit.persistedRows
+        || canonicalBefore.pendingRows !== verifiedPlan.audit.pendingRows
+        || verifiedPlan.preservedRepresentationRows !== verifiedPlan.audit.dateRepresentationRows) {
+        return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
+      }
     }
 
-    const result = await runtime.synchronization.synchronize(snapshot);
+    // Normal path remains strict and unchanged; the audited exceptional
+    // path carries byte-identical original fingerprints into locked SQL.
+    const result = verifiedPlan
+      ? await runtime.synchronization.synchronizePreparedBatch(verifiedPlan.batch)
+      : await runtime.synchronization.synchronize(snapshot);
     // The mutation may have committed. A malformed or unrelated receipt is
     // uncertain, never a promise of rollback and never retried automatically.
     if (!isSourceSyncResultForPreflight(result, summary)) {
@@ -213,7 +251,9 @@ export async function POST(request: Request) {
       const persistedAfter = await callPersistenceGateway<unknown>("source.postflight_rows", {
         sourceFileId: summary.sourceFileId,
       });
-      const afterReport = buildSourcePostflightReport(snapshot, persistedAfter);
+      const afterReport = verifiedPlan
+        ? verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedAfter)
+        : buildSourcePostflightReport(snapshot, persistedAfter);
       if (!isCompleteSourceSyncPostflight(afterReport)) {
         return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
       }
@@ -308,6 +348,9 @@ export async function POST(request: Request) {
         { error: "google_source_contract_invalid", code: error.code },
         { status: 422, headers: HEADERS },
       );
+    }
+    if (error instanceof SourceDateRepresentationAuditError) {
+      return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
     }
     if (error instanceof SourcePostflightError) {
       return Response.json({ error: "source_postflight_invalid_record" }, { status: 409, headers: HEADERS });

@@ -6,6 +6,8 @@ export type SourceSyncRuntimeCapabilities = {
   canonicalProductSelection: boolean;
   /** Only a gateway with bounded, workspace-scoped full-row postflight may enable sync. */
   sourcePostflightRows: boolean;
+  /** Optional compatibility gate for production-only, full original payload reads. */
+  sourceImmutableOriginalRows?: boolean;
 };
 
 export class SourceSyncRuntimeCompatibilityError extends Error {

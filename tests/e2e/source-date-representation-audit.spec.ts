@@ -320,3 +320,35 @@ test("REC-SYNC-404 · private original reads are production-only and workspace-s
   );
   expect(previewAllowlist).not.toContain('"source.original_rows"');
 });
+
+test("REC-SYNC-405 · representation-only sync is capability gated, cross-read verified and checked after SQL", () => {
+  const api = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const runtime = readFileSync("src/application/source-sync-runtime-contract.ts", "utf8");
+  const gateway = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
+  const service = readFileSync("src/application/source-sync-service.ts", "utf8");
+  const confirmation = api.indexOf("matchesSourcePreflightConfirmation(confirmation, summary)");
+  const capGate = api.indexOf("capabilities.sourceImmutableOriginalRows !== true");
+  const originals = api.indexOf('"source.original_rows"');
+  const crossRead = api.indexOf("verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedBefore)");
+  const exceptional = api.indexOf("synchronizePreparedBatch(verifiedPlan.batch)");
+  const normal = api.indexOf("synchronize(snapshot)", exceptional);
+  const receipt = api.indexOf("isSourceSyncResultForPreflight(result, summary)", exceptional);
+  const after = api.indexOf("verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedAfter)");
+  const finish = api.indexOf("isCompleteSourceSyncPostflight(afterReport)", after);
+  expect(confirmation).toBeGreaterThan(-1);
+  expect(capGate).toBeGreaterThan(confirmation);
+  expect(originals).toBeGreaterThan(capGate);
+  expect(crossRead).toBeGreaterThan(originals);
+  expect(exceptional).toBeGreaterThan(crossRead);
+  expect(normal).toBeGreaterThan(exceptional);
+  expect(receipt).toBeGreaterThan(normal);
+  expect(after).toBeGreaterThan(receipt);
+  expect(finish).toBeGreaterThan(after);
+  expect(api).toContain("beforeReport.differences.sourceFingerprint === beforeReport.differingRows");
+  expect(api).toContain("canonicalBefore.matchingRows !== verifiedPlan.audit.persistedRows");
+  expect(api).toContain("result.rowsRevised !== 0");
+  expect(runtime).toContain("sourceImmutableOriginalRows?: boolean");
+  expect(gateway).toContain('sourceImmutableOriginalRows: identity.environment === "production"');
+  expect(service).toContain("async synchronizePreparedBatch(batch: PreparedSourceSyncBatch)");
+  expect(api).not.toContain("ignoreSourceFingerprint");
+});

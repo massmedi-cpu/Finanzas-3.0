@@ -443,6 +443,12 @@ export class SourceSyncService {
     private readonly prepareBatch: SourceSyncBatchPreparer = prepareOfficialSourceSyncBatch,
   ) {}
 
+  /** Persist only a separately audited full-row plan. The gateway still locks
+   * and rolls back the entire SQL batch if any stored original was revised. */
+  async synchronizePreparedBatch(batch: PreparedSourceSyncBatch) {
+    return this.persistence.syncBatch(batch);
+  }
+
   async synchronize(snapshot: OfficialSourceWorkbookSnapshot) {
     let batch: PreparedSourceSyncBatch;
     try {
