@@ -101,3 +101,51 @@ preflight-sync-postflight para las 20 altas y release final verificada.
 El job [Source Trust del SHA 61b4b31d](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/39665697962) comprobó los cuatro regresores REC-SYNC-276–279 en **desktop y móvil: 8/8 PASS**. El build y typecheck del workflow llegaron a la fase de Playwright. El resultado global del job fue FAILURE: 122 PASS y dos fallos (desktop+móvil) del visual REC-BANK-274. **Causa reproducida:** el fixture de prueba había montado 04/09, 03/09, 02/09 y después una fila prepago 03/09 en la misma pestaña; la nueva protección real lo rechaza correctamente como `source_order_mismatch`.
 
 En [commit 85a09247](https://github.com/massmedi-cpu/Finanzas-3.0/commit/85a09247acc1d9de67e5c00d69b984bb6483e9b1) se reordenó **solo el fixture sintético** a 04/09, 03/09, 03/09, 02/09, conservando exactamente el ejemplo financiero de un enlace correcto y otro discontinuo. Se añadió aserción explícita de cursor físico de cuatro filas apuntando a `CHAIN-OLD`. El importador no suaviza ningún control, no reordena la fuente real y no escribe datos. La nueva CI requiere acreditación por SHA exacto antes de declarar completado el bloque.
+
+
+## 23/10/2026 · REC-SYNC-352–355 · Bloqueo preventivo de revisiones históricas y prueba de persistencia
+
+**Hallazgo auténtico de solo lectura:** auditoría columna a columna de los 3.188 registros
+existentes contra el Google Sheet oficial (ambas pestañas, 22 columnas): **3.187
+filas exactas**, y **una** cuya celda `Fecha` pasó de fecha española como
+texto persistido a fecha serial numérica de Sheets; las dos representan el
+**mismo día**, corroborado por `bank_date`. No existen diferencias en las
+otras 21 columnas de esa fila; por eso fecha/importe/saldo coincidían en
+la auditoría anterior. Fuente: **3.208 filas únicas** (3.191 corriente + 17 ahorro)
+frente a 3.188 persistidas: 18+2 altas pendientes, cero huérfanos y duplicados.
+Este único cambio de representación sigue siendo cambio de contenido original
+para la huella contractual de fila; **no** normalizarlo a escondidas ni borrar
+el registro existente. No publicar ni sincronizar hasta disponer de una
+revisión controlada y respaldada.
+
+**Implementación acumulada sin producción:** `POST /api/source/google/sync`
+ahora exige, *antes de llamar a* `runtime.synchronization.synchronize`,
+que `source.postflight_rows` del gateway devuelva el histórico completo
+por archivo/workspace (lectura autenticada), y que su comparación exacta no
+contenga huérfanos ni diferencias, incluidas las huellas. Las filas nuevas
+están permitidas como `pending`. Si existen diferencias, responde HTTP 409
+`google_source_existing_rows_changed` sin escribir. Un gateway obsoleto
+sin la acción bloquea la importación, no omite la comprobación.
+
+**Después del único intento de mutación autorizado**, se comprueba el recibo,
+se prohíben revisiones históricas inesperadas (`rowsRevised !== 0`) y se
+hace una nueva lectura del gateway. Solo si las dos instantáneas comparadas
+están en estado `verified`, sin pendientes, huérfanos, diferencias de campos
+o hashes, se confirma el éxito al navegador. Si falta la lectura o no es
+exacta, se informa `google_source_sync_unconfirmed` HTTP 502: la escritura
+**podría haberse producido** y no se repite automáticamente. La verificación
+es **secuencial y no atómica entre Google y PostgreSQL**, sin garantía de
+rollback tras respuesta incierta.
+
+`REC-SYNC-352–353` garantizan las barreras antes/después del POST; pruebas
+puras `REC-SYNC-354–355` verifican aceptación de 20 altas sintéticas,
+rechazo de diferencias/huérfanos y rechazo de falsos éxitos. Los cuatro casos
+están en el gate obligatorio desktop/móvil. Las dos interfaces explican la
+revisión requerida y el bloqueo preventivo en español de España.
+
+**Operación futura, aún bloqueada:** acreditar respaldo/restore aislado y AP1,
+documentar la diferencia de representación sin mostrar la fila privada,
+acordar la corrección puntual del registro persistido en una operación
+reversible autorizada, comprobar la huella del histórico y solo entonces
+aplicar las 20 altas con preflight + postflight. No se ha escrito nada en
+Supabase, Google Sheets, Edge Function o Vercel producción desde este trabajo.
