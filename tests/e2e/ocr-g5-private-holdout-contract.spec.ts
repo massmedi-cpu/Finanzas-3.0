@@ -104,7 +104,7 @@ test("REC-G5-348 · validar GOLD completo antes de leer los ocho PDF", () => {
   expect(firstRead).toBeGreaterThan(precheck);
   expect(observedCheck).toBeGreaterThan(firstRead);
   expect(local).toContain("documents.map(({ name, sha256 }) => ({ name, sha256 }))");
-  expect(local).not.toMatch(/\\b(?:fetch\\s*\\(|axios|writeFileSync|uploadFile)\\b/);
+  expect(local).not.toMatch(/\b(?:fetch\s*\(|axios\b|writeFileSync\b|uploadFile\b)/);
 });
 
 test("REC-G5-347 · prueba local excluida de CI pública y sin red ni salida privada", () => {
