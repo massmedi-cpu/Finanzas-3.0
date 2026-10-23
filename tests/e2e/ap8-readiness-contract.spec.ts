@@ -10,6 +10,14 @@ test("REC-AP8-308 · la comprobación productiva AP8 es estrictamente de lectura
   for (const proof of [
     "documents_private_original_rewrite_guard",
     "prevent_private_original_rewrite",
+    // REC-AP1-338: catalogue preflight cannot accept a trigger with the right
+    // name but a wrong function, timing or operation, nor one missing Drive ID.
+    "t.tgfoid=to_regprocedure('financial_app.prevent_private_original_rewrite()')",
+    "(t.tgtype & 1)=1",
+    "(t.tgtype & 2)=2",
+    "(t.tgtype & 16)=16",
+    "pg_get_functiondef(p.oid)",
+    "NEW.source_drive_file_id IS DISTINCT FROM OLD.source_drive_file_id",
     "table_count<>tables_with_rls",
     "t.source_record_id",
     "transactions_without_source",
