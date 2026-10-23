@@ -1,3 +1,4 @@
+import { isDocumentOcrDeferred } from "../../../../src/application/release-ocr-scope";
 import { publicGatewayErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
@@ -113,6 +114,9 @@ function lineItems(value: unknown) {
 }
 
 export async function GET(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   // Private OCR history is not a public existence oracle. Verify the app
   // session and workspace membership before inspecting document identifiers.
   const denied = await requireVerifiedSourceWorkspace();
@@ -136,6 +140,9 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   // Fail closed before reading or validating private OCR review data. A valid
   // session alone is insufficient: membership must pass source.capabilities.
   const denied = await requireVerifiedSourceWorkspace();
