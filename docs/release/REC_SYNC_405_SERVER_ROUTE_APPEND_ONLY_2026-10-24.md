@@ -9,3 +9,7 @@ Only a fingerprint-only difference with no orphans may be examined further. The 
 `SourceSyncService.synchronizePreparedBatch` sends the verified canonical plan. No changes to the legacy SQL ingestion guard: all rows run inside one transaction and advisory lock; any revision rolls back every insertion. Receipt + zero revised rows + a new independent canonical postflight must verify all expected source rows (including new rows), otherwise status remains unconfirmed. This postflight is proof against the original-hash canonical plan, not a claim that the altered Google date serial has the same byte hash.
 
 Tests REC-SYNC-400–405 cover pure snapshot proofs, exceptional route gating and normal route unchanged. Full tests/CI, PG17 restore/race/rollback, fresh encrypted production backup, gateway v86 upgrade and authenticated QA remain required **before any live sync, merge, or release**.
+
+
+## REC-SYNC-406: comprehensive immutable-original postflight
+The exceptional route rereads every 22-cell JSONB payload after SQL writes, recalculates source fingerprints with the same strict audit, verifies no changed/pending/orphaned records, and cross-checks the independent eight-field postflight before reporting success. Even a manipulated payload with an unchanged eight-field fingerprint fails. Reads are sequential (not a shared Google/DB snapshot); an uncertain write is NEVER automatically retried. Test REC-SYNC-406 includes tampering scenario. No production deployment or migrations.

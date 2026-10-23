@@ -257,6 +257,23 @@ export async function POST(request: Request) {
       if (!isCompleteSourceSyncPostflight(afterReport)) {
         return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
       }
+      if (verifiedPlan) {
+        // REC-SYNC-406: independent 22-cell reread, not just eight-field hashes.
+        // Recalculate every source SHA; unchanged fingerprint with mutated JSONB
+        // is NOT sufficient proof of immutable original payloads.
+        const originalPayloadsAfter = await callPersistenceGateway<unknown>("source.original_rows", {
+          sourceFileId: summary.sourceFileId,
+        });
+        const verifiedAfter = prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter);
+        const originalAfterReport = verifyPlannedAppendOnlyPostflight(verifiedAfter, persistedAfter);
+        if (verifiedAfter.audit.pendingRows !== 0
+          || verifiedAfter.audit.persistedRows !== verifiedPlan.audit.sourceRows
+          || verifiedAfter.audit.changedRows !== 0 || verifiedAfter.audit.orphanRows !== 0
+          || verifiedAfter.audit.dateRepresentationRows !== verifiedPlan.audit.dateRepresentationRows
+          || !isCompleteSourceSyncPostflight(originalAfterReport)) {
+          return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
+        }
+      }
     } catch {
       // A write may already have committed. Never leak raw data or promise rollback.
       return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });

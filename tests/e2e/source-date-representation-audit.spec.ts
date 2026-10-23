@@ -352,3 +352,29 @@ test("REC-SYNC-405 · representation-only sync is capability gated, cross-read v
   expect(service).toContain("async synchronizePreparedBatch(batch: PreparedSourceSyncBatch)");
   expect(api).not.toContain("ignoreSourceFingerprint");
 });
+
+test("REC-SYNC-406 · complete original reread detects tampering beyond eight-field postflight", () => {
+  const original = source();
+  const google = replaceCell(original, 1, SERIAL);
+  const before = stored(original);
+  const plan = prepareVerifiedAppendOnlySourcePlan(google, before);
+  const eight = { rows: before.rows.map(({ source_payload, source_row_identity, concept_original, ...row }) => row) };
+  expect(verifyPlannedAppendOnlyPostflight(plan, eight)).toMatchObject({ status: "verified", matchingRows: 4 });
+  expect(prepareVerifiedAppendOnlySourcePlan(google, before).audit).toMatchObject({ pendingRows: 0, changedRows: 0 });
+  const tampered = structuredClone(before);
+  tampered.rows[0].source_payload.Notas = "ALTERACION_OCULTA";
+  // Even if the eight-field DB view looks unchanged, the full-payload SHA is checked.
+  expect(() => prepareVerifiedAppendOnlySourcePlan(google, tampered))
+    .toThrow("source_date_representation_audit_invalid_snapshot");
+  const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
+  const mutation = route.indexOf("synchronizePreparedBatch(verifiedPlan.batch)");
+  const reread = route.indexOf("originalPayloadsAfter = await callPersistenceGateway<unknown>", mutation);
+  const reparse = route.indexOf("prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter)", reread);
+  const check = route.indexOf("isCompleteSourceSyncPostflight(originalAfterReport)", reparse);
+  const success = route.indexOf("return Response.json(\n      {\n        ...result", check);
+  expect(mutation).toBeGreaterThan(-1);
+  expect(reread).toBeGreaterThan(mutation);
+  expect(reparse).toBeGreaterThan(reread);
+  expect(check).toBeGreaterThan(reparse);
+  expect(success).toBeGreaterThan(check);
+});
