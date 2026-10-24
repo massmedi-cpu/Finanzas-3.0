@@ -1,18 +1,20 @@
 /**
- * REC-REL-424: use the isolated, SHA-matched candidate Edge function only for
- * the protected release branch's Vercel preview. All other previews and the
- * production deployment retain the established production gateway.
+ * REC-REL-455: independent gateway cutover. The release preview and the newly
+ * promoted production deployment use the already deployed v3 Edge function.
+ * The stable production gateway remains untouched for 10.0.103 rollback.
+ * Unrelated previews retain the legacy gateway and preview-write denial.
  *
- * The Edge runtime independently denies preview writes to financial data.
- * A browser-controlled value must never choose this service endpoint.
+ * Only server-owned Vercel deployment metadata chooses the endpoint; no
+ * query parameter, request header or browser-controlled setting is involved.
  */
 export function resolveGatewayTarget(
   productionGatewayUrl: string,
   candidateGatewayUrl: string,
   env: Readonly<{ VERCEL_ENV?: string; VERCEL_GIT_COMMIT_REF?: string }>,
 ): string {
-  return env.VERCEL_ENV === "preview"
-    && env.VERCEL_GIT_COMMIT_REF === "chat/integrated-b-e-c-visual-20261010"
+  const isReleasePreview = env.VERCEL_ENV === "preview"
+    && env.VERCEL_GIT_COMMIT_REF === "chat/integrated-b-e-c-visual-20261010";
+  return env.VERCEL_ENV === "production" || isReleasePreview
     ? candidateGatewayUrl
     : productionGatewayUrl;
 }
