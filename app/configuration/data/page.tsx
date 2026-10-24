@@ -45,10 +45,10 @@ export default function DataTrustPage() {
         <p className={styles.eyebrow}>Transparencia de datos</p>
         <h1>Datos y privacidad</h1>
         <p className={styles.lead}>
-          Financial App está diseñada para un único usuario. Esta pantalla resume las protecciones y capacidades de datos que puede demostrar hoy.
+          Financial App está diseñada para un único usuario. Consulta las protecciones de tus datos y las operaciones disponibles desde tu acceso privado.
         </p>
         <div className={styles.notice} role="note">
-          La separación interna de datos es una medida técnica de seguridad y no implica cuentas compartidas, equipos ni espacios de trabajo gestionables.
+          La configuración protege tus datos personales y mantiene la fuente bancaria original en solo lectura.
         </div>
       </header>
 

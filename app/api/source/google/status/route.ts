@@ -1,4 +1,5 @@
 import { GoogleOauthGateway } from "../../../../../src/infrastructure/google/google-oauth-gateway";
+import { requireVerifiedSourceWorkspace } from "../../../../../src/infrastructure/auth/source-metadata-access";
 import {
   GoogleSourceConnectionContractError,
   GoogleSourceRuntimeConfigurationError,
@@ -58,6 +59,9 @@ async function configurationStatus(): Promise<ConfigurationStatus> {
 }
 
 export async function GET() {
+  const accessDenied = await requireVerifiedSourceWorkspace();
+  if (accessDenied) return accessDenied;
+
   let configuration: ConfigurationStatus;
   try {
     configuration = await configurationStatus();
@@ -117,6 +121,9 @@ export async function GET() {
 }
 
 export async function DELETE() {
+  const accessDenied = await requireVerifiedSourceWorkspace();
+  if (accessDenied) return accessDenied;
+
   if (getGoogleSourceAuthMode() === "service-account") {
     return Response.json(
       { error: "google_service_account_managed" },

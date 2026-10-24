@@ -1,10 +1,13 @@
+import { isDocumentOcrDeferred } from "../../../../src/application/release-ocr-scope";
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
 import type { OcrWord } from "../../../../src/domain/document-ocr";
 import { interpretDocumentOcrFinancially } from "../../../../src/domain/document-ocr-financial-interpretation";
+import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
 } from "../../../../src/infrastructure/google/google-drive-document-downloader";
+import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../../../src/infrastructure/google/google-drive-document-discovery";
 import {
   GOOGLE_DOCUMENT_READONLY_SCOPES,
   GoogleServiceAccountAccessTokenProvider,
@@ -19,6 +22,10 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
+import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
+
+import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -28,6 +35,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
+const OCR_SOURCE_FETCH_TIMEOUT_MS = 45_000;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
 function normalizeDiagnosticToken(text: string) {
@@ -293,15 +301,7 @@ const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
-type DocumentDetail = {
-  document: {
-    id: string;
-    mimeType: string;
-    originalFileName: string;
-    storageProvider: "supabase" | "google_drive";
-    sourceDriveFileId: string | null;
-  };
-};
+type DocumentDetail = PrivateDocumentOriginalDetail;
 
 type DocumentOpen = {
   url: string;
@@ -316,7 +316,7 @@ class OcrApiError extends Error {
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
-      { error: error.status === 404 ? "not_found" : "persistence_failed", code: error.code ?? null },
+      { error: error.status === 404 ? "not_found" : "persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
@@ -329,6 +329,7 @@ function apiError(error: unknown) {
       google_drive_document_access_denied: 409,
       google_drive_document_not_found: 404,
       google_drive_document_metadata_invalid: 409,
+      google_drive_document_source_changed: 409,
       google_drive_document_mime_mismatch: 415,
       google_drive_document_content_mismatch: 415,
       google_drive_document_too_large: 413,
@@ -356,8 +357,8 @@ function apiError(error: unknown) {
       InvalidPDFException: 422,
       PasswordException: 422,
     };
-    const status = known[error.message] ?? known[error.name];
-    if (status) return Response.json({ error: "ocr_failed", code: error.message || error.name }, { status, headers: HEADERS });
+    const code = knownPublicErrorCode(error, known);
+    if (code) return Response.json({ error: "ocr_failed", code }, { status: known[code], headers: HEADERS });
   }
   console.error("document-ocr-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
@@ -370,16 +371,26 @@ async function downloadPrivateDocument(rawUrl: string) {
   } catch {
     throw new OcrApiError("ocr_source_url_invalid", 503);
   }
-  if (url.protocol !== "https:" || url.hostname !== SUPABASE_STORAGE_HOST || !url.pathname.startsWith("/storage/v1/object/sign/")) {
+  if (url.protocol !== "https:" || url.hostname !== SUPABASE_STORAGE_HOST || url.port !== "" || url.username !== "" || url.password !== "" || !url.pathname.startsWith("/storage/v1/object/sign/")) {
     throw new OcrApiError("ocr_source_url_rejected", 503);
   }
 
-  const response = await fetch(url, { cache: "no-store", redirect: "error" }).catch(() => null);
+  const response = await fetch(url, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(OCR_SOURCE_FETCH_TIMEOUT_MS) }).catch(() => null);
   if (!response?.ok) throw new OcrApiError("ocr_source_download_failed", 503);
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > MAX_BYTES) throw new OcrApiError("ocr_source_too_large", 413);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.byteLength || bytes.byteLength > MAX_BYTES) throw new OcrApiError("ocr_source_too_large", 413);
+  // Enforce the bound WHILE consuming the stream; Content-Length can be
+  // missing or dishonest and arrayBuffer() would allocate unbounded memory.
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = await readLimitedResponseBody(response, MAX_BYTES);
+  } catch (error) {
+    if (error instanceof LimitedResponseBodyError && error.reason === "too_large") {
+      throw new OcrApiError("ocr_source_too_large", 413);
+    }
+    throw new OcrApiError("ocr_source_download_failed", 503);
+  }
+  if (!bytes.byteLength) throw new OcrApiError("ocr_source_download_failed", 503);
   return bytes;
 }
 
@@ -410,6 +421,7 @@ async function documentBytes(detail: DocumentDetail) {
     const downloaded = await driveDownloader().download({
       fileId,
       expectedMimeType: detail.document.mimeType.toLowerCase(),
+      expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
     });
     return downloaded.bytes;
   }
@@ -421,13 +433,18 @@ async function documentBytes(detail: DocumentDetail) {
 async function executeOcr(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  if (!id || !UUID.test(id)) throw new OcrApiError("invalid_ocr_document_id", 400);
+  if (!id || !UUID.test(id) || searchParams.getAll("id").length !== 1) {
+    throw new OcrApiError("invalid_ocr_document_id", 400);
+  }
   if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
 
   const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
+  if (!isPrivateDocumentOriginalDetailForId(detail, id)) throw new OcrApiError("ocr_document_identity_mismatch", 502);
   const mimeType = detail.document.mimeType.toLowerCase();
   const provider = providerForMime(mimeType);
   const bytes = await documentBytes(detail);
+  // A signed 200 response is not proof that the bytes match the bank document format.
+  if (!documentBytesMatchMimeType(bytes, mimeType)) throw new OcrApiError("ocr_source_mime_mismatch", 415);
   const result = await runDocumentOcr({
     documentId: id,
     bytes,
@@ -439,6 +456,9 @@ async function executeOcr(request: Request) {
 }
 
 export async function GET(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   try {
     const { result } = await executeOcr(request);
     return Response.json(result, { headers: HEADERS });
@@ -448,6 +468,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
   try {
     const { id, result } = await executeOcr(request);
     const interpretation = interpretDocumentOcrFinancially(result);

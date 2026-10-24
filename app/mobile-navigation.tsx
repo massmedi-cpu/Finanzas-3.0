@@ -20,11 +20,16 @@ export default function MobileNavigation() {
   const pathname = usePathname();
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
+  // An SSR button has no click/keyboard listeners until React hydrates.
+  // Prevent an apparently active mobile menu from swallowing its first tap
+  // or Enter before the client component is ready.
+  const [hydrated, setHydrated] = useState(false);
   const [favoriteHref, setFavoriteHref] = useState<MobileFavoriteHref>("/review");
   const panelRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    setHydrated(true);
     try {
       setFavoriteHref(readMobileFavorite(window.localStorage));
     } catch {
@@ -101,7 +106,30 @@ export default function MobileNavigation() {
 
   return (
     <div className={styles.mobileNavigation}>
-      <div ref={panelRef} className={styles.mobileMorePanel} id="mobile-more-navigation" hidden={!moreOpen}>
+      <div
+        ref={panelRef}
+        className={styles.mobileMorePanel}
+        id="mobile-more-navigation"
+        hidden={!moreOpen}
+        onKeyDown={(event) => {
+          // The expanded menu is an overlay. Keep keyboard focus inside it
+          // until Escape, its close control or an actual navigation.
+          if (!moreOpen || event.key !== "Tab") return;
+          const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          )).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+          const first = focusable[0];
+          const last = focusable[focusable.length - 1];
+          if (!first || !last) return;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
+      >
         {moreOpen && <>
           <div className={styles.mobileMoreHeader}>
             <strong>Más secciones</strong>
@@ -172,6 +200,7 @@ export default function MobileNavigation() {
           className={`${styles.mobileDockLink} ${styles.mobileMoreButton}${moreActive ? ` ${styles.mobileActive}` : ""}`}
           aria-expanded={moreOpen}
           aria-controls="mobile-more-navigation"
+          disabled={!hydrated}
           onClick={() => setMoreOpen((value) => !value)}
         >
           <span className={styles.mobileMoreGlyph}><ProductIcon name="more" /></span>

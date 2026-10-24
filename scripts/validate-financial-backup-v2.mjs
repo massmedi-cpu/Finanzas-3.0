@@ -142,8 +142,8 @@ if (!Number.isInteger(bucketCount) || bucketCount < 0 || !Number.isInteger(objec
 if (storageInventory.buckets.length !== bucketCount || storageInventory.objects.length !== objectCount) {
   fail("storage_inventory_count_mismatch");
 }
-if (objectCount > 0) {
-  if (!manifest?.storage?.archive) fail("storage_archive_required");
+if (objectCount > 0 && !manifest?.storage?.archive) fail("storage_archive_required");
+if (manifest?.storage?.archive) {
   verifyEvidence(manifest.storage.archive, "storage_archive");
   try {
     verifyStorageBackupConsistency(
@@ -153,8 +153,6 @@ if (objectCount > 0) {
   } catch (error) {
     fail("storage_inventory_archive_mismatch", error instanceof Error ? error.message : String(error));
   }
-} else if (manifest?.storage?.archive) {
-  verifyEvidence(manifest.storage.archive, "storage_archive");
 }
 
 const declaredExclusions = new Set(

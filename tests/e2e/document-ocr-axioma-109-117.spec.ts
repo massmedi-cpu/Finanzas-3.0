@@ -7,7 +7,9 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const documentsClient = read("app/documents/documents-client.tsx");
 const ocrRoute = read("app/api/documents/ocr/route.ts");
+const privateOriginalContract = read("src/application/private-document-original-detail.ts");
 const tesseract = read("src/infrastructure/ocr/tesseract-image-provider.ts");
+const rotationDecision = read("src/infrastructure/ocr/ocr-rotation-decision.ts");
 const illumination = read("src/infrastructure/ocr/receipt-illumination.ts");
 const paddedConsensus = read("src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts");
 const reviewWorkbench = read("app/documents/ocr-page-review-workbench.tsx");
@@ -22,7 +24,8 @@ test("PRE-038 §110 converges camera, gallery/files and Drive into the document 
   expect(documentsClient).toContain('.pdf,.jpg,.jpeg,.png,.webp');
 
   expect(ocrRoute).toContain("GoogleDriveDocumentDownloader");
-  expect(ocrRoute).toContain('storageProvider: "supabase" | "google_drive"');
+  expect(privateOriginalContract).toContain('storageProvider: "supabase" | "google_drive"');
+  expect(ocrRoute).toContain("isPrivateDocumentOriginalDetailForId(detail, id)");
   expect(ocrRoute).toContain("const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(");
   expect(ocrRoute).toContain("const pdfProvider = new PdfTextOcrProvider()");
   expect(ocrRoute).toContain("runDocumentOcr");
@@ -30,7 +33,10 @@ test("PRE-038 §110 converges camera, gallery/files and Drive into the document 
 
 test("PRE-038 §111 has conservative rotation, framing, illumination and perspective evaluation", () => {
   expect(tesseract).toContain("rotateAuto: true");
-  expect(tesseract).toContain("needsOrientationFallback");
+  expect(tesseract).toContain("ocrNeedsRotationFallback(initial.words, metadata)");
+  expect(rotationDecision).toContain("financialCue");
+  expect(rotationDecision).toContain("confidence >= 0.78");
+  expect(rotationDecision).toContain("imageColor: autoRotate");
   expect(tesseract).toContain("refineBackgroundContamination");
   expect(tesseract).toContain("refinementIsSafe");
   expect(tesseract).toContain("MAX_PIXELS");
@@ -101,7 +107,8 @@ test("PRE-038 §116 covers heterogeneous physical fixtures plus Camera, Gallery,
   expect(documentsClient).toContain('id="document-camera"');
   expect(documentsClient).toContain('id="document-file"');
   expect(ocrRoute).toContain("GoogleDriveDocumentDownloader");
-  expect(ocrRoute).toContain('storageProvider: "supabase" | "google_drive"');
+  expect(privateOriginalContract).toContain('storageProvider: "supabase" | "google_drive"');
+  expect(ocrRoute).toContain("isPrivateDocumentOriginalDetailForId(detail, id)");
   expect(ocrRoute).toContain("new PdfTextOcrProvider()");
   expect(ocrContract).toContain('word("FACTURA"');
 });

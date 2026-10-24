@@ -1,7 +1,11 @@
+import { isDocumentOcrDeferred } from "../../../../src/application/release-ocr-scope";
+import { publicGatewayErrorCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../src/infrastructure/http/limited-json-request";
+import { requireVerifiedSourceWorkspace } from "../../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -11,16 +15,41 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
+// Allows 200 valid OCR lines of up to 500 characters while forbidding oversized requests.
+const MAX_REVIEW_JSON_BYTES = 256 * 1024;
 
-function errorResponse(error: unknown) {
+export function errorResponse(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const status = error.reason === "too_large" ? 413 : 400;
+    const code = error.reason === "too_large" ? "document_review_too_large" : "invalid_json";
+    return Response.json({ error: "invalid_request", code }, { status, headers: HEADERS });
+  }
   if (error instanceof PersistenceGatewayError) {
     return Response.json(
       { error: error.status === 404 ? "not_found" : "persistence_failed", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  const code = error instanceof Error ? error.message : "invalid_request";
-  return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
+  // Only local OCR validation codes may cross the HTTP boundary. Never
+  // return raw backend exception messages, original OCR text or credentials.
+  if (error instanceof SyntaxError) {
+    return Response.json(
+      { error: "invalid_request", code: "invalid_json" },
+      { status: 400, headers: HEADERS },
+    );
+  }
+  // Line-item validation encodes the actual source line index (0..199).
+  // Its bounded format is a public error code; arbitrary numeric error text
+  // must not bypass the shared response sanitizer.
+  const indexedCode = error instanceof Error
+    && /^invalid_document_line_(?:0|[1-9]\d?|1\d{2})_(?:description|quantity|unit_price|total)$/.test(error.message)
+    ? error.message : null;
+  const code = indexedCode ?? publicGatewayErrorCode(error);
+  if (/^invalid_document_[a-z0-9_]+$/.test(code)) {
+    return Response.json({ error: "invalid_request", code }, { status: 400, headers: HEADERS });
+  }
+  console.error("document-ocr-review-internal", error instanceof Error ? error.name : typeof error);
+  return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
 }
 
 function uuid(value: unknown, field: string) {
@@ -85,8 +114,24 @@ function lineItems(value: unknown) {
 }
 
 export async function GET(request: Request) {
+  // Private OCR history is not a public existence oracle. Verify the app
+  // session and workspace membership before inspecting document identifiers.
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
+
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
+
   try {
     const url = new URL(request.url);
+    // The document identity must be unique: URLSearchParams.get() silently
+    // ignores a second, conflicting ID, and arbitrary query keys are unsafe
+    // for an authenticated private evidence history.
+    if (url.searchParams.getAll("id").length !== 1
+      || [...url.searchParams.keys()].some((key) => key !== "id")) {
+      throw new Error("invalid_document_review_query");
+    }
     const id = uuid(url.searchParams.get("id"), "document_id");
     const result = await callPersistenceGateway("document.ocr_history", { id });
     return Response.json(result, { headers: HEADERS });
@@ -96,8 +141,17 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  // Fail closed before reading or validating private OCR review data. A valid
+  // session alone is insufficient: membership must pass source.capabilities.
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
+
+  if (isDocumentOcrDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
+
   try {
-    const body = await request.json();
+    const body = await readLimitedJsonRequest(request, MAX_REVIEW_JSON_BYTES);
     if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("invalid_document_review");
     const input = body as Record<string, unknown>;
     const documentId = uuid(input.documentId, "document_id");

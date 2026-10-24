@@ -2,11 +2,12 @@
   box-sizing: border-box;
   margin: 0 auto 18px;
   width: min(1480px, calc(100% - 32px));
-  border: 1px solid color-mix(in srgb, var(--border, #c9cbd0) 82%, transparent);
+  border: 1px solid var(--border-card);
   border-radius: 22px;
-  background: color-mix(in srgb, var(--surface, #ffffff) 94%, transparent);
+  background: var(--surface-card);
   box-shadow: 0 18px 50px color-mix(in srgb, #000 8%, transparent);
   padding: 22px;
+  color: var(--color-text);
 }
 
 .heading {
@@ -26,11 +27,12 @@
   font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.12em;
-  color: var(--text-secondary, #65676d);
+  color: var(--color-text-secondary);
 }
 
 .heading h2 {
   margin: 0;
+  color: var(--color-text);
   font-size: var(--font-section-title);
   line-height: 1.08;
 }
@@ -38,7 +40,7 @@
 .heading p {
   margin: 0;
   max-width: 560px;
-  color: var(--text-secondary, #65676d);
+  color: var(--color-text-secondary);
   font-size: 0.88rem;
   line-height: 1.45;
 }
@@ -63,7 +65,7 @@
   margin-bottom: 7px;
   font-size: var(--font-helper);
   font-weight: 760;
-  color: var(--text-secondary, #65676d);
+  color: var(--color-text-secondary);
 }
 
 .segmented,
@@ -71,9 +73,9 @@
   display: flex;
   gap: 5px;
   padding: 4px;
-  border: 1px solid var(--border, #d6d7db);
+  border: 1px solid var(--color-border);
   border-radius: 13px;
-  background: var(--surface-subtle, #f5f5f7);
+  background: var(--surface-card-muted);
 }
 
 .segmented {
@@ -109,13 +111,13 @@
 .segment,
 .quickRange {
   background: transparent;
-  color: var(--text-secondary, #65676d);
+  color: var(--color-text-secondary);
 }
 
 .activeSegment,
 .activeQuickRange {
-  background: var(--text-primary, #111216);
-  color: var(--surface, #ffffff);
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
   box-shadow: 0 5px 13px color-mix(in srgb, #000 12%, transparent);
 }
 
@@ -131,8 +133,8 @@
   box-sizing: border-box;
   border: 1px solid var(--border-control);
   border-radius: 11px;
-  background: var(--surface, #ffffff);
-  color: var(--text-primary, #111216);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
   padding: 8px 11px;
   font: inherit;
   font-size: 0.88rem;
@@ -145,7 +147,7 @@
 .quickRange:focus-visible,
 .activeQuickRange:focus-visible,
 .apply:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--accent, #78633a) 35%, transparent);
+  outline: 3px solid color-mix(in srgb, var(--color-primary-bright) 35%, transparent);
   outline-offset: 2px;
 }
 
@@ -160,8 +162,8 @@
   border: 0;
   border-radius: 12px;
   padding: 10px 17px;
-  background: var(--text-primary, #111216);
-  color: var(--surface, #ffffff);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
   font: inherit;
   font-size: var(--font-helper);
   font-weight: 780;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CashFlowEvolutionPoint } from "../../src/application/cash-flow/cash-flow-model";
-import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath } from "../../src/application/cash-flow/evolution-plot";
+import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath, cashFlowSelectedDayIndex } from "../../src/application/cash-flow/evolution-plot";
 import { formatMoneyCents } from "../../src/core/money";
 import styles from "./cash-flow.module.css";
 
@@ -33,12 +33,15 @@ function stateLabel(value: number | null) {
 export function CashFlowEvolution({
   points,
   onInspectDate,
+  selectedDate,
+  onSelectDate,
 }: {
   points: CashFlowEvolutionPoint[];
   onInspectDate: (date: string) => void;
+  selectedDate: string | null;
+  onSelectDate: (date: string) => void;
 }) {
-  const [activeIndex, setActiveIndex] = useState(Math.max(0, points.length - 1));
-  const safeActiveIndex = Math.min(activeIndex, Math.max(0, points.length - 1));
+  const safeActiveIndex = cashFlowSelectedDayIndex(points, selectedDate);
   const active = points[safeActiveIndex] ?? null;
   const plotRef = useRef<HTMLDivElement>(null);
   const [plotWidth, setPlotWidth] = useState<number | null>(null);
@@ -162,7 +165,10 @@ export function CashFlowEvolution({
           value={safeActiveIndex + 1}
           aria-label="Elegir día de la evolución"
           aria-valuetext={formatDate(active.date)}
-          onChange={(event) => setActiveIndex(Number(event.target.value) - 1)}
+          onChange={(event) => {
+            const selected = points[Number(event.target.value) - 1];
+            if (selected) onSelectDate(selected.date);
+          }}
         />
       </label>
 

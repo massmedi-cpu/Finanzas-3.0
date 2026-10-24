@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../src/application/release-document-scope";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -20,7 +21,7 @@ type SearchItem = {
   amountCents?: number | null;
   date?: string | null;
 };
-type SearchResponse = { query: string; items: SearchItem[]; partial: boolean };
+type SearchResponse = { query: string; items: SearchItem[]; partial: boolean; error?: string };
 
 const KIND_LABEL: Record<SearchKind, string> = {
   transaction: "Movimiento",
@@ -58,6 +59,7 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
+  const [sessionRequired, setSessionRequired] = useState(false);
   const [requestTimedOut, setRequestTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -78,6 +80,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     setActiveIndex(-1);
     const opener = openerRef.current;
@@ -126,6 +129,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     setActiveIndex(-1);
   }, [pathname]);
@@ -148,6 +152,7 @@ export default function GlobalSearch() {
     requestRef.current = controller;
     setLoading(true);
     setError(false);
+    setSessionRequired(false);
     setRequestTimedOut(false);
     // La respuesta queda vinculada al término exacto, incluso antes del siguiente efecto React.
     setItems([]);
@@ -162,9 +167,12 @@ export default function GlobalSearch() {
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => null) as SearchResponse | null;
+          if ((response.status === 401 || response.status === 403)
+            && payload?.error === "workspace_session_required") throw new Error("search_session_required");
           if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
           if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
-          setItems(payload.items);
+          setItems(payload.items.filter((item) => isReleaseHrefAvailable(item.href)
+            && (!isDocumentsDeferred() || item.kind !== "document")));
           setResultsQuery(preparedQuery);
           setPartial(payload.partial === true);
         })
@@ -175,6 +183,7 @@ export default function GlobalSearch() {
             setResultsQuery("");
             setPartial(false);
             setError(true);
+            setSessionRequired(cause instanceof Error && cause.message === "search_session_required");
             setRequestTimedOut(deadlineExceeded);
           }
         })
@@ -247,7 +256,7 @@ export default function GlobalSearch() {
   const statusMessage = searching
     ? "Buscando resultados…"
     : error
-      ? requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
+      ? sessionRequired ? "No hay una sesión válida para consultar tus datos. Inicia sesión y reintenta." : requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
       : preparedQuery
         ? `Resultados rápidos: ${visibleItems.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
@@ -273,7 +282,7 @@ export default function GlobalSearch() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onInputKeyDown}
-                placeholder="Comercio, factura, categoría, movimiento…"
+                placeholder={isDocumentsDeferred() ? "Comercio, categoría, movimiento…" : "Comercio, factura, categoría, movimiento…"}
                 autoComplete="off"
                 maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
@@ -292,13 +301,19 @@ export default function GlobalSearch() {
             ) : null}
             <div id={`${inputId}-results`} className={styles.results} role={hasResults ? "listbox" : "region"} aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
-                <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
+                <div className={styles.hint}><strong>Busca en toda la app</strong><span>{isDocumentsDeferred()
+                  ? "Prueba con un comercio, una categoría o el nombre de una sección."
+                  : "Prueba con un comercio, una factura, una categoría o el nombre de una sección."}</span></div>
               ) : searching ? (
                 <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
                 <div className={styles.hint}>
-                  <strong>{requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
-                  <span>{requestTimedOut ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos." : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
+                  <strong>{sessionRequired ? "Necesitas iniciar sesión" : requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
+                  <span>{sessionRequired
+                    ? "La sesión ha caducado o no tienes acceso a este espacio. Inicia sesión y reintenta. No se ha mostrado información bancaria sin verificar."
+                    : requestTimedOut
+                      ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos."
+                      : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
                   <button type="button" className={styles.retryButton} onClick={() => { setRetryCount((current) => current + 1); inputRef.current?.focus(); }}>
                     Reintentar búsqueda
                   </button>

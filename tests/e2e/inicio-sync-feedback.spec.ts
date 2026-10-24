@@ -1,4 +1,6 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { hasRecentSourceSyncEvidence } from "../../src/application/source-sync-incidents";
 
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
@@ -62,7 +64,7 @@ const transactions = {
   ],
 };
 
-type SyncMode = "missing-after-sync" | "duplicates-persisted";
+type SyncMode = "missing-after-sync" | "duplicates-persisted" | "stale-success";
 
 async function mockInicio(page: Page, mode: SyncMode) {
   let posts = 0;
@@ -70,12 +72,17 @@ async function mockInicio(page: Page, mode: SyncMode) {
     const request = route.request();
     const url = new URL(request.url());
 
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(10));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       if (request.method() === "POST") {
         posts += 1;
         await json(route, mode === "missing-after-sync"
-          ? { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 1, duplicatesDetected: 0, warningsCount: 1 }
-          : { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 0, duplicatesDetected: 2, warningsCount: 0 });
+          ? { ...syntheticSourceSyncReceipt(10), rowsMissing: 1, warningsCount: 1 }
+          : { ...syntheticSourceSyncReceipt(10), duplicatesDetected: 2 });
         return;
       }
 
@@ -98,6 +105,19 @@ async function mockInicio(page: Page, mode: SyncMode) {
           errorMessage: null,
         },
         cursors: [],
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/analysis/source-freshness" && mode === "stale-success") {
+      await json(route, {
+        available: true,
+        earliestMovementDate: "2018-11-22",
+        latestMovementDate: "2026-09-11",
+        sync: { status: "success", finishedAt: "2026-09-15T09:04:08.000Z",
+          rowsSeen: 10, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
       });
       return;
     }
@@ -162,4 +182,25 @@ test("Inicio conserva tras recarga los posibles duplicados de la última sincron
   await expect(sourceHealth).toContainText("2 posibles duplicados detectados. Revisa la fuente.");
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+});
+
+test("REC-HOME-SYNC-015 · Inicio no certifica como actuales datos importados hace semanas", async ({ page }) => {
+  const run = {
+    status: "success", finishedAt: "2026-10-16T10:00:00.000Z",
+    rowsSeen: 10, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+  };
+  expect(hasRecentSourceSyncEvidence(run, Date.parse("2026-10-17T10:00:00.000Z"))).toBe(true);
+  expect(hasRecentSourceSyncEvidence(run, Date.parse("2026-10-19T10:00:01.000Z"))).toBe(false);
+  expect(hasRecentSourceSyncEvidence(run, Date.parse("2026-10-15T10:00:00.000Z"))).toBe(false);
+  const postCount = await mockInicio(page, "stale-success");
+  await page.goto("/");
+  const section = page.locator('section[aria-label="Estado de los datos bancarios"]');
+  await expect(section.getByText("Actualización bancaria pendiente", { exact: true })).toBeVisible();
+  await expect(section).toContainText("Última sincronización");
+  // A stale source check does not verify the date of bank movements.
+  await expect(section).toContainText("La fecha de los movimientos aún no está verificada");
+  await expect(section).not.toContainText("Movimientos registrados hasta");
+  await expect(section).not.toContainText("Datos bancarios actualizados");
+  await expect(section.getByRole("button", { name: "Actualizar datos" })).toBeEnabled();
+  expect(postCount()).toBe(0); // Merely displaying a warning never mutates the official source.
 });

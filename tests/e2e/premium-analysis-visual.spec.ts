@@ -5,6 +5,7 @@ import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
 } from "../../src/application/analysis/analysis-engine";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 
 const WIDTHS = [360, 430, 768, 1024, 1280, 1440] as const;
 
@@ -152,6 +153,75 @@ const SNAPSHOT = buildAnalysisSnapshot({
   partial: true,
   partialMonthStart: "2026-09-01",
   gateway: GATEWAY,
+});
+
+// REC-CHART-021 · Visible drilldowns from the actual chart data use only the
+// observed day or the known merchant identity. Synthetic data; no bank writes.
+test("REC-CHART-021 · Análisis enlaza días observados y comercios a los movimientos correctos", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+
+  const daily = page.getByText("Ver datos diarios", { exact: true });
+  await daily.click();
+  await expect(daily.locator("..").getByRole("link", { name: "1 sept", exact: true }))
+    .toHaveAttribute("href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-01&kind=expense");
+  const noActivity = daily.locator("..").getByRole("row", { name: /^2 sept / });
+  await expect(noActivity).toBeVisible();
+  await expect(noActivity.getByRole("link")).toHaveCount(0);
+
+  const merchants = page.getByText("Ver datos de comercios", { exact: true });
+  await merchants.click();
+  const merchant = merchants.locator("..").getByRole("link", { name: "Mercado Central", exact: true });
+  await expect(merchant).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=22222222-2222-4222-8222-222222222222",
+  );
+  await expect(merchants.locator("..").getByRole("link", { name: "Gasolinera", exact: true }))
+    .toHaveAttribute("href", /merchantId=44444444-4444-4444-8444-444444444444$/);
+  // Tappable and keyboard-accessible in both themes, without tiny SVG dots.
+  await expect(merchant).toBeVisible();
+  expect(await merchant.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await merchant.focus();
+  await expect(merchant).toBeFocused();
+});
+
+// REC-VIS-006 · Based on the retained 360px merchant chart screenshot:
+// ordinary merchant names must not be shortened when the SVG has room.
+test("REC-VIS-006 · el gráfico móvil conserva Mercado Central sin cortar el nombre", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.route("**/api/analysis**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) }));
+  await page.route("**/api/analysis/source-freshness", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
+    }) }));
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+  const plot = page.getByRole("region", { name: "Gráfica de comercios" }).locator("svg");
+  await expect(plot).toBeVisible();
+  await expect.poll(() => plot.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width)).toBeLessThan(480);
+  const label = plot.locator("text").filter({ hasText: /^Mercado Central$/ });
+  await expect(label).toHaveText("Mercado Central");
+  const bounds = await label.evaluate((node) => {
+    const box = (node as SVGGraphicsElement).getBBox();
+    const root = node.ownerSVGElement!;
+    return { left: box.x, right: box.x + box.width, total: root.viewBox.baseVal.width };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.total);
 });
 
 for (const width of WIDTHS) {
@@ -623,8 +693,9 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
     ...source,
     id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
     name: `Categoría de prueba ${index + 1}`,
-    href: `/transactions?categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
   }));
+  expect(isAnalysisSnapshot(expandedSnapshot), "AUD-E2E-ANA-001 category fixture must pass the production snapshot contract").toBe(true);
   await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
   await page.route("**/api/analysis/source-freshness", (route) =>

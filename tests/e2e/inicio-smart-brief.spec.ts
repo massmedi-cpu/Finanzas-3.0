@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const HOME_VISIT_KEY = "financial-app:home-last-visit:v1";
@@ -90,6 +91,20 @@ async function mockInicio(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    // The source exposes only its last imported date. Historical nonzero
+    // aggregates remain partial; earlier empty months remain unverified.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-16", sync: null,
+      });
+      return;
+    }
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(12));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
@@ -319,22 +334,7 @@ test("QA-08 · Saldo se invalida al Actualizar datos aunque el periodo no cambie
       return;
     }
     refreshed = true;
-    await json(route, {
-      run: {
-        id: "run-refresh",
-        status: "success",
-        startedAt: "2026-09-16T06:10:00.000Z",
-        finishedAt: "2026-09-16T06:10:05.000Z",
-        rowsSeen: 12,
-        rowsInserted: 0,
-        rowsRevised: 0,
-        rowsSkipped: 12,
-        rowsFailed: 0,
-        errorCode: null,
-        errorMessage: null,
-      },
-      cursors: [],
-    });
+    await json(route, syntheticSourceSyncReceipt(12));
   });
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
@@ -964,6 +964,16 @@ test("REC-HOME-003 · importes históricos no cero siguen visibles pero no se ce
 
 test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de meses observados", async ({ page }) => {
   await mockInicio(page);
+  // This regression deliberately simulates a bank source whose most recent
+  // transaction was in July, rather than an inconsistent September dashboard.
+  // Make the provenance endpoint match the activity snapshot so July remains
+  // observed and August/September are genuinely outside bank coverage.
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true, earliestMovementDate: null,
+      latestMovementDate: "2026-07-31", sync: null,
+    });
+  });
   await page.route("**/api/dashboard?**", async (route) => {
     const scope = new URL(route.request().url()).searchParams.get("scope");
     if (scope === "activity") {

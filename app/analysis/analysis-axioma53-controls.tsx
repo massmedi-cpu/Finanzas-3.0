@@ -3,6 +3,8 @@
 import { useMemo, useState, type FormEvent } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import type { AnalysisSelectionInput } from "../../src/application/analysis/analysis-loader";
+import { SpanishDateInput } from "../../src/design/spanish-date-input";
+import { SpanishMonthInput } from "../../src/design/spanish-month-input";
 import styles from "./analysis-axioma53-controls.module.css";
 
 type PeriodMode = "month" | "year" | "custom";
@@ -229,7 +231,7 @@ export default function AnalysisAxioma53Controls({
               </div>
               <label className={styles.control}>
                 <span>Mes para análisis avanzado</span>
-                <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
+                <SpanishMonthInput label="Mes para análisis avanzado" name="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
               </label>
             </div>
           )}
@@ -243,11 +245,11 @@ export default function AnalysisAxioma53Controls({
             <div className={styles.datePair}>
               <label className={styles.control}>
                 <span>Desde</span>
-                <input name="dateFrom" type="date" value={dateFrom} max={dateTo || today} onChange={(event) => setDateFrom(event.target.value)} required />
+                <SpanishDateInput label="Desde" name="dateFrom" value={dateFrom} max={dateTo || today} onChange={(event) => setDateFrom(event.target.value)} required />
               </label>
               <label className={styles.control}>
                 <span>Hasta</span>
-                <input name="dateTo" type="date" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} required />
+                <SpanishDateInput label="Hasta" name="dateTo" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} required />
               </label>
             </div>
           )}
@@ -267,11 +269,11 @@ export default function AnalysisAxioma53Controls({
             <div className={styles.datePair}>
               <label className={styles.control}>
                 <span>Desde</span>
-                <input name="compareDateFrom" type="date" value={compareDateFrom} max={compareDateTo || customComparisonMax} onChange={(event) => setCompareDateFrom(event.target.value)} required />
+                <SpanishDateInput label="Desde" name="compareDateFrom" value={compareDateFrom} max={compareDateTo || customComparisonMax} onChange={(event) => setCompareDateFrom(event.target.value)} required />
               </label>
               <label className={styles.control}>
                 <span>Hasta</span>
-                <input name="compareDateTo" type="date" value={compareDateTo} min={compareDateFrom} max={customComparisonMax} onChange={(event) => setCompareDateTo(event.target.value)} required />
+                <SpanishDateInput label="Hasta" name="compareDateTo" value={compareDateTo} min={compareDateFrom} max={customComparisonMax} onChange={(event) => setCompareDateTo(event.target.value)} required />
               </label>
             </div>
           )}

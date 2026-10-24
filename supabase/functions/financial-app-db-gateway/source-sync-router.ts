@@ -1,3 +1,4 @@
+import { prepareStableReplayProofRows } from "../../../src/application/source-stable-replay-proof.ts";
 import { handleDataExportAction } from "./data-export.ts";
 import { handleWorkspaceDeletionImpactAction } from "./workspace-deletion-impact.ts";
 import { handleWorkspaceDeletionIntentAction } from "./workspace-deletion-intent.ts";
@@ -55,30 +56,11 @@ function expectedLastRowBySheet(observations: any[]) {
 async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response | null> {
   const batch = payload?.batch;
   if (!stableReplayCandidate(batch)) return null;
-
-  const sourceRowIdentities: string[] = [];
-  const sourceFingerprints: string[] = [];
-  for (const observation of batch.observations) {
-    if (
-      typeof observation?.sourceRowIdentity !== "string" ||
-      !observation.sourceRowIdentity.trim() ||
-      typeof observation?.sourceFingerprint !== "string" ||
-      !/^[0-9a-f]{64}$/.test(observation.sourceFingerprint)
-    ) {
-      return null;
-    }
-    sourceRowIdentities.push(observation.sourceRowIdentity);
-    sourceFingerprints.push(observation.sourceFingerprint);
-  }
-  if (new Set(sourceRowIdentities).size !== sourceRowIdentities.length) return null;
-
-  const accountExternalKeys = batch.accounts.map((account: any) => account?.accountExternalKey);
-  if (
-    accountExternalKeys.some((value: unknown) => typeof value !== "string" || !value.trim()) ||
-    new Set(accountExternalKeys).size !== accountExternalKeys.length
-  ) {
-    return null;
-  }
+  // Never short-circuit the canonical validator with malformed or oversized
+  // observations. Its private date/amount/account evidence stays server-side.
+  const proofRows = prepareStableReplayProofRows(batch);
+  if (!proofRows) return null;
+  const accountExternalKeys = batch.accounts.map((account: any) => account.accountExternalKey);
 
   const lastRowBySheet = expectedLastRowBySheet(batch.observations);
   if (!lastRowBySheet?.size) return null;
@@ -102,10 +84,20 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
     `;
     if (!previousRows[0]?.id) return;
 
+    // REC-SYNC-359: one SQL snapshot proves full cardinality and all
+    // persistence metadata, not only the subset whose hashes happened to match.
+    // An extra stored/orphan row invalidates this shortcut.
     const snapshotRows = await tx`
-      select count(*)::int as matched
-      from unnest(${sourceRowIdentities}::text[],${sourceFingerprints}::text[])
-        as expected(source_row_identity,source_fingerprint)
+      select
+        count(*)::int as matched,
+        (select count(*)::int from financial_app.transaction_source_records
+         where source_file_id=${batch.sourceFileId}) as persisted
+      from jsonb_to_recordset(${JSON.stringify(proofRows)}::jsonb)
+        as expected(
+          source_row_identity text, source_fingerprint text,
+          account_external_key text, bank_date date,
+          amount_cents bigint, balance_after_cents bigint
+        )
       join financial_app.transactions t
         on t.source_row_identity=expected.source_row_identity
       join financial_app.transaction_source_records sr
@@ -113,8 +105,13 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
        and sr.source_file_id=${batch.sourceFileId}
        and sr.source_row_identity=expected.source_row_identity
        and sr.source_fingerprint=expected.source_fingerprint
+       and sr.account_external_key=expected.account_external_key
+       and sr.bank_date=expected.bank_date
+       and sr.amount_cents=expected.amount_cents
+       and sr.balance_after_cents is not distinct from expected.balance_after_cents
     `;
-    if (snapshotRows[0]?.matched !== batch.observations.length) return null;
+    if (snapshotRows[0]?.matched !== proofRows.length
+      || snapshotRows[0]?.persisted !== proofRows.length) return null;
 
     const mappingRows = await tx`
       select account_external_key

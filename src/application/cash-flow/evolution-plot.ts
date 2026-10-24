@@ -68,3 +68,14 @@ export function cashFlowDayPositions(points: CashFlowEvolutionPoint[]): number[]
   }
   return points.map((_, index) => points.length <= 1 ? 0.5 : index / (points.length - 1));
 }
+
+/** Preserve the meaning of a selected calendar day when the series is refreshed.
+ * If that day no longer belongs to the observed period, show the latest day.
+ * This avoids silently pointing the slider to a different date at the same index.
+ */
+export function cashFlowSelectedDayIndex(points: CashFlowEvolutionPoint[], selectedDate: string | null): number {
+  const latest = Math.max(0, points.length - 1);
+  if (selectedDate === null) return latest;
+  const matched = points.findIndex((point) => point.date === selectedDate);
+  return matched >= 0 ? matched : latest;
+}

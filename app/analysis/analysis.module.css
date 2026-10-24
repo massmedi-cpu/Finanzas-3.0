@@ -1,7 +1,9 @@
 .shell {
   width: min(var(--content-max), 100%);
   min-width: 0;
-  min-height: 100vh;
+  /* Content-sized: on a failed read the advanced controls must follow the error,
+     not appear after an artificial viewport-height blank region. */
+  min-height: 0;
   margin: 0 auto;
   padding: clamp(0.9rem, 1.7vw, 1.6rem);
   display: flex;
@@ -74,7 +76,7 @@
 .filters {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(17rem, 1.3fr) minmax(8.5rem, 0.56fr) minmax(10.5rem, 0.78fr) auto;
+  grid-template-columns: minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
   align-items: end;
   gap: 0.5rem;
 }
@@ -111,8 +113,10 @@
 }
 
 .rangeSelector {
+  grid-column: 1 / -1;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 0.14rem;
   padding: 0.16rem;
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 14%, transparent);
@@ -122,8 +126,9 @@
 
 .rangeButton,
 .rangeActive {
-  flex: 1 1 0;
-  min-width: 0;
+  /* Range names must never overlap, even inside a narrow desktop grid. */
+  flex: 1 1 5.3rem;
+  min-width: max-content;
   padding: 0.48rem 0.58rem;
   border: 1px solid transparent;
   border-radius: 0.52rem;
@@ -500,9 +505,14 @@
 .skeletonGrid span { min-height: 10rem; }
 @keyframes skeletonShift { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
 
+/* Global navigation reduces the content width at the canonical wide breakpoint.
+   Keep analysis title and filters stacked through the governed 1440px transition. */
+@media (max-width: 90rem) {
+  .header { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+}
+
 @media (max-width: 80rem) {
   .header { grid-template-columns: 1fr; align-items: stretch; }
-  .filters { grid-template-columns: minmax(0, 1.35fr) minmax(8rem, 0.58fr) minmax(10rem, 0.78fr) auto; }
   .quickRead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quickReadIntro { grid-column: 1 / -1; }
 }

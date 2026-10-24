@@ -1,4 +1,5 @@
 import type { ProductIconName } from "../src/design/product-icons";
+import { isReleaseHrefAvailable } from "../src/application/release-document-scope";
 
 export type NavigationItem = {
   href: string;
@@ -7,7 +8,7 @@ export type NavigationItem = {
   icon: ProductIconName;
 };
 
-export const navigationItems = [
+export const navigationItems = ([
   { href: "/", label: "Inicio", icon: "home" },
   { href: "/cash-flow", label: "Cash Flow", icon: "future" },
   { href: "/onboarding", label: "Primeros pasos", icon: "onboarding" },
@@ -22,7 +23,18 @@ export const navigationItems = [
   { href: "/forecast", label: "Previsión", icon: "forecast" },
   { href: "/documents", label: "Documentos", icon: "documents" },
   { href: "/configuration", label: "Configuración", icon: "settings" },
-] satisfies ReadonlyArray<NavigationItem>;
+] satisfies ReadonlyArray<NavigationItem>).filter((item) => isReleaseHrefAvailable(item.href));
+
+// Canonical configuration destinations; compatibility aliases remain redirects.
+export const configurationRoutes = [
+  "/configuration/appearance",
+  "/configuration/data",
+  "/configuration/merchants",
+  "/configuration/preferences",
+  "/configuration/rules",
+  "/configuration/source",
+  "/configuration/source/diagnostics",
+] as const;
 
 export function isNavigationActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";

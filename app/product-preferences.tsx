@@ -1,5 +1,6 @@
 "use client";
 
+import { synchronizeOfficialSource } from "../src/application/source-sync-client";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type BudgetFocus = "all" | "attention";
@@ -98,10 +99,8 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
     if (window.sessionStorage.getItem(SESSION_SYNC_KEY) === "true") return;
     syncTriggered.current = true;
     window.sessionStorage.setItem(SESSION_SYNC_KEY, "true");
-    void fetch("/api/source/google/sync", { method: "POST", cache: "no-store" })
-      .then((response) => {
-        if (response.ok) setLastAutomaticSyncAt(new Date().toISOString());
-      })
+    void synchronizeOfficialSource()
+      .then(() => setLastAutomaticSyncAt(new Date().toISOString()))
       .catch(() => undefined);
   }, [preferences.syncOnOpen, ready]);
 

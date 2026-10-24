@@ -79,8 +79,10 @@
 .primaryButton {
   padding: 13px 18px;
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 45%, transparent);
-  color: var(--color-text);
-  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-bright));
+  /* REC-VIS-251: use the accessible on-primary token, not the theme body text.
+     Both themes keep at least 4.5:1 contrast on their primary surface. */
+  color: var(--color-on-primary);
+  background: var(--color-primary);
   box-shadow: 0 10px 25px color-mix(in srgb, var(--color-primary-bright) 22%, transparent);
 }
 

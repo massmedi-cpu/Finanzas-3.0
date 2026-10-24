@@ -166,13 +166,13 @@
 
 .warning {
   border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
-  color: color-mix(in srgb, var(--color-warning) 78%, white);
+  color: var(--text-warning-soft);
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .notice {
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 35%, transparent);
-  color: color-mix(in srgb, var(--color-primary-bright) 48%, white);
+  color: var(--color-primary-bright);
   background: color-mix(in srgb, var(--color-primary-bright) 8%, transparent);
 }
 

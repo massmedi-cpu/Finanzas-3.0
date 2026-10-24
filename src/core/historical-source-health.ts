@@ -12,6 +12,7 @@ function createBaselineSummary(): OfficialSourcePreflightSummary {
     sourceFileId: "historical-health-source",
     sourceRevision: "historical-health-revision",
     schemaFingerprint: "b".repeat(64),
+    snapshotFingerprint: "c".repeat(64),
     totalAuthoritativeRows: baseline.minimumTotalAuthoritativeRows,
     accounts: baseline.accounts.map((account) => ({
       accountExternalKey: account.accountName,
@@ -23,6 +24,7 @@ function createBaselineSummary(): OfficialSourcePreflightSummary {
       newestBankDate: null,
       oldestBankDate: null,
       latestBalanceAfterCents: null,
+      balanceContinuity: { comparablePairs: 0, consistentPairs: 0, discontinuousPairs: 0, unverifiablePairs: account.minimumAuthoritativeRows - 1 },
     })),
     cursors: baseline.cursors.map((cursor, index) => ({
       sourceSheetId: `historical-health-sheet-${index + 1}`,

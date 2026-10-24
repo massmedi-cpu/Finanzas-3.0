@@ -13,6 +13,7 @@ import {
   resolveGoogleSourceConnection,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
 import { GoogleServiceAccountError } from "../../../../../src/infrastructure/google/google-service-account";
+import { requireVerifiedSourceWorkspace } from "../../../../../src/infrastructure/auth/source-metadata-access";
 import { GoogleOfficialSourceReadError } from "../../../../../src/infrastructure/google/official-bank-source-reader";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,11 @@ export const dynamic = "force-dynamic";
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 export async function POST() {
+  // A successful HTTP read-only preflight still exposes financial balances.
+  // Verify Auth and workspace membership before reading any Google workbook.
+  const accessDenied = await requireVerifiedSourceWorkspace();
+  if (accessDenied) return accessDenied;
+
   try {
     const connection = await resolveGoogleSourceConnection();
     if (!connection) {

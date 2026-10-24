@@ -7,10 +7,14 @@ import {
   PersistenceGatewayError,
   callPersistenceGateway,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { requireSourceSession, sourceWorkspaceAuthError } from "../../../../src/infrastructure/auth/source-metadata-access";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const missing = await requireSourceSession();
+  if (missing) return missing;
+
   try {
     const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
     assertSourceSyncRuntimeCapabilities(capabilities);
@@ -20,6 +24,9 @@ export async function GET() {
       { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
     );
   } catch (error) {
+    const denied = sourceWorkspaceAuthError(error);
+    if (denied) return denied;
+
     const incompatible =
       error instanceof SourceSyncRuntimeCompatibilityError ||
       (error instanceof PersistenceGatewayError && error.code === "unsupported_action");
