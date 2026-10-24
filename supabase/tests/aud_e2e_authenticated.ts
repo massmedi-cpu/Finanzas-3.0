@@ -17,6 +17,9 @@ const client = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { a
 const database = () => postgres(dbUrl, { max: 1, prepare: false, transform: { undefined: null } });
 const workspaceA = "a0e20000-0000-4000-8000-000000000001";
 const workspaceB = "a0e20000-0000-4000-8000-000000000002";
+// Deliberately isolated role=member fixture: it cannot share the owner's
+// workspace because this release is a *single-owner personal* application.
+const workspaceC = "a0e20000-0000-4000-8000-000000000005";
 const categoryA = "a0e20000-0000-4000-8000-000000000003";
 const categoryB = "a0e20000-0000-4000-8000-000000000004";
 
@@ -55,8 +58,8 @@ if (Deno.args[0] === "prepare") {
   const sql = database();
   const fixtureIds: Record<string, string> = { categoryA, categoryB };
   try {
-    await sql`insert into financial_app.workspaces(id,name) values (${workspaceA}::uuid,'AUD authenticated A'),(${workspaceB}::uuid,'AUD authenticated B')`;
-    for (const [account, workspace, role] of [[owner, workspaceA, "owner"], [member, workspaceA, "member"], [foreign, workspaceB, "owner"]] as const) {
+    await sql`insert into financial_app.workspaces(id,name) values (${workspaceA}::uuid,'AUD authenticated A'),(${workspaceB}::uuid,'AUD authenticated B'),(${workspaceC}::uuid,'AUD unauthorized member only')`;
+    for (const [account, workspace, role] of [[owner, workspaceA, "owner"], [member, workspaceC, "member"], [foreign, workspaceB, "owner"]] as const) {
       await sql`insert into financial_app.authorized_users(user_id,active) values (${account.id}::uuid,true)`;
       await sql`insert into financial_app.workspace_memberships(workspace_id,user_id,role,active,is_default) values (${workspace}::uuid,${account.id}::uuid,${role},true,true)`;
     }
@@ -107,7 +110,7 @@ if (Deno.args[0] === "prepare") {
   // Serial Playwright workers ensure that the context is amended before the
   // full HTTP suite and before the final cross-user SQL verification.
   await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, fixtureIds }), { mode: 0o600 });
-  console.log("AUD_AUTH|stage=prepared|users=4|workspaces=2|real_auth=true");
+  console.log("AUD_AUTH|stage=prepared|users=4|workspaces=3|single_owner_per_working_workspace=true|real_auth=true");
 } else if (Deno.args[0] === "verify") {
   const c = JSON.parse(await Deno.readTextFile(contextPath));
   // The app logout test revokes actual sessions. Authenticate afresh for this phase.
@@ -230,5 +233,20 @@ if (Deno.args[0] === "prepare") {
     const persisted = await finalSql`select raw_result from financial_app.document_ocr_runs where document_id=${httpEvidence.id}::uuid`;
     assert(persisted.length === 1 && isDeepStrictEqual(persisted[0].raw_result, httpEvidence.raw), 'next_http_ocr_not_persisted_exactly');
   } finally { await finalSql.end(); }
-  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
+  // A second active membership must lock the owner's workspace before any
+  // business role/GUC is granted; restoring a single owner must restore access.
+  // All fixtures are local disposable PG17 + GoTrue; never run against cloud.
+  const memberGateSql = database();
+  try {
+    await memberGateSql`insert into financial_app.workspace_memberships(
+      workspace_id,user_id,role,active,is_default
+    ) values (${workspaceA}::uuid,${c.member.id}::uuid,'member',true,false)`;
+    const locked = await operation(c.owner.token, "document.detail", { id });
+    assert(locked.status === 403, "multi_member_owner_still_allowed");
+    await memberGateSql`delete from financial_app.workspace_memberships
+      where workspace_id=${workspaceA}::uuid and user_id=${c.member.id}::uuid`;
+    const recovered = await operation(c.owner.token, "document.detail", { id });
+    assert(recovered.status === 200, "single_owner_access_not_recovered");
+  } finally { await memberGateSql.end(); }
+  console.log("AUD_AUTH|stage=verified|owner_only=true|member_denied=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
 } else { throw new Error("expected_prepare_or_verify"); }
