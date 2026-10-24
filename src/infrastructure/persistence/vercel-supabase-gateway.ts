@@ -7,7 +7,7 @@ import { publicRemoteGatewayCode } from "../http/gateway-public-error";
 const SUPABASE_GATEWAY_URL = resolveGatewayTarget(
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway",
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway-candidate-619",
-  process.env,
+  { VERCEL_ENV: process.env.VERCEL_ENV, VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF },
 );
 const SUPABASE_GATEWAY_REGION = "eu-west-3";
 export const PERSISTENCE_GATEWAY_GZIP_THRESHOLD_BYTES = 64 * 1024;
