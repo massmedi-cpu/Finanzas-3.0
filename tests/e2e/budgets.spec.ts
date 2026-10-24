@@ -1165,7 +1165,12 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
   });
 
   await page.goto("/budgets?month=2026-07");
-  await expect(page.locator('input[type="month"]')).toHaveValue("2026-07");
+  // REC-UX-412: the responsive shell may render a second month input outside
+  // the main region. Assert ONE product control and its correct value instead
+  // of an ambiguous whole-page locator (both existing inputs had 2026-07).
+  const budgetMonth = page.locator('main input[type="month"]');
+  await expect(budgetMonth).toHaveCount(1);
+  await expect(budgetMonth).toHaveValue("2026-07");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
   expect(requestedMonth).toBe("2026-07");
 });
