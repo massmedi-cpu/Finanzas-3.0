@@ -128,6 +128,7 @@ jobs:
         env:
           PREVIEW_URL: ${{ steps.preview.outputs.url }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          REQUIRE_APP_AUTH_ENFORCED: ${{ github.event.pull_request.number == 619 && github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
@@ -136,6 +137,7 @@ jobs:
           const sha = process.env.EXPECTED_SHA || '';
           const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
           const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+          const requireAppAuth = process.env.REQUIRE_APP_AUTH_ENFORCED === 'true';
           if (!/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(url) ||
               !/^[0-9a-f]{40}$/.test(sha) || !token) {
             throw new Error('preview_or_oidc_missing');
@@ -183,6 +185,19 @@ jobs:
             }
             console.log('SOURCE_BOUNDARY|documents=' + features.documents +
               '|document_ocr=' + features.documentOcr + '|drive_sync=' + features.documentDriveSync);
+            // REC-REL-438: the release candidate preview additionally requires
+            // app-level owner authentication. This is separate from Vercel's
+            // deployment protection bypass, which must never grant app access.
+            if (requireAppAuth) {
+              const { response, body } = await jsonGet('/api/configuration');
+              if (response.status !== 401 || body.error !== 'authentication_required' || body.code !== null) {
+                throw new Error('candidate_preview_owner_auth_not_enforced');
+              }
+              if (!response.headers.get('cache-control')?.toLowerCase().includes('no-store')) {
+                throw new Error('candidate_preview_auth_response_cacheable');
+              }
+              console.log('SOURCE_BOUNDARY|candidate_owner_auth=enforced');
+            }
             const paths = [
               '/api/source/google/status',
               '/api/source/google/sync',
@@ -221,11 +236,16 @@ jobs:
               const privateHistory = path.startsWith('/api/documents/ocr-review?');
               const deferred = !features.documents ||
                 (path.startsWith('/api/documents/ocr?') && !features.documentOcr);
-              const denied = privateHistory
-                ? response.status === 401 && body.error === 'authentication_required'
-                : deferred
-                  ? response.status === 404 && body.error === 'feature_deferred' && body.code === null
-                  : response.status === 403 && body.code === 'workspace_context_required';
+              // When the outer app-auth proxy is enforced, it must deny
+              // anonymous requests before a deferred feature or Edge gateway.
+              // Non-release previews retain their legacy read-only contract.
+              const denied = requireAppAuth
+                ? response.status === 401 && body.error === 'authentication_required' && body.code === null
+                : privateHistory
+                  ? response.status === 401 && body.error === 'authentication_required'
+                  : deferred
+                    ? response.status === 404 && body.error === 'feature_deferred' && body.code === null
+                    : response.status === 403 && body.code === 'workspace_context_required';
               if (!denied) {
                 // Diagnostic metadata only: never log a response body.
                 console.log('DOCUMENT_BOUNDARY|unexpected_http=' + response.status +

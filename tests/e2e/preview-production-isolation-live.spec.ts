@@ -12,11 +12,16 @@ test("PRE-003 protected preview denies workspace reads without session (GET-only
   // occurs before obtaining the PostgreSQL connection.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const response = await request.get("/api/configuration");
-    expect(response.status()).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      error: "persistence_failed",
-      code: "workspace_context_required",
-    });
+    const body = await response.json();
+    // Older protected previews deny at the workspace gateway; the release
+    // candidate denies earlier at app auth. Neither may leak private data.
+    if (response.status() === 401) {
+      expect(body).toEqual({ error: "authentication_required", code: null });
+    } else {
+      expect(response.status()).toBe(403);
+      expect(body).toEqual({ error: "persistence_failed", code: "workspace_context_required" });
+    }
+    expect(response.headers()["cache-control"]).toContain("no-store");
   }
 });
 
