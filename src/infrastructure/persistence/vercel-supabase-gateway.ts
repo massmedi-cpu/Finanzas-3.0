@@ -1,10 +1,14 @@
 import { gzipSync } from "node:zlib";
+import { resolveGatewayTarget } from "./release-gateway-target";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { resolveWorkspaceSession } from "../auth/workspace-session";
 import { publicRemoteGatewayCode } from "../http/gateway-public-error";
 
-const SUPABASE_GATEWAY_URL =
-  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
+const SUPABASE_GATEWAY_URL = resolveGatewayTarget(
+  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway",
+  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway-candidate-619",
+  process.env,
+);
 const SUPABASE_GATEWAY_REGION = "eu-west-3";
 export const PERSISTENCE_GATEWAY_GZIP_THRESHOLD_BYTES = 64 * 1024;
 

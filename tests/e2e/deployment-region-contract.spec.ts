@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { resolveGatewayTarget } from "../../src/infrastructure/persistence/release-gateway-target";
 import { expect, test } from "@playwright/test";
 
 // These are configuration contracts, not substitutes for real latency measurements.
@@ -27,4 +28,37 @@ test("REC-PERF-REGION-002 · region change keeps the protected production alias 
   };
   expect(vercel.alias).toEqual(["financialapp-home.vercel.app"]);
   expect(vercel.regions).toHaveLength(1);
+});
+
+test("REC-REL-424 · release preview selects only its verified canary, never changes the production target", () => {
+  const production = "https://synthetic.example/functions/v1/financial-app-db-gateway";
+  const canary = "https://synthetic.example/functions/v1/financial-app-db-gateway-candidate-619";
+  const branch = "chat/integrated-b-e-c-visual-20261010";
+
+  expect(resolveGatewayTarget(production, canary, {
+    VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: branch,
+  })).toBe(canary);
+
+  for (const environment of [
+    { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: branch },
+    { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "main" },
+    { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "chat/other-branch" },
+    { VERCEL_ENV: "development", VERCEL_GIT_COMMIT_REF: branch },
+    { VERCEL_ENV: "preview" },
+    {},
+  ]) {
+    expect(resolveGatewayTarget(production, canary, environment)).toBe(production);
+  }
+
+  const gateway = readFileSync(join(process.cwd(),
+    "src/infrastructure/persistence/vercel-supabase-gateway.ts"), "utf8");
+  expect(gateway).toContain("const SUPABASE_GATEWAY_URL = resolveGatewayTarget(");
+  expect(gateway).toContain("/financial-app-db-gateway-candidate-619");
+  expect(gateway).toContain('"https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway"');
+
+  // A preview, even when pointed at the canary, is forbidden to write production data.
+  const edge = readFileSync(join(process.cwd(),
+    "supabase/functions/financial-app-db-gateway/index.ts"), "utf8");
+  expect(edge).toContain('identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)');
+  expect(edge).toContain('return json({ error: "preview_production_write_forbidden" }, 403)');
 });
