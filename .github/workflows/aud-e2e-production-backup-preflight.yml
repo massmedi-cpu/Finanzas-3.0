@@ -2,14 +2,18 @@ name: AUD E2E Production Backup Upgrade
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'chat/twenty-one-routes-responsive-shell-20261010']
     paths:
       - 'supabase/migrations/**'
       - 'supabase/tests/aud_e2e_production_upgrade_rollback.sql'
+      - 'supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql'
+      - 'supabase/tests/ap1_private_document_original_immutable.sql'
       - 'supabase/tests/aud_e2e_budget_balance.sql'
       - 'supabase/tests/aud_e2e_document_designation.sql'
       - 'supabase/tests/fixtures/production-10.0.102-permissions-20261009.json'
       - 'scripts/aud-e2e-production-backup-preflight.sh'
+      - 'scripts/rec-ap8-restored-backup-rehearsal.sh'
+      - 'scripts/verify-ap8-restored-acl-matrix.mjs'
       - 'scripts/render-aud-production-permissions.mjs'
       - 'scripts/restore-verify-production-backup-v2.sh'
       - 'scripts/protect-backup-artifact-v2.sh'
@@ -20,7 +24,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: aud-production-backup-upgrade-561
+  # PR #619 and PR #620 share one head branch but must never cancel each other.
+  group: aud-production-backup-upgrade-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
@@ -126,3 +131,124 @@ jobs:
           rm -rf -- "$GITHUB_WORKSPACE/.aud-private-production-backup"
       # No database passwords/service keys, live database route, Drive requests,
       # financial rows, signed URLs, plaintext artifacts or browser traces.
+
+  restored-production-103-ap8-619:
+    # Safe PR-specific replacement for the legacy PR #561-only rehearsal.
+    if: >-
+      github.event.pull_request.number == 619 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' &&
+      github.event.pull_request.base.ref == 'chat/twenty-one-routes-responsive-shell-20261010'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact PR candidate (without credentials)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Setup Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Validate 32-table gateway ACL matrix and reject malformed SQL before backup download
+        run: node scripts/verify-ap8-restored-acl-matrix.mjs
+      - name: Verify specific immutable backup metadata (no plaintext access)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$AUD_VALIDATION_SHA"
+          node <<'NODE'
+          const base = 'https://api.github.com/repos/massmedi-cpu/Finanzas-3.0';
+          const get = async path => {
+            const r = await fetch(base + path, {headers: {
+              authorization: 'Bearer ' + process.env.GH_TOKEN,
+              accept: 'application/vnd.github+json'
+            }});
+            if (!r.ok) throw new Error('backup_metadata_unavailable');
+            return r.json();
+          };
+          (async () => {
+            const run = await get('/actions/runs/39417500915');
+            const a = await get('/actions/artifacts/12261579268');
+            if (run.event !== 'workflow_dispatch' || run.conclusion !== 'success'
+              || run.path !== '.github/workflows/production-backup-v2.yml'
+              || a.expired || a.workflow_run.id !== run.id
+              || a.name !== 'financial-app-production-v2-6dad59c6c2db3575618a7c91c49c3060a93bbba1'
+              || a.digest !== 'sha256:5376fd4ec6527e078f70c1ea25aef35473170c125180e51ea4b4bc588cc5a5de') {
+              throw new Error('encrypted_backup_identity_or_retention_invalid');
+            }
+            process.stdout.write('REC_AP8_REAL_BACKUP|stage=artifact|status=ok|encrypted=true\n');
+          })().catch(e => {console.error(e.message);process.exitCode=1});
+          NODE
+      - name: Download only the pinned encrypted 10.0.103 backup
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          artifact-ids: '12261579268'
+          run-id: '39417500915'
+          github-token: ${{ github.token }}
+          path: .ap8-private-restored-backup
+      - name: Decrypt only on ephemeral CI runner, never upload plaintext
+        env:
+          FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -ge 32
+          echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
+          cd .ap8-private-restored-backup
+          archive='financial-app-production-v2-6dad59c6c2db3575618a7c91c49c3060a93bbba1.tgz'
+          sha256sum -c "${archive}.gpg.sha256" >/dev/null
+          bash "$GITHUB_WORKSPACE/scripts/protect-backup-artifact-v2.sh" decrypt "${archive}.gpg" "$archive" >/dev/null
+          mkdir -p extracted
+          tar -xzf "$archive" -C extracted
+          echo 'REC_AP8_REAL_BACKUP|stage=decrypt|status=ok|private_runner=true'
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update >/dev/null
+          sudo apt-get install --yes curl ca-certificates gnupg >/dev/null
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc |
+            sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update >/dev/null
+          sudo apt-get install --yes postgresql-client-17 >/dev/null
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Restore authentic backup, upgrade four migrations, rollback and compare all data
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_SOURCE_COMMIT: 6dad59c6c2db3575618a7c91c49c3060a93bbba1
+          EXPECTED_APP_VERSION: 10.0.103
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/rec-ap8-restored-backup-rehearsal.sh \
+            "$PWD/.ap8-private-restored-backup/extracted/production-v2-$EXPECTED_SOURCE_COMMIT"
+      - name: Always destroy private restored database and temporary files
+        if: always()
+        shell: bash
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:5432/postgres' -X -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS financial_app_production_backup_restore_check' >/dev/null 2>&1 || true
+          rm -rf -- "$GITHUB_WORKSPACE/.ap8-private-restored-backup"
+      # Private PDFs, DB credentials, live DB host, private bank rows and
+      # plaintext backups are never passed to CI artifacts or logs.

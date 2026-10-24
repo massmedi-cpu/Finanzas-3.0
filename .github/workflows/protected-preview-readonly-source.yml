@@ -1,0 +1,277 @@
+name: Protected Preview Readonly Source Boundary
+
+on:
+  pull_request:
+    branches:
+      - main
+      - chat/twenty-one-routes-responsive-shell-20261010
+    paths:
+      - '.github/workflows/protected-preview-readonly-source.yml'
+      - 'src/infrastructure/auth/**'
+      - 'app/api/source/google/**'
+      - 'app/api/documents/**'
+      - 'app/api/health/source-runtime/route.ts'
+      - 'app/api/build/route.ts'
+      - 'proxy.ts'
+
+permissions:
+  contents: read
+  deployments: read
+  id-token: write
+
+concurrency:
+  group: source-preview-readonly-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  anonymous-source-boundary:
+    # Never give a forked PR an ID token; don't run mutations or use DB secrets.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Mint ephemeral OIDC token (never print it)
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Find successful Vercel preview for exact candidate SHA
+        id: preview
+        uses: actions/github-script@v8
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const wanted = process.env.EXPECTED_SHA;
+            if (!/^[0-9a-f]{40}$/.test(wanted)) throw new Error('invalid_candidate_sha');
+            const trustedOwnerPR = context.payload.pull_request?.number === 619
+              && context.payload.pull_request?.head?.repo?.full_name === process.env.GITHUB_REPOSITORY
+              && context.payload.pull_request?.head?.ref === 'chat/integrated-b-e-c-visual-20261010'
+              && context.payload.pull_request?.base?.ref === 'chat/twenty-one-routes-responsive-shell-20261010';
+            for (let attempt = 0; attempt < (trustedOwnerPR ? 3 : 36); attempt++) {
+              const list = await github.rest.repos.listDeployments({
+                owner, repo, sha: wanted, per_page: 50,
+              });
+              for (const dep of list.data) {
+                if (dep.environment?.toLowerCase().includes('production')) continue;
+                const states = await github.rest.repos.listDeploymentStatuses({
+                  owner, repo, deployment_id: dep.id, per_page: 30,
+                });
+                const match = states.data.find((s) => {
+                  const url = s.environment_url || s.target_url || '';
+                  return s.state === 'success' &&
+                    /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/i.test(url) &&
+                    !/financialapp-home\.vercel\.app/i.test(url);
+                });
+                if (match) {
+                  const url = (match.environment_url || match.target_url).replace(/\/$/, '');
+                  core.setOutput('url', url);
+                  core.info('Located SHA-bound non-production Vercel preview');
+                  return;
+                }
+              }
+              if (attempt < 35) await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+            // GitHub deployments can be absent for Vercel API-created builds.
+            // The alias below was verified from Vercel's own deployment
+            // aliases (2026-10-22); never accept it for another PR/branch.
+            // The NEXT step strictly requires /api/build SHA === PR HEAD and
+            // environment === preview before testing any protected route.
+            if (trustedOwnerPR) {
+              // REC-PREVIEW-367: an alias can lag behind a freshly pushed SHA.
+              // Poll the protected /api/build over GET ONLY until it serves the
+              // precise PR commit. Never treat an older alias as an eligible run.
+              const alias = 'https://finanzas-3-0-git-chat-integrated-6ec953-massmedi-9832s-projects.vercel.app';
+              const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+              const oidc = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+              if (!bypass && !oidc) {
+                core.setFailed('preview_proof_credentials_unavailable');
+                return;
+              }
+              const headers = {
+                ...(bypass ? { 'x-vercel-protection-bypass': bypass }
+                  : { 'x-vercel-trusted-oidc-idp-token': oidc }),
+                'accept': 'application/json',
+                'cache-control': 'no-store',
+              };
+              for (let attempt = 0; attempt < 24; attempt++) {
+                try {
+                  const response = await fetch(alias + '/api/build', {
+                    method: 'GET', redirect: 'manual', headers,
+                    signal: AbortSignal.timeout(15000),
+                  });
+                  const build = response.status === 200
+                    ? await response.json().catch(() => null) : null;
+                  if (build?.commit === wanted && build?.environment === 'preview') {
+                    core.setOutput('url', alias);
+                    core.info('Source boundary preview matched exact PR SHA and preview environment');
+                    return;
+                  }
+                } catch {
+                  // Protected preview not READY yet; never print tokens or data.
+                }
+                if (attempt < 23) await new Promise((resolve) => setTimeout(resolve, 10000));
+              }
+              core.setFailed('No SHA-matching protected Vercel preview became ready');
+              return;
+            }
+            core.setFailed('No successful Vercel preview deployment for the exact PR commit');
+
+      - name: Prove exact deployed SHA and anonymous GET-only restrictions
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+          REQUIRE_APP_AUTH_ENFORCED: ${{ github.event.pull_request.number == 619 && github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          node <<'NODE'
+          const url = process.env.PREVIEW_URL || '';
+          const sha = process.env.EXPECTED_SHA || '';
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+          const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+          const requireAppAuth = process.env.REQUIRE_APP_AUTH_ENFORCED === 'true';
+          if (!/^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(url) ||
+              !/^[0-9a-f]{40}$/.test(sha) || !token) {
+            throw new Error('preview_or_oidc_missing');
+          }
+          // Use the pre-existing preview automation secret when configured;
+          // fall back to the ephemeral Github OIDC identity otherwise.
+          // Never print either value or copy it into a request URL.
+          const headers = {
+            ...(bypass ? { 'x-vercel-protection-bypass': bypass }
+              : { 'x-vercel-trusted-oidc-idp-token': token }),
+            'accept': 'application/json',
+            'cache-control': 'no-store',
+          };
+          async function jsonGet(path) {
+            const response = await fetch(url + path, {
+              method: 'GET', redirect: 'manual', headers,
+              signal: AbortSignal.timeout(20000),
+            });
+            if (response.status >= 300 && response.status < 400) {
+              throw new Error('unexpected_redirect_' + path);
+            }
+            const body = await response.json().catch(() => null);
+            if (!body || typeof body !== 'object') {
+              throw new Error('non_json_response_' + path);
+            }
+            return { response, body };
+          }
+          (async () => {
+            const build = await jsonGet('/api/build');
+            // Log status and equality only, never response bodies, tokens or bank metadata.
+            console.log('SOURCE_BOUNDARY|build_http=' + build.response.status +
+              '|sha_matches=' + (build.body.commit === sha) +
+              '|is_preview=' + (build.body.environment === 'preview') +
+              '|auth_method=' + (bypass ? 'configured_bypass' : 'github_oidc'));
+            if (build.response.status !== 200 || build.body.commit !== sha ||
+                build.body.environment !== 'preview') {
+              throw new Error('preview_commit_mismatch_or_protection_not_bypassed');
+            }
+            console.log('SOURCE_BOUNDARY|build=exact_sha|environment=preview');
+            const features = build.body.releaseFeatures;
+            if (!features || typeof features !== 'object'
+                || ['documents', 'documentOcr', 'documentDriveSync'].some((key) => typeof features[key] !== 'boolean')
+                || (!features.documents && (features.documentOcr || features.documentDriveSync))) {
+              throw new Error('preview_release_profile_invalid');
+            }
+            console.log('SOURCE_BOUNDARY|documents=' + features.documents +
+              '|document_ocr=' + features.documentOcr + '|drive_sync=' + features.documentDriveSync);
+            // REC-REL-438: the release candidate preview additionally requires
+            // app-level owner authentication. This is separate from Vercel's
+            // deployment protection bypass, which must never grant app access.
+            if (requireAppAuth) {
+              const { response, body } = await jsonGet('/api/configuration');
+              if (response.status !== 401 || body.error !== 'authentication_required' || body.code !== null) {
+                throw new Error('candidate_preview_owner_auth_not_enforced');
+              }
+              if (!response.headers.get('cache-control')?.toLowerCase().includes('no-store')) {
+                throw new Error('candidate_preview_auth_response_cacheable');
+              }
+              console.log('SOURCE_BOUNDARY|candidate_owner_auth=enforced');
+            }
+            const paths = [
+              '/api/source/google/status',
+              '/api/source/google/sync',
+              '/api/health/source-runtime',
+              '/api/source/google/connect',
+            ];
+            for (const path of paths) {
+              const { response, body } = await jsonGet(path);
+              if (response.status !== 401 || body.error !== 'authentication_required') {
+                throw new Error('anonymous_access_not_denied_' + path);
+              }
+              if (['connection', 'accountEmail', 'authMode',
+                  'capabilities', 'run', 'cursors', 'sourceFileId',
+                  'sourceFileName', 'configured'].some((key) => key in body)) {
+                throw new Error('anonymous_metadata_disclosed_' + path);
+              }
+              const cache = response.headers.get('cache-control') ?? '';
+              if (!cache.toLowerCase().includes('no-store')) {
+                throw new Error('anonymous_response_cacheable_' + path);
+              }
+              console.log('SOURCE_BOUNDARY|anonymous_get_denied|' + path);
+            }
+
+            // REC-DOC-AUTH-221: read-only checks against a real protected
+            // preview. The synthetic ID cannot represent an imported source;
+            // no POST, PATCH, DELETE, OCR mutation or Google fetch is sent.
+            const fakeId = '93000000-0000-4000-8000-000000000117';
+            const privateDocuments = [
+              '/api/documents?limit=1',
+              '/api/documents/download?id=' + fakeId,
+              '/api/documents/ocr?id=' + fakeId,
+              '/api/documents/ocr-review?id=' + fakeId,
+            ];
+            for (const path of privateDocuments) {
+              const { response, body } = await jsonGet(path);
+              const privateHistory = path.startsWith('/api/documents/ocr-review?');
+              const deferred = !features.documents ||
+                (path.startsWith('/api/documents/ocr?') && !features.documentOcr);
+              // When the outer app-auth proxy is enforced, it must deny
+              // anonymous requests before a deferred feature or Edge gateway.
+              // Non-release previews retain their legacy read-only contract.
+              const earlyAuthDenied = response.status === 401
+                && body.error === 'authentication_required' && body.code === null;
+              // A second PR may test this SAME branch after its candidate
+              // auth flag is active. A 401 is stronger than legacy 403/404
+              // and is valid for every PR, but mandatory for the release PR.
+              const denied = requireAppAuth
+                ? earlyAuthDenied
+                : earlyAuthDenied || (privateHistory
+                  ? response.status === 401 && body.error === 'authentication_required'
+                  : deferred
+                    ? response.status === 404 && body.error === 'feature_deferred' && body.code === null
+                    : response.status === 403 && body.code === 'workspace_context_required');
+              if (!denied) {
+                // Diagnostic metadata only: never log a response body.
+                console.log('DOCUMENT_BOUNDARY|unexpected_http=' + response.status +
+                  '|expected_history_auth=' + privateHistory + '|path=' + path);
+                throw new Error('anonymous_document_access_not_denied_' + path);
+              }
+              if (['document', 'documents', 'connection', 'url', 'bytes',
+                  'rawResult', 'history', 'reviewedValues', 'accountEmail'].some((key) => key in body)) {
+                throw new Error('anonymous_document_metadata_disclosed_' + path);
+              }
+              const cache = response.headers.get('cache-control') ?? '';
+              if (!cache.toLowerCase().includes('no-store')) {
+                throw new Error('anonymous_document_response_cacheable_' + path);
+              }
+              console.log('DOCUMENT_BOUNDARY|anonymous_get_denied|' + path);
+            }
+          })().catch((error) => {
+            console.error(error.message);
+            process.exitCode = 1;
+          });
+          NODE
+
+      # All checks are HTTP GET, without any Google preflight, mutation,
+      # OAuth token exchange, bank sync or private financial data in logs.

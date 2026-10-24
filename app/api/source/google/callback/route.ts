@@ -1,4 +1,5 @@
 import { prepareOfficialSourceSyncBatch } from "../../../../../src/application/source-sync-service";
+import { requireVerifiedSourceWorkspace } from "../../../../../src/infrastructure/auth/source-metadata-access";
 import {
   OfficialSourceHistoricalBaselineError,
   assertOfficialSourceHistoricalBaseline,
@@ -64,7 +65,8 @@ export async function GET(request: Request) {
   if (url.searchParams.has("error")) return callbackRedirect(request, "error", "google_oauth_denied");
 
   try {
-    const configuration = getGoogleSourceServerConfiguration();
+    // Invalid OAuth callbacks may safely redirect without reading Google.
+    // A valid state and code still require Financial App authentication.
     const expectedState = readCookie(request, GOOGLE_OAUTH_STATE_COOKIE);
     if (!expectedState) {
       return callbackRedirect(request, "error", "google_oauth_state_missing");
@@ -73,6 +75,12 @@ export async function GET(request: Request) {
 
     const code = url.searchParams.get("code")?.trim() ?? "";
     if (!code) return callbackRedirect(request, "error", "google_oauth_code_missing");
+
+    // Recheck the workspace after returning from Google's external flow.
+    // No exchange, data read or refresh token storage for anonymous callers.
+    const denied = await requireVerifiedSourceWorkspace();
+    if (denied) return denied;
+    const configuration = getGoogleSourceServerConfiguration();
 
     const oauth = new GoogleOauthGateway();
     const allowedEmail = await getGoogleAllowedAccountEmail(oauth);

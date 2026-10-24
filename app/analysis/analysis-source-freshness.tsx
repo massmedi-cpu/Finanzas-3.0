@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   hasSourceSyncIncidents,
+  hasCompletedSourceSyncEvidence,
+  hasRecentSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
@@ -14,6 +16,7 @@ type SyncStatus = "success" | "partial" | "failed" | "started";
 export type SourceFreshness = {
   available: boolean;
   latestMovementDate: string | null;
+  earliestMovementDate?: string | null;
   sync: null | {
     status: SyncStatus;
     finishedAt: string | null;
@@ -64,6 +67,7 @@ function nullableFiniteNumber(value: unknown): value is number | null {
 function isFreshness(value: unknown): value is SourceFreshness {
   if (!record(value) || typeof value.available !== "boolean") return false;
   if (!nullableString(value.latestMovementDate)) return false;
+  if (value.earliestMovementDate !== undefined && !nullableString(value.earliestMovementDate)) return false;
   if (value.sync === null) return true;
   if (!record(value.sync)) return false;
 
@@ -123,11 +127,16 @@ function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
 }
 
 function statusText(freshness: SourceFreshness) {
+  // A retained sync receipt cannot certify a bank that declares itself
+  // unavailable for the selected account.
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return "Fuente bancaria no disponible para la cuenta consultada";
+  }
   const sync = freshness.sync;
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
 
-  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : null;
+  if (!sync) return movementLabel ? `Fuente bancaria · último movimiento ${movementLabel} · sincronización sin verificar` : "Cobertura bancaria sin verificar: no consta fecha de movimiento ni estado de sincronización";
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
@@ -136,6 +145,9 @@ function statusText(freshness: SourceFreshness) {
   const health = syncHealth(sync);
 
   if (sync.status === "success") {
+    if (!hasCompletedSourceSyncEvidence(sync)) {
+      return `Sincronización sin finalización verificable${movement}`;
+    }
     return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
   if (sync.status === "partial") {
@@ -146,17 +158,34 @@ function statusText(freshness: SourceFreshness) {
 }
 
 function userSummary(freshness: SourceFreshness): FreshnessSummary {
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return {
+      label: "Fuente bancaria no disponible",
+      detail: null,
+      incidentDetail: "La fuente no está disponible para esta cuenta. No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores.",
+      tone: "warning",
+    };
+  }
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? `Último movimiento ${movementLabel}` : null;
   const sync = freshness.sync;
 
   if (!sync) {
-    return {
-      label: "Datos bancarios disponibles",
-      detail: movement,
-      incidentDetail: null,
-      tone: "ok",
-    };
+    // Legacy/partial freshness responses may have neither a sync report nor
+    // any observed movement. Do not imply the account contains bank data.
+    return movementLabel
+      ? {
+          label: "Último movimiento disponible",
+          detail: movement,
+          incidentDetail: "El estado de sincronización no está disponible; no se puede confirmar la cobertura completa.",
+          tone: "warning",
+        }
+      : {
+          label: "Cobertura bancaria sin verificar",
+          detail: null,
+          incidentDetail: "No hay fecha de movimiento ni estado de sincronización confirmados.",
+          tone: "warning",
+        };
   }
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
@@ -173,12 +202,20 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
   const incidents = normalizeSourceSyncIncidents(sync);
   const incidentParts: string[] = [];
+  if (sync.status === "success" && !hasCompletedSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización sin finalización verificada",
+      detail: movement,
+      incidentDetail: "La fuente indica éxito, pero no consta una fecha de finalización válida o un recuento íntegro de las filas. No se puede confirmar la cobertura bancaria.",
+      tone: "warning",
+    };
+  }
 
   if (incidents.failedRows > 0) {
     incidentParts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
   }
   if (incidents.missingRows > 0) {
-    incidentParts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ya no está en la fuente" : "movimientos ya no están en la fuente"}`);
+    incidentParts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ausente de los datos importados" : "movimientos ausentes de los datos importados"}`);
   }
   if (incidents.duplicates > 0) {
     incidentParts.push(`${formatInteger(incidents.duplicates)} ${incidents.duplicates === 1 ? "posible duplicado" : "posibles duplicados"}`);
@@ -241,8 +278,40 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
+  // A successful sync is not evidence that any bank movement date was
+  // imported. A missing date may mean an empty account or an unavailable
+  // legacy bounds endpoint. Never display "Datos al día" in that situation.
+  if (!movementLabel) {
+    return {
+      label: "Cobertura bancaria sin verificar",
+      detail,
+      incidentDetail: "No hay ninguna fecha de movimiento bancario confirmada.",
+      tone: "warning",
+    };
+  }
+
+  if (!freshness.earliestMovementDate) {
+    return {
+      label: "Cobertura histórica sin verificar",
+      detail,
+      incidentDetail: "Se conoce el último movimiento, pero no la fecha inicial del histórico bancario.",
+      tone: "warning",
+    };
+  }
+
+  // A historical successful run only proves what was known at that time.
+  // It cannot certify that the external source is current now.
+  if (!hasRecentSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización pendiente de comprobar",
+      detail,
+      incidentDetail: "La última comprobación de la fuente tiene más de 48 horas o una fecha futura. Revisa si hay movimientos pendientes antes de dar los datos por actualizados.",
+      tone: "warning",
+    };
+  }
+
   return {
-    label: "Datos al día",
+    label: "Sincronización reciente",
     detail,
     incidentDetail: null,
     tone: "ok",
@@ -251,15 +320,28 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
 
 export default function AnalysisSourceFreshness({
   onChange,
+  accountId = null,
 }: {
   onChange?: (freshness: SourceFreshness | null) => void;
+  accountId?: string | null;
 }) {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    void fetch("/api/analysis/source-freshness", {
+    // A different bank account or retry must clear any old coverage/error.
+    setFailed(false);
+    setFreshness(null);
+    onChange?.(null);
+    const params = new URLSearchParams();
+    if (accountId) params.set("accountId", accountId);
+    const url = params.size > 0
+      ? `/api/analysis/source-freshness?${params.toString()}`
+      : "/api/analysis/source-freshness";
+    void fetch(url, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -270,7 +352,12 @@ export default function AnalysisSourceFreshness({
       })
       .then((payload) => {
         if (!controller.signal.aborted) {
-          const next = payload?.available ? payload : null;
+          // "available: false" is itself a valid source-health result from
+          // a successful API request. Suppressing it hid the warning added
+          // for an account with no imported movement date or connection.
+          // Invalid/failed HTTP requests are still handled as unknown.
+          const next = payload;
+          setFailed(next === null);
           setFreshness(next);
           onChange?.(next);
         }
@@ -278,15 +365,34 @@ export default function AnalysisSourceFreshness({
       .catch(() => {
         if (!controller.signal.aborted) {
           setFreshness(null);
+          setFailed(true);
           onChange?.(null);
         }
         // La frescura es información auxiliar: nunca bloquea ni degrada Análisis.
       });
 
     return () => controller.abort();
-  }, [onChange]);
+  }, [accountId, onChange, attempt]);
 
-  if (!freshness) return null;
+  if (!freshness) {
+    if (!failed) return null;
+    // A request error/invalid payload is not proof of an empty account, so
+    // show a retryable warning without inventing a bank date or movement.
+    return (
+      <div className={styles.wrap}>
+        <div className={`${styles.status} ${styles.danger}`}>
+          <span className={styles.dot} aria-hidden="true" />
+          <span className={styles.copy} role="status" aria-live="polite">
+            <strong>No se ha podido comprobar la cobertura bancaria</strong>
+            <small>Sin estado bancario verificado. Puedes volver a consultar sin cambiar tus datos.</small>
+          </span>
+          <button className={`${styles.action} ${styles.retry}`} type="button" onClick={() => setAttempt((value) => value + 1)}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
   const text = statusText(freshness);
   if (!text) return null;
   const summary = userSummary(freshness);
@@ -295,8 +401,12 @@ export default function AnalysisSourceFreshness({
       || freshness.sync.status === "partial"
       || freshness.sync.status === "started"
       || syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasRecentSourceSyncEvidence(freshness.sync))
     : false;
-  const actionable = freshness.sync ? syncHasIncidents(freshness.sync) : false;
+  const actionable = !freshness.available || (freshness.sync
+    ? syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasRecentSourceSyncEvidence(freshness.sync))
+    : false);
 
   return (
     <div className={styles.wrap}>

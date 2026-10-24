@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../src/application/release-document-scope";
 import styles from "./review.module.css";
 
 type SignalItem = {
@@ -99,7 +100,7 @@ export default function ReviewClient() {
         readJson<TransactionCount>("/api/transactions?signMismatch=true&limit=1", controller.signal),
         readJson<TransactionCount>("/api/transactions?duplicateState=suspected&limit=1", controller.signal),
         readJson<RecurrenceSnapshot>("/api/recurrences?minOccurrences=3", controller.signal),
-        readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
+        isDocumentsDeferred() ? Promise.resolve(null) : readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
         readJson<BudgetSnapshot>(`/api/budgets?month=${month}`, controller.signal),
         readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${dateTo}`, controller.signal),
         readJson<GoogleStatus>("/api/source/google/status", controller.signal),
@@ -201,7 +202,7 @@ export default function ReviewClient() {
       count: counts.source,
       description: "Conexión, avisos o incidencias de la fuente bancaria.",
     },
-  ], [counts]);
+  ].filter((item) => isReleaseHrefAvailable(item.href)), [counts]);
 
   const actionItems = useMemo(() => items.filter((item) => typeof item.count === "number" && item.count > 0), [items]);
   const clearItems = useMemo(() => items.filter((item) => item.count === 0), [items]);

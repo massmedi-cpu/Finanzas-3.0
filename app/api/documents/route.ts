@@ -1,3 +1,5 @@
+import { knownPublicErrorCode, publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
+import { deferredDocumentResponse } from "../../../src/infrastructure/http/deferred-document-response";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -12,6 +14,11 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/application/document-query-integer";
+import { verifyDriveDocumentBatchMetadata } from "../../../src/application/document-drive-batch-verification";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
+import { requireVerifiedSourceWorkspace } from "../../../src/infrastructure/auth/source-metadata-access";
+import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../../src/infrastructure/google/google-drive-document-discovery";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,6 +31,12 @@ const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]
 const METHODS = new Set(["manual", "suggested"]);
 const SCOPES = new Set(["ordinary", "tests", "all"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+// Includes the largest supported batch of 200 original Drive metadata rows.
+const MAX_DOCUMENT_JSON_BYTES = 512 * 1024;
+const DOCUMENT_LIST_KEYS = new Set(["status", "q", "limit", "offset", "scope", "unassociated"]);
+const DOCUMENT_DETAIL_KEYS = new Set(["id"]);
+const DOCUMENT_OPEN_KEYS = new Set(["id", "mode"]);
+const DOCUMENT_CANDIDATE_KEYS = new Set(["id", "mode", "days", "limit"]);
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
 function objectBody(value: unknown) {
@@ -99,12 +112,17 @@ function driveDownloader() {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const status = error.reason === "too_large" ? 413 : 400;
+    return Response.json({ error: "invalid_request", code: status === 413 ? "document_body_too_large" : "invalid_document_body" }, { status, headers: HEADERS });
+  }
   if (error instanceof GoogleDriveDocumentError) {
     const status: Record<GoogleDriveDocumentError["code"], number> = {
       google_drive_document_id_invalid: 400,
       google_drive_document_access_denied: 409,
       google_drive_document_not_found: 404,
       google_drive_document_metadata_invalid: 409,
+      google_drive_document_source_changed: 409,
       google_drive_document_mime_mismatch: 415,
       google_drive_document_content_mismatch: 415,
       google_drive_document_too_large: 413,
@@ -116,6 +134,14 @@ function apiError(error: unknown) {
     return Response.json({ error: "drive_reader_unavailable", code: error.code }, { status: 503, headers: HEADERS });
   }
   if (error instanceof PersistenceGatewayError) {
+    // "unauthorized" at this gateway means Vercel OIDC verification failed;
+    // it is not evidence that the user's interactive session expired.
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     if (error.status === 404) return Response.json({ error: "not_found", code: error.code ?? null }, { status: 404, headers: HEADERS });
     if (error.status === 409) return Response.json({ error: "conflict", code: error.code ?? null }, { status: 409, headers: HEADERS });
     if (error.status === 400) return Response.json({ error: "invalid_request", code: error.code ?? null }, { status: 400, headers: HEADERS });
@@ -124,26 +150,54 @@ function apiError(error: unknown) {
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  if (error instanceof Error && (error.message.startsWith("invalid_document_") || error.message.startsWith("unsupported_document_"))) {
-    return Response.json({ error: "invalid_request", code: error.message }, { status: 400, headers: HEADERS });
+  // SHA-256 is an exact, public validation field; do not loosen the shared
+  // error grammar to accept unbounded numeric fragments from arbitrary errors.
+  const explicitCode = knownPublicErrorCode(error, {
+    invalid_document_content_sha256: 400,
+    invalid_document_expected_sha256: 400,
+  });
+  const publicCode = explicitCode ?? publicGatewayErrorCode(error);
+  if (publicCode.startsWith("invalid_document_") || publicCode.startsWith("unsupported_document_")) {
+    return Response.json({ error: "invalid_request", code: publicCode }, { status: 400, headers: HEADERS });
   }
   console.error("documents-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
 }
 
 export async function GET(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const { searchParams } = new URL(request.url);
+    // Never let URLSearchParams.get() silently pick the first of two
+    // contradictory filters or document IDs.
+    for (const key of searchParams.keys()) {
+      if (searchParams.getAll(key).length > 1) throw new Error("invalid_document_query_duplicate");
+    }
     const idRaw = searchParams.get("id");
     const mode = searchParams.get("mode");
+    // Preserve the established public contract for unknown/empty modes
+    // while still rejecting extra selectors on valid mode requests.
+    // Existing browser clients distinguish invalid_document_mode from
+    // invalid_document_query_parameters.
+    if (mode !== null && (idRaw === null || (mode !== "open" && mode !== "candidates"))) {
+      throw new Error("invalid_document_mode");
+    }
+    const allowedKeys = idRaw !== null
+      ? mode === "candidates" ? DOCUMENT_CANDIDATE_KEYS
+        : mode === "open" ? DOCUMENT_OPEN_KEYS : DOCUMENT_DETAIL_KEYS
+      : DOCUMENT_LIST_KEYS;
+    if ([...searchParams.keys()].some((key) => !allowedKeys.has(key))) {
+      throw new Error("invalid_document_query_parameters");
+    }
 
-    if (idRaw) {
+    if (idRaw !== null) {
       const id = uuid(idRaw, "invalid_document_id");
       if (mode === "candidates") {
         const daysRaw = searchParams.get("days");
         const limitRaw = searchParams.get("limit");
-        const days = daysRaw === null ? 7 : integer(Number(daysRaw), "invalid_document_candidate_days", 0, 31);
-        const limit = limitRaw === null ? 8 : integer(Number(limitRaw), "invalid_document_candidate_limit", 1, 20);
+        const days = optionalQueryInteger(daysRaw, "invalid_document_candidate_days", 7, 0, 31);
+        const limit = optionalQueryInteger(limitRaw, "invalid_document_candidate_limit", 8, 1, 20);
         const result = await callPersistenceGateway("document.candidates", { id, days, limit });
         return Response.json(result, { headers: HEADERS });
       }
@@ -151,18 +205,18 @@ export async function GET(request: Request) {
         const result = await callPersistenceGateway("document.open", { id });
         return Response.json(result, { headers: HEADERS });
       }
-      if (mode) throw new Error("invalid_document_mode");
+      if (mode !== null) throw new Error("invalid_document_mode");
       const result = await callPersistenceGateway("document.detail", { id });
       return Response.json(result, { headers: HEADERS });
     }
 
-    if (mode) throw new Error("invalid_document_mode");
+    if (mode !== null) throw new Error("invalid_document_mode");
     const status = statusValue(searchParams.get("status"), true);
     const query = nullableText(searchParams.get("q"), "invalid_document_query", 200);
     const limitRaw = searchParams.get("limit");
     const offsetRaw = searchParams.get("offset");
-    const limit = limitRaw === null ? 50 : integer(Number(limitRaw), "invalid_document_limit", 1, 100);
-    const offset = offsetRaw === null ? 0 : integer(Number(offsetRaw), "invalid_document_offset", 0, 100000);
+    const limit = optionalQueryInteger(limitRaw, "invalid_document_limit", 50, 1, 100);
+    const offset = optionalQueryInteger(offsetRaw, "invalid_document_offset", 0, 0, 100000);
     const scope = searchParams.get("scope") ?? "ordinary";
     if (!SCOPES.has(scope)) throw new Error("invalid_document_scope");
     const unassociatedRaw = searchParams.get("unassociated");
@@ -177,8 +231,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
 
     if (action === "upload_sign") {
@@ -187,7 +243,14 @@ export async function POST(request: Request) {
         originalFileName: text(row.originalFileName, "invalid_document_file_name", 500),
         mimeType: mimeValue(row.mimeType),
         sizeBytes: integer(row.sizeBytes, "invalid_document_size", 1, 15 * 1024 * 1024),
+        // Optional only for an older client; new clients include the digest
+        // so different devices receive the same signed private object path.
+        expectedSha256: row.expectedSha256 === null || row.expectedSha256 === undefined
+          ? null : text(row.expectedSha256, "invalid_document_content_sha256", 64),
       };
+      if (payload.expectedSha256 !== null && !/^[0-9a-f]{64}$/.test(payload.expectedSha256)) {
+        throw new Error("invalid_document_content_sha256");
+      }
       const result = await callPersistenceGateway("document.upload_sign", payload);
       return Response.json(result, { headers: HEADERS });
     }
@@ -198,7 +261,15 @@ export async function POST(request: Request) {
         originalFileName: text(row.originalFileName, "invalid_document_file_name", 500),
         mimeType: mimeValue(row.mimeType),
         path: text(row.path, "invalid_document_storage_key", 1000),
+        // Optional for recovery of uploads created before hash-aware clients.
+        // New uploads provide both; all hash validation is repeated at gateway.
+        expectedSizeBytes: integer(row.expectedSizeBytes, "invalid_document_expected_size", 1, 15 * 1024 * 1024, true),
+        expectedSha256: row.expectedSha256 === null || row.expectedSha256 === undefined
+          ? null : text(row.expectedSha256, "invalid_document_expected_sha256", 64),
       };
+      if (payload.expectedSha256 !== null && !/^[0-9a-f]{64}$/.test(payload.expectedSha256)) {
+        throw new Error("invalid_document_expected_sha256");
+      }
       const result = await callPersistenceGateway("document.upload_finalize", payload);
       return Response.json(result, { headers: HEADERS });
     }
@@ -213,21 +284,42 @@ export async function POST(request: Request) {
           mimeType: mimeValue(item.mimeType),
           fileId: text(item.fileId, "invalid_document_drive_file_id", 300),
           sizeBytes: integer(item.sizeBytes, "invalid_document_size", 0, Number.MAX_SAFE_INTEGER, true),
-          modifiedTime: nullableText(item.modifiedTime, "invalid_document_source_modified_at", 80),
+          // Never accept a browser-provided modification timestamp as Drive evidence.
         };
       });
 
-      const verifiedFiles = [];
+      // Reject duplicate IDs before contacting Google: duplicate inventory
+      // rows cannot be independent financial documents.
+      if (new Set(files.map((file) => file.fileId)).size !== files.length) {
+        throw new Error("invalid_document_drive_batch");
+      }
+      // Block any production-backed preview before contacting Google. The
+      // gateway also rejects writes, but this route must not download files
+      // using its service account for unauthenticated requests.
+      if (process.env.VERCEL_ENV === "preview") {
+        return Response.json({ error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" }, { status: 409, headers: HEADERS });
+      }
+      const accessDenied = await requireVerifiedSourceWorkspace();
+      if (accessDenied) return accessDenied;
+
       const downloader = driveDownloader();
-      for (const file of files) {
-        const downloaded = await downloader.download({ fileId: file.fileId, expectedMimeType: file.mimeType });
-        verifiedFiles.push({
+      // Bounded concurrency reduces latency for large imports, while
+      // preserving original ordering and verifying *every* Drive revision.
+      // A failed verification prevents the single downstream batch write.
+      const verifiedFiles = await verifyDriveDocumentBatchMetadata(files, async (file) => {
+        const downloaded = await downloader.download({
+          fileId: file.fileId,
+          expectedMimeType: file.mimeType,
+          expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        });
+        return {
           ...file,
           name: downloaded.fileName ?? file.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
-        });
-      }
+          modifiedTime: downloaded.modifiedTime, // Authoritative Google metadata only.
+        };
+      });
 
       const result = await callPersistenceGateway("document.drive_batch", { files: verifiedFiles });
       return Response.json(result, { headers: HEADERS });
@@ -240,8 +332,10 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_DOCUMENT_JSON_BYTES));
     const action = text(row.action, "invalid_document_action", 40);
 
     if (action === "test_designation") {
@@ -263,7 +357,7 @@ export async function PATCH(request: Request) {
         documentDate: nullableDate(row.documentDate, "invalid_document_date"),
         issuerName: nullableText(row.issuerName, "invalid_document_issuer", 300),
         totalCents: integer(row.totalCents, "invalid_document_total", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true),
-        notes: row.notes === null || row.notes === undefined ? "" : text(String(row.notes), "invalid_document_notes", 2000, true),
+        notes: row.notes === null || row.notes === undefined ? "" : text(row.notes, "invalid_document_notes", 2000, true),
       };
       const result = await callPersistenceGateway("document.update", payload);
       return Response.json(result, { headers: HEADERS });

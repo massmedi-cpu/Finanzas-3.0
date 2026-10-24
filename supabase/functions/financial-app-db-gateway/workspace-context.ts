@@ -1,5 +1,5 @@
 import { createClient } from "supabase-js";
-import type { WorkspaceContext } from "../../../src/domain/workspace-context.ts";
+import { isSingleOwnerWorkspaceAccess, type WorkspaceContext } from "../../../src/domain/workspace-context.ts";
 
 export class WorkspaceContextError extends Error {
   constructor(
@@ -124,6 +124,14 @@ export async function resolveWorkspaceContext(
     membership.workspace_membership_count < 1
   ) {
     throw new WorkspaceContextError("workspace_membership_invalid", 500);
+  }
+
+  // Personal-only product: never grant member access, even with a valid
+  // login token and default membership. A second workspace member must also
+  // fail closed until explicitly removed by the owner outside this release.
+  // This is evaluated BEFORE SET ROLE and before setting tenant GUCs.
+  if (!isSingleOwnerWorkspaceAccess(membership.role, membership.workspace_membership_count)) {
+    throw new WorkspaceContextError("workspace_access_denied", 403);
   }
 
   const context: WorkspaceContext = {

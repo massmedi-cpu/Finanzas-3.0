@@ -5,7 +5,7 @@ import type {
   DocumentOcrProviderOutput,
 } from "../../application/document-ocr-service";
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
-import { isReceiptMoney } from "../../domain/receipt-money";
+import { isReceiptMoney, isReceiptNumericLike } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
 
@@ -190,8 +190,7 @@ function suspiciousNumeric(text: string) {
 }
 
 function isNumericLike(word: OcrWord) {
-  const token = cleanToken(word.text);
-  return /\d/.test(token) && /^[\d,./:-]+$/.test(token);
+  return isReceiptNumericLike(word.text);
 }
 
 function alphaChars(text: string) {

@@ -243,7 +243,7 @@ export default function MerchantsClient() {
           <h1>Comercios y alias</h1>
           <p className={styles.copy}>Define un nombre canónico por comercio, agrupa variantes bancarias mediante alias y asigna una categoría predeterminada sin alterar la fuente bancaria.</p>
         </div>
-        <div className={styles.summary} aria-label="Resumen de comercios">
+        <div className={styles.summary} role="group" aria-label="Resumen de comercios">
           <div><strong>{activeMerchantCount}</strong><span>Activos</span></div>
           <div><strong>{data.aliases.length}</strong><span>Alias</span></div>
           <button type="button" onClick={() => void load()} disabled={loading || busy} aria-label="Actualizar comercios">Actualizar</button>

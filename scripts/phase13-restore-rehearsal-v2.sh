@@ -158,10 +158,36 @@ SQL
 schema_version="$(psql_db "$SOURCE_URL" -Atc "select schema_version from financial_app.schema_meta where id=true")"
 export FINANCIAL_APP_DB_URL="$SOURCE_URL"
 export FINANCIAL_APP_SOURCE_COMMIT="$GITHUB_SHA"
-unset FINANCIAL_APP_STORAGE_ARCHIVE || true
+
+# Production always archives Storage, including a newly emptied workspace. Use
+# the real disposable DB's bucket count and bundle that empty archive through
+# the same creator, validator and restore verifier used for production.
+storage_root="${RUNNER_TEMP:-/tmp}/financial-app-f13-v2-empty-storage"
+storage_archive="${RUNNER_TEMP:-/tmp}/financial-app-f13-v2-empty-storage.tgz"
+rm -rf "$storage_root"
+mkdir -p "$storage_root/objects"
+psql_db "$SOURCE_URL" -Atc "
+  select json_build_object(
+    'contractVersion', 2,
+    'bucketCount', (select count(*) from storage.buckets),
+    'objectCount', (select count(*) from storage.objects),
+    'totalBytes', 0,
+    'objects', '[]'::json
+  )" > "$storage_root/storage-archive-manifest.json"
+node scripts/validate-storage-archive-v2.mjs "$storage_root"
+tar -czf "$storage_archive" -C "$(dirname "$storage_root")" "$(basename "$storage_root")"
+export FINANCIAL_APP_STORAGE_ARCHIVE="$storage_archive"
 
 node scripts/create-financial-backup-v2.mjs "$BACKUP_DIR"
 node scripts/validate-financial-backup-v2.mjs "$BACKUP_DIR"
+node - "$BACKUP_DIR/manifest.json" <<'NODE'
+const fs = require('node:fs');
+const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (manifest.storage.objectCount !== 0 || !manifest.storage.archive?.sha256) {
+  throw new Error('F13_V2_RESTORE|reason=empty_storage_archive_not_bundled');
+}
+console.log('F13_V2_RESTORE|empty_storage_archive=bundled_and_validated');
+NODE
 
 prepare_restore_target_stubs "$TARGET_URL"
 psql_db "$TARGET_URL" --single-transaction -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null

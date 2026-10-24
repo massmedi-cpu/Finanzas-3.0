@@ -70,6 +70,30 @@ const snapshot = {
 };
 
 async function mockBudgetRead(page: Parameters<typeof test>[0] extends never ? never : any) {
+  // The text/contrast fixture is explicitly a fully observed month. Without
+  // this stub it would now correctly render "Estado sin verificar" instead
+  // of the legacy "Dentro de referencia" tested for font size.
+  await page.route("**/api/analysis/source-freshness*", async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: TEST_MONTH_START,
+        latestMovementDate: TEST_MONTH_END,
+        sync: {
+          status: "success",
+          finishedAt: TEST_MONTH_END + "T11:00:00Z",
+          startedAt: TEST_MONTH_END + "T10:00:00Z",
+          rowsSeen: 3,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
   await page.route("**/api/budgets**", async (route: any) => {
     if (route.request().method() === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
@@ -100,6 +124,9 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
             ...snapshot.total,
             manualAmountCents: 123456,
             effectiveAmountCents: 123456,
+            remainingCents: 123456 - snapshot.total.actualExpenseCents,
+            progressBps: Math.round((snapshot.total.actualExpenseCents * 10000) / 123456),
+            status: "on_track",
           },
         }),
       });
@@ -208,8 +235,40 @@ test("AUD-E2E-UI-001 · texto funcional de Presupuestos mantiene tono legible en
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const eyebrow = page.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
   await expect(eyebrow).toBeVisible();
-  await expect(eyebrow).toHaveCSS("color", "rgb(30, 64, 175)");
   const emptyMessage = page.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
   await expect(emptyMessage).toBeVisible();
-  await expect(emptyMessage).toHaveCSS("color", "rgb(71, 85, 105)");
+
+  // El tema debe aplicar tokens de diseño, no un RGB histórico que ya no representa la paleta.
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement("span");
+    document.body.appendChild(probe);
+    const resolveColor = (name: string) => {
+      probe.style.color = `var(${name})`;
+      return getComputedStyle(probe).color;
+    };
+    const result = {
+      primary: resolveColor("--color-primary-bright"),
+      muted: resolveColor("--color-text-muted"),
+    };
+    probe.remove();
+    return result;
+  });
+  const eyebrowRgb = await eyebrow.evaluate((node) => getComputedStyle(node).color);
+  const helperRgb = await emptyMessage.evaluate((node) => getComputedStyle(node).color);
+  expect(eyebrowRgb).toBe(tokens.primary);
+  expect(helperRgb).toBe(tokens.muted);
+
+  const contrastAgainstWhite = (rgb: string) => {
+    const channels = (rgb.match(/[0-9]+(?:\\.[0-9]+)?/g) ?? []).slice(0, 3).map(Number);
+    if (channels.length !== 3) throw new Error(`Unexpected RGB value: ${rgb}`);
+    const luminance = channels.reduce((sum, channel, index) => {
+      const s = channel / 255;
+      const linear = s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    return 1.05 / (luminance + 0.05);
+  };
+  expect(contrastAgainstWhite(eyebrowRgb)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastAgainstWhite(helperRgb)).toBeGreaterThanOrEqual(4.5);
 });

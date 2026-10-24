@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ProductIcon } from "../src/design/product-icons";
 import { usePwaRuntime } from "./pwa-runtime";
 import styles from "./pwa-install-button.module.css";
@@ -44,8 +45,28 @@ type Props = {
 export function PwaInstallButton({ className, promptOnly = false }: Props) {
   const { canInstall, install, installed } = usePwaRuntime();
   const [showHelp, setShowHelp] = useState(false);
+  const dialogRef = useRef<HTMLElement>(null);
+  const titleId = useId();
   const installPlatform = useMemo(() => platform(), []);
   const help = useMemo(() => instructions(installPlatform), [installPlatform]);
+
+  useEffect(() => {
+    if (!showHelp) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setShowHelp(false); }
+      if (event.key === "Tab") { event.preventDefault(); dialogRef.current?.querySelector<HTMLButtonElement>("button")?.focus(); }
+    };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, [showHelp]);
 
   if (installed || (promptOnly && !canInstall)) return null;
 
@@ -64,15 +85,15 @@ export function PwaInstallButton({ className, promptOnly = false }: Props) {
       <button type="button" className={className} onClick={() => void requestInstall()} aria-label="Instalar Financial App en este dispositivo">
         Instalar app
       </button>
-      {showHelp ? (
+      {showHelp ? createPortal(
         <div className={styles.backdrop} role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget) setShowHelp(false);
         }}>
-          <section className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby="pwa-install-title">
+          <section ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}>
             <div className={styles.heading}>
               <div>
                 <span>APLICACIÓN INSTALABLE</span>
-                <h2 id="pwa-install-title">{help.title}</h2>
+                <h2 id={titleId}>{help.title}</h2>
               </div>
               <button type="button" className={styles.close} aria-label="Cerrar instrucciones de instalación" onClick={() => setShowHelp(false)}>
                 <ProductIcon name="close" size="1.15em" />
@@ -84,7 +105,7 @@ export function PwaInstallButton({ className, promptOnly = false }: Props) {
             <p className={styles.note}>No es un acceso directo normal: al instalarla, Financial App puede abrirse en modo independiente, sin la interfaz habitual del navegador.</p>
           </section>
         </div>
-      ) : null}
+      , document.body) : null}
     </>
   );
 }

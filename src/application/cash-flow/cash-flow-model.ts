@@ -1,4 +1,6 @@
 import { isForecastSnapshot, type ForecastItem, type ForecastSnapshot } from "../forecast/forecast-contract";
+import { resolveHomeBankCoverage, type HomeBankFreshness } from "../dashboard/home-bank-coverage";
+import { hasCompletedSourceSyncEvidence, hasSourceSyncIncidents } from "../source-sync-incidents";
 import {
   dateHasConfirmedCoverage,
   periodHasObservedData,
@@ -61,6 +63,7 @@ export type CashFlowView = {
   dateTo: string;
   actualState: "ready" | "unavailable" | "incomplete" | "mismatch";
   actualCoverage: PeriodCoverage;
+  bankDailyVerified: boolean;
   forecastState: "ready" | "unavailable" | "mismatch";
   actualIncomeCents: number | null;
   actualExpenseCents: number | null;
@@ -89,12 +92,20 @@ export function shiftCashFlowMonth(month: string, offset: number) {
   return new Date(Date.UTC(year, number - 1 + offset, 1)).toISOString().slice(0, 7);
 }
 
+function validBankDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = Date.parse(value + "T00:00:00Z");
+  return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === value;
+}
+
 function isTransaction(value: unknown): value is CashFlowTransaction {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Partial<CashFlowTransaction>;
-  return typeof row.id === "string" && typeof row.bankDate === "string"
+  return typeof row.id === "string" && row.id.trim().length > 0
+    && validBankDate(row.bankDate)
     && Number.isSafeInteger(row.amountCents)
     && typeof row.concept?.effective === "string"
+    && typeof row.account?.id === "string" && row.account.id.trim().length > 0
     && typeof row.account?.name === "string"
     && ["income", "expense", "transfer", "refund", "adjustment"].includes(row.kind?.effective ?? "")
     && ["none", "suspected", "confirmed"].includes(row.duplicateState ?? "")
@@ -102,14 +113,22 @@ function isTransaction(value: unknown): value is CashFlowTransaction {
 }
 
 export function isTransactionPage(value: unknown): value is TransactionPage {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const page = value as Partial<TransactionPage>;
-  return Array.isArray(page.rows) && page.rows.every(isTransaction)
-    && Number.isSafeInteger(page.totalCount) && (page.totalCount ?? -1) >= 0
-    && typeof page.hasMore === "boolean"
-    && (page.nextCursor === null || (
-      typeof page.nextCursor?.bankDate === "string" && typeof page.nextCursor.id === "string"
-    ));
+  if (!Array.isArray(page.rows) || !page.rows.every(isTransaction)
+    || !Number.isSafeInteger(page.totalCount) || (page.totalCount ?? -1) < 0
+    || page.rows.length > page.totalCount!
+    || new Set(page.rows.map((row) => row.id)).size !== page.rows.length
+    || typeof page.hasMore !== "boolean") return false;
+  const validCursor = page.nextCursor === null || (page.nextCursor != null
+    && validBankDate(page.nextCursor.bankDate)
+    && typeof page.nextCursor.id === "string" && page.nextCursor.id.trim().length > 0);
+  // Cash Flow loads every page before showing confirmed real money.
+  // A broken cursor or an empty continuation must never masquerade as a
+  // completed bank extract, even when the gateway responds with HTTP 200.
+  return validCursor
+    && (!page.hasMore || (page.rows.length > 0 && page.nextCursor != null
+      && page.rows.length < page.totalCount!));
 }
 
 function isFinancialPeriod(value: unknown, dateFrom: string, dateTo: string): value is FinancialPeriod {
@@ -118,7 +137,9 @@ function isFinancialPeriod(value: unknown, dateFrom: string, dateTo: string): va
   return period.dateFrom === dateFrom && period.dateTo === dateTo && period.accountId === null
     && Number.isSafeInteger(period.operatingNetCents)
     && Number.isSafeInteger(period.quality?.includedRows)
-    && Number.isSafeInteger(period.quality?.scopedRows);
+    && Number.isSafeInteger(period.quality?.scopedRows)
+    && period.quality!.includedRows >= 0
+    && period.quality!.scopedRows >= period.quality!.includedRows;
 }
 
 function isCashFlowForecast(value: unknown, dateFrom: string, dateTo: string): value is ForecastSnapshot {
@@ -141,6 +162,23 @@ export function countsInCashFlow(row: CashFlowTransaction) {
   return !row.excludedFromAnalytics && row.duplicateState !== "confirmed" && row.kind.effective !== "transfer";
 }
 
+/**
+ * Daily visual signals require confirmed bank coverage. An imported row alone
+ * is not evidence of full coverage, and must never colour an uncovered day.
+ * Ineligible duplicates, transfers and excluded rows cannot produce signals.
+ */
+export function cashFlowObservedDaySignal(
+  day: Pick<CashFlowDay, "real">,
+  hasConfirmedCoverage: boolean,
+  direction: "income" | "expense",
+): boolean {
+  if (!hasConfirmedCoverage) return false;
+  return day.real.some((row) =>
+    countsInCashFlow(row)
+    && (direction === "income" ? row.amountCents > 0 : row.amountCents < 0)
+  );
+}
+
 export function cashFlowEventState(item: ForecastItem): CashFlowEventState {
   if (item.status === "excluded") return "discarded";
   if (item.status === "confirmed") return "realized";
@@ -156,28 +194,41 @@ export function assembleCashFlow(input: {
   period: unknown;
   forecast: unknown;
   latestMovementDate?: string | null;
+  bankFreshness?: HomeBankFreshness | null;
 }): CashFlowView {
   const { month, dateFrom, dateTo, transactions, transactionState } = input;
   const periodValid = isFinancialPeriod(input.period, dateFrom, dateTo);
   const forecast = isCashFlowForecast(input.forecast, dateFrom, dateTo) ? input.forecast : null;
-  const actualCoverage = resolvePeriodCoverage({ dateFrom, dateTo, latestMovementDate: input.latestMovementDate });
+  const actualCoverage = input.bankFreshness
+    ? resolveHomeBankCoverage({
+      dateFrom, dateTo, freshness: input.bankFreshness,
+      activityLatestDate: input.latestMovementDate ?? null,
+    })
+    : resolvePeriodCoverage({ dateFrom, dateTo, latestMovementDate: input.latestMovementDate });
+  const bankDailyVerified = Boolean(input.bankFreshness
+    && hasCompletedSourceSyncEvidence(input.bankFreshness.sync)
+    && !hasSourceSyncIncidents(input.bankFreshness.sync));
   const actualRows = transactions ?? [];
   const eligible = actualRows.filter((row) => !row.excludedFromAnalytics && row.duplicateState !== "confirmed");
   const cashFlowRows = actualRows.filter(countsInCashFlow);
   const derivedRealIncome = cashFlowRows.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
   const derivedRealExpense = cashFlowRows.reduce((sum, row) => sum - Math.min(0, row.amountCents), 0);
   const derivedRealNet = derivedRealIncome - derivedRealExpense;
+  const realArithmeticSafe = [derivedRealIncome, derivedRealExpense, derivedRealNet]
+    .every(Number.isSafeInteger);
   const actualState = transactionState === "unavailable" || !periodValid ? "unavailable"
     : transactionState === "incomplete" || transactions === null ? "incomplete"
-      : derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
+      : realArithmeticSafe && derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
         && eligible.length === (input.period as FinancialPeriod).quality.includedRows
         && actualRows.length === (input.period as FinancialPeriod).quality.scopedRows ? "ready" : "mismatch";
   const actualObserved = actualState === "ready" && periodHasObservedData(actualCoverage);
   const derivedPlannedNet = forecast?.items.reduce((sum, item) => sum + item.projectionEffectCents, 0);
   const derivedPlannedIncome = forecast?.items.reduce((sum, item) => sum + Math.max(0, item.projectionEffectCents), 0);
   const derivedPlannedExpense = forecast?.items.reduce((sum, item) => sum - Math.min(0, item.projectionEffectCents), 0);
+  const plannedArithmeticSafe = [derivedPlannedNet, derivedPlannedIncome, derivedPlannedExpense]
+    .every((amount) => amount !== undefined && Number.isSafeInteger(amount));
   const forecastState = !forecast ? "unavailable"
-    : derivedPlannedNet === forecast.summary.projectedNetCents
+    : plannedArithmeticSafe && derivedPlannedNet === forecast.summary.projectedNetCents
       && derivedPlannedIncome === forecast.summary.projectedIncomeCents
       && derivedPlannedExpense === forecast.summary.projectedExpenseCents
       && forecast.summary.plannedItems === forecast.items.filter((item) => item.status === "planned").length
@@ -202,7 +253,7 @@ export function assembleCashFlow(input: {
   for (let day = dateFrom; day <= dateTo;) {
     const real = transactionsByDate.get(day) ?? [];
     const forecasts = forecastsByDate.get(day) ?? [];
-    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day, actualCoverage);
+    const realCovered = actualState === "ready" && bankDailyVerified && dateHasConfirmedCoverage(day, actualCoverage);
     const effects = realCovered ? real.filter(countsInCashFlow) : [];
     const planned = forecastState === "ready" ? forecasts : [];
     const realIncomeCents = effects.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
@@ -220,7 +271,7 @@ export function assembleCashFlow(input: {
   let realCumulativeCents = 0;
   let plannedCumulativeCents = 0;
   const evolution = days.map((day): CashFlowEvolutionPoint => {
-    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day.date, actualCoverage);
+    const realCovered = actualState === "ready" && bankDailyVerified && dateHasConfirmedCoverage(day.date, actualCoverage);
     if (realCovered) realCumulativeCents += day.realNetCents;
     plannedCumulativeCents += day.plannedNetCents;
     return {
@@ -242,7 +293,7 @@ export function assembleCashFlow(input: {
   ) : null;
 
   return {
-    month, dateFrom, dateTo, actualState, actualCoverage, forecastState,
+    month, dateFrom, dateTo, actualState, actualCoverage, bankDailyVerified, forecastState,
     actualIncomeCents: actualObserved ? derivedRealIncome : null,
     actualExpenseCents: actualObserved ? derivedRealExpense : null,
     actualNetCents: actualObserved ? derivedRealNet : null,

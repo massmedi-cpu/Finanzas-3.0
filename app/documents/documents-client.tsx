@@ -13,13 +13,133 @@ import { useActionFeedback } from "../action-feedback";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
+import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
+import { SpanishDateField } from "./spanish-date-field";
+import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
+type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string; sizeBytes: number | null; expectedSha256: string | null };
+type PendingPrivateUpload = PendingFinalize & {
+  signedUrl: string | null;
+  file: File | null;
+  storagePutConfirmed: boolean;
+};
+
+const PENDING_PRIVATE_UPLOAD_KEY = "financial-app:documents:pending-private-upload:v1";
+const PRIVATE_SHA256 = /^[0-9a-f]{64}$/;
+
+async function fileSha256(file: File) {
+  // Bound by the 15 MiB upload limit, before a private upload signature is
+  // requested. No file bytes or signed Storage credentials are persisted.
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer()));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// A minimal same-origin recovery handle remains after closing/reopening a
+// tab. No document bytes, signed URLs, tokens or auth credentials are stored.
+// The old session-only journal is migrated without changing its private path.
+// The server still enforces workspace ownership for every finalize request.
+function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivateUpload | null } {
+  let raw: string | null;
+  try {
+    const durable = localStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+    const previousSession = sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY);
+    if (durable === null && previousSession !== null) {
+      // Migrate the legacy in-tab handle before accepting a new upload.
+      localStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, previousSession);
+    }
+    raw = durable ?? previousSession;
+  } catch {
+    // No durable recovery means a page or browser restart could lose an
+    // uncertain write. Fail closed rather than sign a duplicate object.
+    return { present: true, pending: null };
+  }
+  if (raw === null) return { present: false, pending: null };
+  try {
+    const value = JSON.parse(raw);
+    if (value?.version !== 1 || value.action !== "upload_finalize"
+      || !["ticket", "invoice", "other"].includes(value.type)
+      || typeof value.originalFileName !== "string"
+      || !value.originalFileName.trim() || value.originalFileName.length > 500
+      || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(value.mimeType)
+      || typeof value.path !== "string"
+      || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(value.path)
+      || typeof value.storagePutConfirmed !== "boolean"
+      || (value.expectedSha256 !== undefined && value.expectedSha256 !== null
+        && (typeof value.expectedSha256 !== "string" || !PRIVATE_SHA256.test(value.expectedSha256)))
+      || (value.sizeBytes !== undefined && (!Number.isSafeInteger(value.sizeBytes) || value.sizeBytes <= 0 || value.sizeBytes > 15_728_640))) {
+      return { present: true, pending: null };
+    }
+    return {
+      present: true,
+      pending: {
+        action: "upload_finalize",
+        type: value.type as DocumentType,
+        originalFileName: value.originalFileName,
+        mimeType: value.mimeType,
+        path: value.path,
+        sizeBytes: value.sizeBytes ?? null, // legacy in-tab journal remains recoverable
+        expectedSha256: value.expectedSha256 ?? null,
+        storagePutConfirmed: value.storagePutConfirmed,
+        signedUrl: null,
+        file: null,
+      },
+    };
+  } catch {
+    // Never discard malformed recovery data and enable a new signed upload.
+    return { present: true, pending: null };
+  }
+}
+
+function writePrivateUploadJournal(pending: PendingPrivateUpload) {
+  // Writing must succeed BEFORE bytes leave the browser; otherwise a reload
+  // could lose the only deduplication/recovery handle for an uncertain PUT.
+  try {
+    const value = JSON.stringify({
+      version: 1, action: pending.action, type: pending.type,
+      originalFileName: pending.originalFileName, mimeType: pending.mimeType,
+      path: pending.path, sizeBytes: pending.sizeBytes,
+      expectedSha256: pending.expectedSha256,
+      storagePutConfirmed: pending.storagePutConfirmed,
+    });
+    // New uploads have exactly ONE durable handle shared across tabs.
+    // Duplicating it in sessionStorage would resurrect stale pending state
+    // after another tab successfully finalizes and clears localStorage.
+    localStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, value);
+  } catch {
+    throw new Error("document_upload_recovery_unavailable");
+  }
+}
+
+function clearPrivateUploadJournal(confirmed: PendingPrivateUpload) {
+  try {
+    // Even when the backend confirms successfully, another tab or an
+    // extension could replace the journal in the meantime. Never erase a
+    // DIFFERENT upload's durable recovery handle.
+    const current = readPrivateUploadJournal();
+    if (!current.present || !current.pending
+      || current.pending.path !== confirmed.path
+      || current.pending.expectedSha256 !== confirmed.expectedSha256
+      || current.pending.sizeBytes !== confirmed.sizeBytes) {
+      throw new Error("document_upload_recovery_unavailable");
+    }
+    // Never permit another upload until both the old and durable handles
+    // are cleared after verified server-side registration.
+    localStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
+    sessionStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
+    if (localStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null
+      || sessionStorage.getItem(PENDING_PRIVATE_UPLOAD_KEY) !== null) {
+      throw new Error("document_upload_recovery_unavailable");
+    }
+  } catch {
+    throw new Error("document_upload_recovery_unavailable");
+  }
+}
 type StorageProvider = "supabase" | "google_drive";
 type MetadataEditor = {
   type: DocumentType;
@@ -80,6 +200,8 @@ type Association = {
 };
 
 type DocumentDetail = {
+  contentDuplicate?: boolean;
+  uploadIntegrity?: { sha256: string; sizeBytes: number; verified: boolean };
   contractVersion: 1 | 2 | 3;
   document: Omit<DocumentItem, "associationCount"> & {
     storageKey?: string;
@@ -116,6 +238,112 @@ type DocumentList = {
   principles: DocumentPrinciples;
 };
 
+// The display layer may receive HTTP 200 with a PostgreSQL timestamp that
+// JavaScript silently normalizes (for example, 30 February -> 2 March).
+// Reject a fictitious provenance date before presenting or editing an item.
+function validDocumentTimestamp(value: unknown): value is string {
+  if (typeof value !== "string"
+    || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return false;
+  return formatDate(value.slice(0, 10)) !== "Fecha no válida"
+    && Number.isFinite(Date.parse(value));
+}
+
+// Trust neither HTTP 200 nor TypeScript assertions as proof that this is a
+// valid personal document list. Refuse to render malformed/partial responses
+// as a genuine empty archive, and do not discard the previous list.
+function validatedDocumentList(payload: unknown): DocumentList {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("document_list_invalid");
+  const row = payload as Partial<DocumentList>;
+  if (![1, 2, 3].includes(row.contractVersion as number)
+    || !Array.isArray(row.items)
+    || !Number.isSafeInteger(row.total) || (row.total ?? -1) < 0
+    || !Number.isSafeInteger(row.limit) || (row.limit ?? -1) < 1 || (row.limit ?? 101) > 100
+    || !Number.isSafeInteger(row.offset) || (row.offset ?? -1) < 0
+    || !row.principles || row.principles.bankSource !== "read_only"
+    || row.principles.getHasSideEffects !== false
+    || row.principles.suggestionsPersisted !== false
+    || row.principles.associationsRequireConfirmation !== true
+    || row.items.length > (row.limit ?? 0)
+    || row.items.length > (row.total ?? 0)
+    // An empty page is legitimate beyond the last item, not within it.
+    || (row.items.length === 0 && (row.offset ?? 0) < (row.total ?? 0))
+    || (row.items.length > 0 && (row.offset ?? 0) + row.items.length > (row.total ?? 0))
+    // If more documents exist, every non-final page must contain 'limit'
+    // entries. A silently truncated page would otherwise cause the next
+    // offset to skip records and make the archive appear complete.
+    || ((row.offset ?? 0) + row.items.length < (row.total ?? 0)
+      && row.items.length !== row.limit)) {
+    throw new Error("document_list_invalid");
+  }
+  const ids = new Set<string>();
+  for (const raw of row.items) {
+    if (!raw || typeof raw !== "object") throw new Error("document_list_invalid");
+    const item = raw as Partial<DocumentItem>;
+    if (typeof item.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id)
+      || ids.has(item.id)
+      || !["ticket", "invoice", "other"].includes(item.type ?? "")
+      || !["imported", "pending_review", "confirmed", "archived"].includes(item.status ?? "")
+      || typeof item.originalFileName !== "string" || !item.originalFileName.trim()
+      // A valid document id is not enough: an HTTP 200 can still contain
+      // unusable or cross-provider metadata. Never present it as a loaded
+      // archive with real files until the minimum display contract is sound.
+      || !["supabase", "google_drive"].includes(item.storageProvider ?? "")
+      || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(item.mimeType ?? "")
+      || typeof item.notes !== "string"
+      || !validDocumentTimestamp(item.createdAt)
+      || !validDocumentTimestamp(item.updatedAt)
+      // Drive origin evidence must not contain invented times or an object
+      // disguised as an opaque file id, even if the rest of the list is 200.
+      || (item.sourceModifiedAt != null && !validDocumentTimestamp(item.sourceModifiedAt))
+      || (item.sourceDriveFileId != null
+        && (typeof item.sourceDriveFileId !== "string" || !item.sourceDriveFileId.trim()))
+      || (item.sizeBytes !== null && (!Number.isSafeInteger(item.sizeBytes) || (item.sizeBytes ?? -1) < 0))
+      || (item.issuerName !== null && typeof item.issuerName !== "string")
+      || (item.totalCents !== null && !Number.isSafeInteger(item.totalCents))
+      || (item.documentDate !== null && (typeof item.documentDate !== "string"
+        || !/^\d{4}-\d{2}-\d{2}$/.test(item.documentDate)
+        || formatDate(item.documentDate) === "Fecha no válida"))
+      // A malformed test designation must not silently turn a test fixture
+      // into an ordinary personal document in the archive UI.
+      || (item.isTest !== undefined && typeof item.isTest !== "boolean")
+      || (item.testDesignationUpdatedAt != null && !validDocumentTimestamp(item.testDesignationUpdatedAt))
+      || (item.testDesignationReason != null && typeof item.testDesignationReason !== "string")
+      || !Number.isSafeInteger(item.associationCount) || (item.associationCount ?? -1) < 0) {
+      throw new Error("document_list_invalid");
+    }
+    ids.add(item.id);
+  }
+  return row as DocumentList;
+}
+
+// The finalized record must be for this exact private object. A successful
+// HTTP response for an unrelated document cannot release an upload lock.
+function validatedFinalizedUpload(payload: unknown, pending: PendingFinalize): DocumentDetail {
+  const data = payload as DocumentDetail | null;
+  const canonicalDuplicate = data?.contentDuplicate === true && pending.expectedSha256 !== null;
+  if (!data || ![1, 2, 3].includes(data.contractVersion)
+    || !data.document || typeof data.document.id !== "string" || !DOCUMENT_UUID.test(data.document.id)
+    || data.document.storageProvider !== "supabase"
+    || data.document.storageKey !== pending.path
+    || (!canonicalDuplicate && (data.document.originalFileName !== pending.originalFileName
+      || data.document.type !== pending.type))
+    || (canonicalDuplicate && (!data.document.originalFileName?.trim()
+      || !["ticket", "invoice", "other"].includes(data.document.type)))
+    || data.document.mimeType !== pending.mimeType
+    || (pending.sizeBytes !== null && data.document.sizeBytes !== pending.sizeBytes)
+    || (pending.expectedSha256 !== null && (
+      data.uploadIntegrity?.verified !== true
+      || data.uploadIntegrity.sha256 !== pending.expectedSha256
+      || data.uploadIntegrity.sizeBytes !== pending.sizeBytes
+    ))
+    || !data.principles || data.principles.bankSource !== "read_only"
+    || data.principles.getHasSideEffects !== false || data.principles.suggestionsPersisted !== false
+    || data.principles.associationsRequireConfirmation !== true) {
+    throw new Error("document_upload_unverified");
+  }
+  return data;
+}
+
 type Candidate = {
   transactionId: string;
   date: string;
@@ -143,6 +371,64 @@ type CandidateResponse = {
   principles: { bankSource: "read_only"; requiresConfirmation: true; suggestionsPersisted: false };
 };
 
+
+const DOCUMENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validAssociation(value: unknown): value is Association {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Partial<Association>;
+  return typeof row.id === "string" && DOCUMENT_UUID.test(row.id)
+    && typeof row.transactionId === "string" && DOCUMENT_UUID.test(row.transactionId)
+    && typeof row.accountId === "string" && DOCUMENT_UUID.test(row.accountId)
+    && (row.method === "manual" || row.method === "suggested")
+    // This panel labels and permits undo of CONFIRMED bank associations.
+    // A false/unknown confirmation must not masquerade as user-approved.
+    && row.confirmed === true
+    && typeof row.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+    && formatDate(row.date) !== "Fecha no válida"
+    && typeof row.concept === "string" && typeof row.accountName === "string"
+    && Number.isSafeInteger(row.amountCents)
+    && (row.categoryId == null || (typeof row.categoryId === "string" && DOCUMENT_UUID.test(row.categoryId)))
+    && (row.merchantId == null || (typeof row.merchantId === "string" && DOCUMENT_UUID.test(row.merchantId)))
+    && (row.merchantName == null || typeof row.merchantName === "string")
+    && (row.effectiveKind == null || typeof row.effectiveKind === "string")
+    && (row.confidence == null || (typeof row.confidence === "number"
+      && Number.isFinite(row.confidence) && row.confidence >= 0 && row.confidence <= 1));
+}
+
+function validatedCandidateResponse(payload: unknown, documentId: string): CandidateResponse {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("document_suggestions_invalid");
+  const data = payload as Partial<CandidateResponse>;
+  if (data.contractVersion !== 1 || data.documentId !== documentId || typeof data.ready !== "boolean"
+    || !Array.isArray(data.candidates) || data.candidates.length > 20
+    || !data.principles || data.principles.bankSource !== "read_only"
+    || data.principles.requiresConfirmation !== true || data.principles.suggestionsPersisted !== false) {
+    throw new Error("document_suggestions_invalid");
+  }
+  const seen = new Set<string>();
+  for (const candidate of data.candidates) {
+    if (!candidate || typeof candidate !== "object"
+      || typeof candidate.transactionId !== "string" || !DOCUMENT_UUID.test(candidate.transactionId)
+      || seen.has(candidate.transactionId)
+      || typeof candidate.accountId !== "string" || !DOCUMENT_UUID.test(candidate.accountId)
+      || !Number.isSafeInteger(candidate.amountCents)
+      || typeof candidate.concept !== "string" || typeof candidate.accountName !== "string"
+      || typeof candidate.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
+      || formatDate(candidate.date) === "Fecha no válida"
+      || typeof candidate.confidence !== "number" || !Number.isFinite(candidate.confidence)
+      || candidate.confidence < 0 || candidate.confidence > 1
+      || !Number.isSafeInteger(candidate.amountDifferenceCents)
+      || !Number.isSafeInteger(candidate.dayDifference)
+      || typeof candidate.effectiveKind !== "string"
+      || (candidate.categoryId != null && (typeof candidate.categoryId !== "string" || !DOCUMENT_UUID.test(candidate.categoryId)))
+      || (candidate.merchantId != null && (typeof candidate.merchantId !== "string" || !DOCUMENT_UUID.test(candidate.merchantId)))) {
+      throw new Error("document_suggestions_invalid");
+    }
+    seen.add(candidate.transactionId);
+  }
+  return data as CandidateResponse;
+}
+
 type TransactionRow = {
   id: string;
   bankDate: string;
@@ -158,6 +444,38 @@ type TransactionSearch = {
   rows: TransactionRow[];
   totalCount: number;
 };
+
+// Never display an untrusted HTTP payload as selectable bank transactions.
+// An invalid account/category shape could otherwise render a misleading
+// association target or crash the document detail.
+function validatedTransactionSearch(value: unknown): TransactionSearch {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("document_transactions_invalid");
+  const result = value as Partial<TransactionSearch>;
+  if (!Array.isArray(result.rows) || result.rows.length > 20 || !Number.isSafeInteger(result.totalCount)
+    || (result.totalCount ?? -1) < 0 || result.rows.length > (result.totalCount ?? -1)) {
+    throw new Error("document_transactions_invalid");
+  }
+  const seen = new Set<string>();
+  for (const raw of result.rows) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("document_transactions_invalid");
+    const row = raw as Partial<TransactionRow>;
+    if (typeof row.id !== "string" || !DOCUMENT_UUID.test(row.id) || seen.has(row.id)
+      || typeof row.bankDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(row.bankDate)
+      || formatDate(row.bankDate) === "Fecha no válida"
+      || !Number.isSafeInteger(row.amountCents)
+      || !row.account || typeof row.account.id !== "string" || !DOCUMENT_UUID.test(row.account.id)
+      || typeof row.account.name !== "string"
+      || !row.concept || typeof row.concept.effective !== "string"
+      || !row.category || (row.category.effectiveId != null
+        && (typeof row.category.effectiveId !== "string" || !DOCUMENT_UUID.test(row.category.effectiveId)))
+      || (row.category.effectiveName != null && typeof row.category.effectiveName !== "string")
+      || !row.kind || typeof row.kind.effective !== "string") {
+      throw new Error("document_transactions_invalid");
+    }
+    seen.add(row.id);
+  }
+  return result as TransactionSearch;
+}
 
 const DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1UCUZSmOWfGM5VyvhDcx7ExeBw3LS872t";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
@@ -234,6 +552,22 @@ function editorMatchesDocument(editor: MetadataEditor, document: DocumentDetail[
     && editor.notes === saved.notes;
 }
 
+// An HTTP 200 for the archive is not sufficient evidence after a document
+// write. If the current page contains the document, its persisted summary must
+// match the independently re-read detail before showing "synchronized".
+// Missing items are allowed only because filters, scope and pagination can
+// legitimately exclude the document from the current archive page.
+function archiveAgreesWithDetail(archive: DocumentList, verified: DocumentDetail) {
+  const saved = verified.document;
+  const listed = archive.items.find((item) => item.id === saved.id);
+  return !listed || (listed.type === saved.type
+    && listed.status === saved.status
+    && listed.documentDate === saved.documentDate
+    && listed.issuerName === saved.issuerName
+    && listed.totalCents === saved.totalCents
+    && listed.notes === saved.notes);
+}
+
 async function getDocumentJson(url: string) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), DOCUMENT_READ_TIMEOUT_MS);
@@ -247,14 +581,23 @@ async function getDocumentJson(url: string) {
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(requestErrorCode(body));
+    // An upstream failure can be a 401/429/503 without a JSON body. Keep
+    // the meaningful HTTP classification instead of a generic "request_failed".
+    const code = requestErrorCode(body);
+    if (code !== "request_failed") throw new Error(code);
+    if (response.status === 401) throw new Error("authentication_required");
+    if (response.status === 429) throw new Error("document_rate_limited");
+    if (response.status === 502 || response.status === 503 || response.status === 504) {
+      throw new Error("document_service_unavailable");
+    }
+    throw new Error("document_request_failed");
   }
   return body;
 }
 
 function friendlyError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
-    return "La consulta documental ha superado el tiempo de espera. No se ha modificado ningún dato; puedes reintentar.";
+    return "La solicitud documental ha superado el tiempo de espera. Si intentabas guardar o asociar, el resultado podría haberse aplicado: comprueba el detalle antes de repetir la operación.";
   }
   const code = error instanceof Error ? error.message : "request_failed";
   const labels: Record<string, string> = {
@@ -263,17 +606,35 @@ function friendlyError(error: unknown) {
     invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
     document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
     document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
-    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado. No mostraremos datos de otro documento; reintenta la consulta.",
+    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado o su contenido no supera la verificación de integridad. La edición y las asociaciones están bloqueadas hasta recuperarlo.",
+    document_open_blocked: "El navegador ha bloqueado la ventana del documento. Permite ventanas emergentes para Financial App y vuelve a pulsar Abrir.",
+    document_open_failed: "No se ha podido abrir el original. Reintenta desde la ficha del documento.",
+    document_open_unsafe_url: "Se ha rechazado un enlace de archivo no seguro. El original no se ha abierto.",
+    document_suggestions_invalid: "Las sugerencias no corresponden a este documento o no cumplen los requisitos de seguridad. No se ha asociado ningún movimiento.",
+    document_transactions_invalid: "La búsqueda de movimientos ha devuelto datos incompletos. No se puede asociar un resultado sin verificar; vuelve a buscar.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
     invalid_document_total: "El importe del documento no es válido.",
     document_upload_not_found: "La subida no llegó a completarse en el almacenamiento privado.",
+    document_upload_unsafe_url: "El servidor ha devuelto un destino de subida que no pertenece al almacenamiento privado autorizado. No se ha enviado el archivo.",
+    document_upload_unverified: "No se ha podido comprobar la identidad del documento guardado. Recupera la misma ruta antes de volver a subir el archivo.",
+    document_upload_integrity_unsupported: "El servidor documental aún no admite la verificación segura SHA-256. El original no se ha enviado; es necesario actualizar el backend de la candidata antes de permitir subidas.",
+    document_upload_recovery_unavailable: "El navegador no permite guardar de forma segura la referencia de recuperación. No se ha enviado el original. Comprueba los permisos de almacenamiento de esta pestaña antes de reintentarlo.",
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
-    authentication_required: "Tu sesión ha caducado antes de guardar.",
-    authentication_unavailable: "El acceso seguro no está disponible temporalmente.",
+    authentication_required: "Tu sesión necesita renovarse. Inicia sesión y pulsa Reintentar lista. Si acababas de guardar algún cambio, comprueba su estado antes de repetirlo.",
+    authentication_unavailable: "El acceso seguro no está disponible temporalmente. Si habías iniciado un guardado, consulta su estado antes de repetirlo.",
+    oidc_unavailable: "No se ha podido verificar la identidad segura del servidor. No se confirma el resultado de ninguna operación; comprueba el estado antes de repetir un cambio.",
+    gateway_identity_unavailable: "El servidor no ha podido acreditar su identidad ante el archivo financiero. No es un problema de tu contraseña; verifica el estado antes de repetir cualquier operación.",
+    persistence_failed: "No se ha podido confirmar la operación documental por un problema de persistencia. Si estabas guardando cambios, comprueba el detalle antes de repetir; también puedes pulsar Reintentar lista.",
+    document_service_unavailable: "El servicio documental no responde en este momento. Si estabas guardando cambios, comprueba primero su estado antes de volver a intentarlo.",
+    document_rate_limited: "Se han alcanzado demasiadas consultas documentales. Espera un momento antes de pulsar Reintentar lista.",
+    document_request_failed: "No se ha podido confirmar la operación documental. Comprueba tu conexión y el estado del documento antes de repetir un cambio; puedes pulsar Reintentar lista.",
+    document_filter_limit: "La búsqueda abarca demasiados documentos. Reduce los filtros antes de volver a cargarla.",
+    document_filter_incomplete: "La lista recibida está incompleta. No mostramos un resultado parcial como si fuera el definitivo; reintenta la carga.",
+    document_list_invalid: "El servidor ha devuelto una lista documental incompleta o incompatible. No se mostrará como si estuviera vacía; reintenta la consulta.",
   };
   return labels[code] ?? "No se pudo completar la operación documental.";
 }
@@ -320,6 +681,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
+  const [transactionResultQuery, setTransactionResultQuery] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
@@ -339,19 +701,65 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadUnverified, setUploadUnverified] = useState(false);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
+  // Preserve unsaved changes even when the detail is hidden after a failed read.
+  const [draftPendingVerification, setDraftPendingVerification] = useState(false);
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
   const metadataDirty = useMemo(
-    () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
-    [detail, editor],
+    () => Boolean((detail && !editorMatchesDocument(editor, detail.document))
+      || (draftPendingVerification && selectedId)),
+    [detail, editor, draftPendingVerification, selectedId],
   );
 
   const listSequence = useRef(0);
+  // Keep the validated GET payload for cross-checking a persisted document.
+  // React state updates are asynchronous and cannot be read safely after await.
+  const verifiedArchiveRef = useRef<{ key: string; data: DocumentList } | null>(null);
   const detailSequence = useRef(0);
+  const originalOpenInFlight = useRef(false);
+  const uploadInFlight = useRef(false);
+  // Close the microtask gap between a click and acquisition of Web Locks.
+  const uploadLockPendingRef = useRef(false);
+  // An in-memory File and its signed URL are used only in the current tab
+  // lifecycle. The minimal journal survives reloads to prevent duplicates.
+  const unverifiedFinalizeRef = useRef<PendingPrivateUpload | null>(null);
+
+  useEffect(() => {
+    const syncExternalPending = () => {
+      // A storage event is delivered to OTHER tabs, not to the initiating tab.
+      // Never replace the active tab's in-memory File or signed upload token.
+      if (uploadInFlight.current) return;
+      const recovery = readPrivateUploadJournal();
+      unverifiedFinalizeRef.current = recovery.pending;
+      setUploadUnverified(recovery.present);
+      if (recovery.present) {
+        setNotice(recovery.pending
+          ? "Hay un envío privado sin confirmar en este navegador. Puedes recuperar la misma ruta aunque hayas cerrado la pestaña."
+          : "La referencia de recuperación no es legible. Se bloquean nuevos envíos para proteger tus documentos.");
+      } else {
+        // Another tab verified the original; do not leave this one blocked
+        // against a stale recovery reference.
+        setNotice((previous) => previous?.startsWith("Hay un envío privado sin confirmar")
+          || previous?.startsWith("La referencia de recuperación no es legible") ? null : previous);
+      }
+    };
+    syncExternalPending();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && event.key === PENDING_PRIVATE_UPLOAD_KEY) {
+        syncExternalPending();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+  const associationMutationInFlight = useRef(false);
+  const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
+  const draftPendingVerificationRef = useRef(false);
   const bypassUnloadOnceRef = useRef(false);
   const exitReturnFocusRef = useRef<HTMLElement | null>(null);
   selectedIdRef.current = selectedId;
@@ -374,33 +782,88 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
+    verifiedArchiveRef.current = null;
     const requested = new URL(url, window.location.origin);
     const requestKey = `${requested.pathname}${requested.search}`;
     setListLoadFailed(false);
     if (!silent) setLoadingList(true);
     setError(null);
     try {
-      const first = await getDocumentJson(url) as DocumentList;
+      const first = validatedDocumentList(await getDocumentJson(url));
+      // Do not replace this page with a structurally valid response to
+      // a different request, which could hide documents or move pagination.
+      if (first.offset !== Number(requested.searchParams.get("offset") ?? "0")
+        || first.limit !== Number(requested.searchParams.get("limit") ?? "50")) {
+        throw new Error("document_list_invalid");
+      }
       let data = first;
-      if (unassociatedOnly && first.contractVersion < 3) {
-        const all = [...first.items];
+      if (requested.searchParams.get("unassociated") === "true" && first.contractVersion < 3) {
+        // Legacy responses do not filter unassociated documents server-side.
+        // Always inventory from offset zero: starting at the requested page
+        // silently skipped earlier records and duplicated later ones.
         const parsed = new URL(url, window.location.origin);
-        while (all.length < first.total) {
-          if (all.length >= 10_000) throw new Error("document_filter_limit");
-          parsed.searchParams.set("limit", "100");
+        parsed.searchParams.set("limit", "100");
+        parsed.searchParams.set("offset", "0");
+        const base = validatedDocumentList(await getDocumentJson(parsed.toString()));
+        if (base.contractVersion !== first.contractVersion
+          || base.total !== first.total || base.offset !== 0 || base.limit !== 100
+          || base.total > 10_000) {
+          throw new Error("document_filter_incomplete");
+        }
+        const all = [...base.items];
+        const ids = new Set(all.map((item) => item.id));
+        while (all.length < base.total) {
           parsed.searchParams.set("offset", String(all.length));
-          const next = await getDocumentJson(parsed.toString()) as DocumentList;
-          if (!next.items.length) throw new Error("document_filter_incomplete");
+          const next = validatedDocumentList(await getDocumentJson(parsed.toString()));
+          if (next.contractVersion !== base.contractVersion
+            || next.total !== base.total || next.offset !== all.length || next.limit !== 100
+            || !next.items.length || next.items.some((item) => ids.has(item.id))) {
+            throw new Error("document_filter_incomplete");
+          }
+          for (const item of next.items) ids.add(item.id);
           all.push(...next.items);
         }
-        const filtered = all.filter((item) => item.status !== "archived" && item.associationCount === 0);
-        data = { ...first, items: filtered, total: filtered.length, offset: 0, limit: filtered.length };
+        // Two non-atomic reads may observe different repository revisions.
+        // A changed page invalidates the reconstructed snapshot rather than
+        // silently mixing two archives and skipping or duplicating records.
+        const originalWindow = all.slice(first.offset, first.offset + first.limit);
+        if (originalWindow.length !== first.items.length
+          || first.items.some((item, index) => {
+            const original = originalWindow[index];
+            return !original || original.id !== item.id
+              || original.status !== item.status
+              || original.associationCount !== item.associationCount
+              || original.updatedAt !== item.updatedAt
+              || original.type !== item.type
+              || original.totalCents !== item.totalCents
+              || original.documentDate !== item.documentDate
+              || original.issuerName !== item.issuerName
+              || original.originalFileName !== item.originalFileName
+              || original.storageProvider !== item.storageProvider
+              || original.isTest !== item.isTest;
+          })) {
+          throw new Error("document_filter_incomplete");
+        }
+        // When the owner explicitly requests archived documents, do not
+        // remove them merely because the backend uses an older contract.
+        const filtered = all.filter((item) => item.associationCount === 0
+          && (requested.searchParams.get("status") === "archived" || item.status !== "archived"));
+        // Keep the requested page and its 50-row limit. Returning the entire
+        // archive as a single page defeated navigation and mobile rendering.
+        data = {
+          ...first,
+          items: filtered.slice(first.offset, first.offset + first.limit),
+          total: filtered.length,
+          offset: first.offset,
+          limit: first.limit,
+        };
       }
-      if (sequence !== listSequence.current) return;
-      if (data.contractVersion === 3 && data.offset > 0 && data.items.length === 0) {
+      if (sequence !== listSequence.current) return false;
+      if (data.offset > 0 && data.items.length === 0) {
         setOffset(0);
-        return;
+        return false;
       }
+      verifiedArchiveRef.current = { key: requestKey, data };
       setList(data);
       setLoadedListKey(requestKey);
       setListLoadFailed(false);
@@ -412,15 +875,17 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setSelectedId(null);
         setDetail(null);
       }
+      return true;
     } catch (caught) {
       if (sequence === listSequence.current) {
         setListLoadFailed(true);
         setError(friendlyError(caught));
       }
+      return false;
     } finally {
       if (sequence === listSequence.current) setLoadingList(false);
     }
-  }, [listUrl, unassociatedOnly]);
+  }, [listUrl]);
 
   const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
@@ -432,24 +897,87 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!silent) {
       setCandidates(null);
       setTransactions(null);
+      setTransactionResultQuery(null);
+      manualSearchSequence.current += 1;
     }
     try {
       const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
-      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)) {
+      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)
+        || ![1, 2, 3].includes(data.contractVersion)
+        || !data.associations.every(validAssociation)
+        || new Set(data.associations.map((entry) => entry.transactionId)).size !== data.associations.length
+        || new Set(data.associations.map((entry) => entry.id)).size !== data.associations.length
+        || !data.principles || data.principles.bankSource !== "read_only"
+        || data.principles.getHasSideEffects !== false
+        || data.principles.suggestionsPersisted !== false
+        || data.principles.associationsRequireConfirmation !== true
+        || !["ticket", "invoice", "other"].includes(data.document.type)
+        || !["imported", "pending_review", "confirmed", "archived"].includes(data.document.status)
+        // A document detail is just as untrusted as the archive list. Do
+        // not enable metadata editing, associations or OCR for a 200 response
+        // whose basic source, date or test designation is malformed.
+        || !["supabase", "google_drive"].includes(data.document.storageProvider)
+        || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(data.document.mimeType)
+        || typeof data.document.notes !== "string"
+        || !validDocumentTimestamp(data.document.createdAt)
+        || !validDocumentTimestamp(data.document.updatedAt)
+        || (data.document.sourceModifiedAt != null
+          && !validDocumentTimestamp(data.document.sourceModifiedAt))
+        || (data.document.sourceDriveFileId != null
+          && (typeof data.document.sourceDriveFileId !== "string"
+            || !data.document.sourceDriveFileId.trim()))
+        || (data.document.sizeBytes !== null
+          && (!Number.isSafeInteger(data.document.sizeBytes) || data.document.sizeBytes < 0))
+        || (data.document.issuerName !== null && typeof data.document.issuerName !== "string")
+        || (data.document.documentDate !== null
+          && (typeof data.document.documentDate !== "string"
+            || !/^\d{4}-\d{2}-\d{2}$/.test(data.document.documentDate)
+            || formatDate(data.document.documentDate) === "Fecha no válida"))
+        || (data.document.isTest !== undefined && typeof data.document.isTest !== "boolean")
+        // This provenance is user-facing. Invalid timestamps and non-text
+        // explanations must not be rendered as authoritative test labelling.
+        || (data.document.testDesignationUpdatedAt != null
+          && !validDocumentTimestamp(data.document.testDesignationUpdatedAt))
+        || (data.document.testDesignationReason != null
+          && typeof data.document.testDesignationReason !== "string")
+        || (data.document.totalCents !== null && !Number.isSafeInteger(data.document.totalCents))
+        || typeof data.document.originalFileName !== "string"
+        || !data.document.originalFileName.trim()) {
         throw new Error("document_detail_mismatch");
       }
+      // A silent revalidation is still authoritative: only a successful
+      // matching, complete GET can unblock a previous failed readback.
+      setDetailLoadFailed(false);
       setDetail(data);
-      if (!preserveEditor) {
+      const recoveringDraft = draftPendingVerificationRef.current;
+      if (!preserveEditor && !recoveringDraft) {
         setDesignationOpen(false);
         setDesignationReason("");
         setDesignationReviewed(false);
+        setEditor(editorFromDocument(data.document));
       }
-      if (!preserveEditor) setEditor(editorFromDocument(data.document));
+      // One valid detail GET cannot certify a previously uncertain PATCH
+      // while the archive list may still be stale or unavailable.
       return data;
     } catch (caught) {
       if (sequence === detailSequence.current && selectedIdRef.current === id) {
-        if (!silent) setDetailLoadFailed(true);
+        // OCR confirmation refreshes quietly, but a failed readback after a
+        // write is never proof that the old detail is still accurate. Fail
+        // closed for BOTH explicit and silent reads: stale controls must not
+        // offer metadata edits or banking associations until verification.
+        // Fail closed for stale controls, but keep the unsaved draft dirty.
+        if (metadataDirtyRef.current || draftPendingVerificationRef.current) {
+          draftPendingVerificationRef.current = true;
+          setDraftPendingVerification(true);
+          metadataDirtyRef.current = true;
+        }
+        setDetailLoadFailed(true);
+        setDetail(null);
+        setCandidates(null);
+        setTransactions(null);
+        setTransactionResultQuery(null);
+        manualSearchSequence.current += 1;
         setError(friendlyError(caught));
       }
       return null;
@@ -459,6 +987,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, []);
 
   useEffect(() => { void loadList(); }, [loadList]);
+  useEffect(() => {
+    const refreshAfterDrive = () => { void loadList(listUrl, true); };
+    window.addEventListener("financial-app:documents-drive-updated", refreshAfterDrive);
+    return () => window.removeEventListener("financial-app:documents-drive-updated", refreshAfterDrive);
+  }, [loadList, listUrl]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (scope === "ordinary") params.delete("scope"); else params.set("scope", scope);
@@ -484,20 +1017,24 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [actionFeedback, busy, error]);
 
   useEffect(() => {
-    if (!metadataDirty) return;
-
+    // React can unmount during a private PUT or a pending finalize when a
+    // navigation starts. Session metadata then survives, but the original File
+    // and signed URL do not. Prevent SPA navigation DURING the write; warn
+    // on full page unload with either a write or unresolved journal.
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (bypassUnloadOnceRef.current || !metadataDirtyRef.current) return;
+      const recoveryPresent = readPrivateUploadJournal().present;
+      if (bypassUnloadOnceRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
+      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
       event.preventDefault();
       event.returnValue = "";
     };
     const protectInternalNavigation = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const anchor = target.closest("a[href]");
       if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
-
       const destination = new URL(anchor.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
       const current = new URL(window.location.href);
@@ -505,6 +1042,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
       event.preventDefault();
       event.stopPropagation();
+      if (uploadLockPendingRef.current || uploadInFlight.current) {
+        setError("Hay un envío de documento en curso. Termina o recupera esa misma subida antes de cambiar de página; así no se pierde el original ni se crea una copia.");
+        return;
+      }
       exitReturnFocusRef.current = anchor;
       setPendingExit({ type: "navigation", href: destination.href });
     };
@@ -515,7 +1056,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", protectInternalNavigation, true);
     };
-  }, [metadataDirty]);
+  }, []);
 
   const selectDocument = (id: string) => {
     if (id === selectedIdRef.current || busy) return;
@@ -532,6 +1073,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const continueDocumentExit = (target: PendingDocumentExit) => {
     setPendingExit(null);
     metadataDirtyRef.current = false;
+    draftPendingVerificationRef.current = false;
+    setDraftPendingVerification(false);
     if (target.type === "document") {
       if (detail) setEditor(editorFromDocument(detail.document));
       setAuthRecovery(null);
@@ -544,17 +1087,188 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   };
 
   const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
-    const [, verifiedDetail] = await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
-    return verifiedDetail?.document.id === id ? verifiedDetail : null;
-  }, [loadList, loadDetail]);
+    const [listVerified, verifiedDetail] = await Promise.all([
+      loadList(), loadDetail(id, false, preserveEditor),
+    ]);
+    // Every metadata or association write requires TWO independent reads:
+    // a valid document detail and a valid archive/list snapshot. A confirmed
+    // detail is insufficient to claim the workspace has synchronized when
+    // the corresponding list returned 503 or an invalid 200 response.
+    if (listVerified !== true || verifiedDetail?.document.id !== id) return null;
+    const archive = verifiedArchiveRef.current;
+    // A valid HTTP 200 for the archive can still return the old document.
+    // If this document is visible within the requested page, require it to
+    // agree with the authoritative detail before accepting a write.
+    if (!archive || archive.key !== listUrl) return null;
+    if (!archiveAgreesWithDetail(archive.data, verifiedDetail)) return null;
+    return verifiedDetail;
+  }, [loadList, loadDetail, listUrl]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
-    await Promise.all([loadList(listUrl, true), loadDetail(id, true, true)]);
+    const [listVerified, verifiedDetail] = await Promise.all([
+      loadList(listUrl, true), loadDetail(id, true, true),
+    ]);
+    // Both readers handle transport errors locally; their promises can
+    // resolve even when one failed. Never claim the whole document was
+    // synchronized merely because Promise.all completed.
+    const archive = verifiedArchiveRef.current;
+    if (listVerified !== true || verifiedDetail?.document.id !== id
+      || !archive || archive.key !== listUrl
+      || !archiveAgreesWithDetail(archive.data, verifiedDetail)) {
+      // The saved OCR revision remains committed. Only the derived archive
+      // synchronization message is blocked until both reads agree.
+      throw new Error("document_post_confirmation_refresh_failed");
+    }
     setNotice("Revisión OCR confirmada y documento sincronizado.");
   }, [listUrl, loadList, loadDetail]);
 
+  async function verifyUncertainUpload() {
+    if (!uploadUnverified || busy || uploadInFlight.current || uploadLockPendingRef.current) return;
+    // Re-finalization is idempotent for the same path, but clearing its
+    // journal must not race with another tab acquiring a new upload path.
+    // Use the SAME lock as uploadDocument, including the clear operation.
+    if (!navigator.locks?.request) {
+      setError("Este navegador no dispone del bloqueo seguro entre pestañas. Recupera el documento desde un navegador actualizado, sin subir otra copia.");
+      return;
+    }
+    uploadLockPendingRef.current = true;
+    try {
+      await navigator.locks.request(PENDING_PRIVATE_UPLOAD_KEY, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          setError("Otra pestaña está gestionando un documento. Comprueba la recuperación allí antes de repetirla aquí.");
+          return;
+        }
+        await verifyUncertainUploadExclusive();
+      });
+    } catch {
+      setError("No se ha podido proteger la recuperación entre pestañas. El original sigue bloqueado; no generes un envío nuevo.");
+    } finally {
+      uploadLockPendingRef.current = false;
+    }
+  }
+
+  async function verifyUncertainUploadExclusive() {
+    if (!uploadUnverified || busy || uploadInFlight.current) return;
+    const pending = unverifiedFinalizeRef.current;
+    if (!pending) {
+      setError("La referencia de recuperación es ilegible. No vuelvas a enviar el original; comprueba los documentos y solicita una revisión antes de generar otra subida.");
+      return;
+    }
+    // A list of the first 50 documents cannot prove an uncertain finalize
+    // was not committed. Re-finalize the SAME private object instead of
+    // creating another signed path and uploading a duplicate.
+    uploadInFlight.current = true;
+    setBusy("upload-verify");
+    setError(null);
+    setNotice(null);
+    try {
+      if (!pending.storagePutConfirmed && pending.file && pending.signedUrl) {
+        // Within the original page lifetime, re-try the same object only.
+        // After a reload these sensitive values are not persisted: instead,
+        // ask the server to verify whether the prior PUT reached Storage.
+        try {
+          const form = new FormData();
+          form.append("cacheControl", "3600");
+          form.append("", pending.file);
+          const put = await fetch(pending.signedUrl, {
+            method: "PUT", headers: { "x-upsert": "false" }, body: form,
+          });
+          if (put.ok) {
+            pending.storagePutConfirmed = true;
+            writePrivateUploadJournal(pending);
+          }
+        } catch {
+          // Network uncertainty does not establish that the object is absent.
+        }
+      }
+      const result = await readJson(await fetch("/api/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: pending.action, type: pending.type,
+          originalFileName: pending.originalFileName,
+          mimeType: pending.mimeType, path: pending.path,
+          expectedSizeBytes: pending.sizeBytes, expectedSha256: pending.expectedSha256,
+        }),
+      }));
+      const confirmed = validatedFinalizedUpload(result, pending);
+      clearPrivateUploadJournal(pending);
+      unverifiedFinalizeRef.current = null;
+      setUploadUnverified(false);
+      setFile(null);
+      for (const inputId of ["document-file", "document-camera"]) {
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (input) input.value = "";
+      }
+      setScope("ordinary");
+      setStatusFilter("");
+      setUnassociatedOnly(false);
+      setQuery("");
+      setDebouncedQuery("");
+      setOffset(0);
+      await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+      if (metadataDirtyRef.current) {
+        setPendingExit({ type: "document", id: confirmed.document.id });
+        setNotice("El registro se ha confirmado sobre la misma ruta privada, sin crear una copia nueva. Resuelve los cambios pendientes antes de abrir su ficha.");
+      } else {
+        selectedIdRef.current = confirmed.document.id;
+        setSelectedId(confirmed.document.id);
+        setNotice(confirmed.contentDuplicate
+          ? "Archivo idéntico ya registrado desde otro dispositivo. Se reutiliza el original existente, sin modificarlo."
+          : "Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. Podrás revisar sus datos manualmente.");
+      }
+    } catch {
+      setUploadUnverified(true);
+      setError(pending.file
+        ? "No se ha podido confirmar la misma ruta privada. Sigue bloqueada para evitar copias duplicadas; puedes reintentar su recuperación sin crear otro archivo."
+        : "El servidor aún no ha confirmado el archivo de la sesión anterior. La referencia privada sigue protegida; no se creará otra subida. Si no llegó al almacenamiento, hará falta resolver la incidencia sin duplicar el original.");
+    } finally {
+      uploadInFlight.current = false;
+      setBusy(null);
+    }
+  }
+
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
+    if (busy || uploadInFlight.current || uploadLockPendingRef.current) return;
+    // localStorage is not atomic across browser tabs: two tabs can both read
+    // an empty journal and sign independent private objects before either
+    // writes. Acquire an exclusive same-origin Web Lock BEFORE reading it.
+    // Without that primitive we do not risk sending a second original.
+    if (!navigator.locks?.request) {
+      setError("Este navegador no dispone del bloqueo seguro entre pestañas. No se ha enviado el archivo; utiliza un navegador actualizado para evitar duplicados.");
+      return;
+    }
+    uploadLockPendingRef.current = true;
+    try {
+      await navigator.locks.request(PENDING_PRIVATE_UPLOAD_KEY, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          setError("Otra pestaña está gestionando un documento. Termina ese envío antes de iniciar otro; no se ha firmado ni subido este archivo.");
+          return;
+        }
+        // Holding the lock until the private PUT and verified finalize finish
+        // makes the initial journal read/sign/write critical section atomic
+        // with respect to all other cooperating tabs of this origin.
+        await uploadDocumentExclusive();
+      });
+    } catch {
+      setError("No se ha podido asegurar el bloqueo entre pestañas. No se iniciará un nuevo envío hasta que puedas comprobar el original anterior.");
+    } finally {
+      uploadLockPendingRef.current = false;
+    }
+  }
+
+  async function uploadDocumentExclusive() {
+    if (busy || uploadInFlight.current) return;
+    // Read the journal synchronously as well: no event can sign a new path
+    // before the mount effect restores a pending upload on hydration.
+    const existingUpload = readPrivateUploadJournal();
+    if (uploadUnverified || existingUpload.present) {
+      unverifiedFinalizeRef.current ??= existingUpload.pending;
+      setUploadUnverified(true);
+      setError("La subida anterior no está confirmada. Recupera primero esa misma ruta privada antes de intentar otra.");
+      return;
+    }
     if (!file) {
       setError("Selecciona un PDF, una imagen o haz una foto.");
       return;
@@ -563,47 +1277,207 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setError("El archivo debe ocupar entre 1 byte y 15 MB.");
       return;
     }
+    uploadInFlight.current = true;
     setBusy("upload");
     setError(null);
     setNotice(null);
+    // Once the original reaches private Storage, a failed finalize response
+    // cannot prove whether the document record was created on the server.
+    let privatePutAttempted = false;
+    let attemptedPrivateUpload: PendingPrivateUpload | null = null;
     try {
+      const expectedSha256 = await fileSha256(file);
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "upload_sign", type: uploadType, originalFileName: file.name, mimeType: file.type, sizeBytes: file.size }),
+        body: JSON.stringify({
+          action: "upload_sign", type: uploadType, originalFileName: file.name,
+          mimeType: file.type, sizeBytes: file.size, expectedSha256,
+        }),
       }));
 
+      // A content-identical original may already be registered by ANOTHER
+      // device. The server reports the canonical document instead of signing
+      // another upload; never send a second copy or rewrite its metadata.
+      if (sign?.alreadyRegistered === true) {
+        if (sign.contentAddressVersion !== 1 || sign.hashVerificationVersion !== 1
+          || sign.hashAlgorithm !== "sha256" || sign.expectedSha256 !== expectedSha256
+          || sign.mimeType !== file.type || sign.sizeBytes !== file.size
+          || typeof sign.documentId !== "string" || !DOCUMENT_UUID.test(sign.documentId)
+          || typeof sign.path !== "string"
+          || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
+          || !["ticket", "invoice", "other"].includes(sign.type)
+          || typeof sign.originalFileName !== "string" || !sign.originalFileName.trim()) {
+          throw new Error("document_upload_unverified");
+        }
+        const id = sign.documentId;
+        setFile(null);
+        for (const inputId of ["document-file", "document-camera"]) {
+          const input = document.getElementById(inputId) as HTMLInputElement | null;
+          if (input) input.value = "";
+        }
+        setScope("ordinary");
+        setStatusFilter("");
+        setUnassociatedOnly(false);
+        setQuery("");
+        setDebouncedQuery("");
+        setOffset(0);
+        await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+        if (metadataDirtyRef.current) {
+          setPendingExit({ type: "document", id });
+          setNotice("Este archivo ya existe. No se ha enviado otra copia; resuelve los cambios pendientes antes de abrirlo.");
+        } else {
+          selectedIdRef.current = id;
+          setSelectedId(id);
+          setNotice("Este archivo ya estaba guardado. Hemos abierto el original existente, sin crear una copia.");
+        }
+        return;
+      }
+
+      // Never send an original invoice or ticket to an arbitrary URL returned
+      // by a malformed/upstream response. Upload only to the configured,
+      // private Supabase Storage bucket via its signed upload endpoint.
+      if (sign?.bucket !== "financial-app-documents"
+        || typeof sign.path !== "string" || !/^uploads[/][0-9a-f-]+[/][0-9a-f-]+[.](?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
+        || typeof sign.signedUrl !== "string"
+        || typeof sign.token !== "string" || !sign.token
+        || sign.originalFileName !== file.name || sign.mimeType !== file.type
+        || sign.sizeBytes !== file.size || !Number.isSafeInteger(sign.maxFileBytes)
+        || sign.maxFileBytes < file.size) throw new Error("document_upload_unsafe_url");
+      let uploadUrl: URL;
+      try { uploadUrl = new URL(sign.signedUrl); }
+      catch { throw new Error("document_upload_unsafe_url"); }
+      if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== SUPABASE_ORIGIN
+        || uploadUrl.pathname !== `/storage/v1/object/upload/sign/financial-app-documents/${sign.path}`
+        || uploadUrl.searchParams.getAll("token").length !== 1
+        || uploadUrl.searchParams.get("token") !== sign.token
+        || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
+        throw new Error("document_upload_unsafe_url");
+      }
+      // Validate destination, token, requested filename, MIME and size FIRST.
+      // An unsafe signer must explain its specific failure even if it also
+      // lacks the new SHA-256 capability. Both gates precede any private PUT.
+      if (sign.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256"
+        || sign.contentAddressVersion !== 1) {
+        throw new Error("document_upload_integrity_unsupported");
+      }
+      attemptedPrivateUpload = {
+        action: "upload_finalize", type: uploadType, originalFileName: file.name,
+        mimeType: file.type, path: sign.path, sizeBytes: file.size,
+        expectedSha256, signedUrl: uploadUrl.href, file, storagePutConfirmed: false,
+      };
       const body = new FormData();
       body.append("cacheControl", "3600");
       body.append("", file);
-      const upload = await fetch(sign.signedUrl, { method: "PUT", headers: { "x-upsert": "false" }, body });
-      if (!upload.ok) throw new Error("document_upload_not_found");
-
+      // A different tab may have started while this tab awaited a signed URL.
+      // Never overwrite its pending path with a second upload.
+      const otherUpload = readPrivateUploadJournal();
+      if (otherUpload.present) {
+        unverifiedFinalizeRef.current = otherUpload.pending;
+        setUploadUnverified(true);
+        throw new Error("document_upload_pending");
+      }
+      // Durable journal before sending any byte, including across tab close.
+      writePrivateUploadJournal(attemptedPrivateUpload);
+      privatePutAttempted = true;
+      const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
+      // A 409 can mean another device won the same content-addressed PUT.
+      // It is NOT proof of success: only a full server SHA-256 finalize can
+      // confirm that the existing private object contains these same bytes.
+      if (!upload.ok && upload.status !== 409) throw new Error("document_upload_unverified");
+      attemptedPrivateUpload.storagePutConfirmed = upload.ok;
+      writePrivateUploadJournal(attemptedPrivateUpload);
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "upload_finalize", type: uploadType, originalFileName: file.name, mimeType: file.type, path: sign.path }),
-      })) as DocumentDetail;
-      const id = finalized?.document?.id;
-      if (!id) throw new Error("document_upload_not_found");
+        body: JSON.stringify({
+          action: attemptedPrivateUpload.action, type: attemptedPrivateUpload.type,
+          originalFileName: attemptedPrivateUpload.originalFileName,
+          mimeType: attemptedPrivateUpload.mimeType, path: attemptedPrivateUpload.path,
+          expectedSizeBytes: attemptedPrivateUpload.sizeBytes, expectedSha256: attemptedPrivateUpload.expectedSha256,
+        }),
+      }));
+      const confirmedUpload = validatedFinalizedUpload(finalized, attemptedPrivateUpload);
+      const id = confirmedUpload.document.id;
+      clearPrivateUploadJournal(attemptedPrivateUpload);
+      unverifiedFinalizeRef.current = null;
+      setUploadUnverified(false);
       setFile(null);
       for (const inputId of ["document-file", "document-camera"]) {
         const input = document.getElementById(inputId) as HTMLInputElement | null;
         if (input) input.value = "";
       }
-      selectDocument(id);
-      await loadList();
-      setNotice("Original guardado de forma privada e intacta. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+      // Reset filters before reloading so an ordinary new upload isn't
+      // invisible in Pruebas, search, status or a stale pagination page.
+      setScope("ordinary");
+      setStatusFilter("");
+      setUnassociatedOnly(false);
+      setQuery("");
+      setDebouncedQuery("");
+      setOffset(0);
+      await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+      if (metadataDirtyRef.current) {
+        // Uploading another file must never discard an unrelated unsaved
+        // metadata draft. Let the existing save/discard dialog arbitrate.
+        setPendingExit({ type: "document", id });
+        setNotice(confirmedUpload.contentDuplicate
+          ? "Archivo idéntico ya registrado. No hemos generado otra copia; resuelve los cambios pendientes antes de abrirlo."
+          : "Original guardado. Antes de abrirlo, decide qué hacer con los metadatos pendientes del documento anterior.");
+      } else {
+        // selectDocument() rejects while busy === "upload": advance directly
+        // after verification and let the detail effect fetch the new original.
+        selectedIdRef.current = id;
+        setSelectedId(id);
+        setNotice(confirmedUpload.contentDuplicate
+          ? "Archivo idéntico ya registrado. Hemos recuperado el original, sin sobrescribir datos ni crear otra copia."
+          : isDocumentOcrDeferred()
+            ? "Original guardado de forma privada. Abriendo su ficha. Podrás revisar los datos desde la ficha del documento."
+            : "Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas. Revisa sus resultados antes de confirmar cualquier dato.");
+      }
     } catch (caught) {
-      setError(friendlyError(caught));
+      if (privatePutAttempted && attemptedPrivateUpload) {
+        unverifiedFinalizeRef.current = attemptedPrivateUpload;
+        setUploadUnverified(true);
+        setError("No se ha podido confirmar si el archivo llegó o quedó registrado. Reintenta la misma ruta privada, sin crear un envío nuevo.");
+      } else {
+        setError(friendlyError(caught));
+      }
     } finally {
+      uploadInFlight.current = false;
       setBusy(null);
     }
   }
 
-  async function persistMetadata(): Promise<boolean> {
-    if (!detail || busy) return false;
-    if (!metadataDirtyRef.current) return true;
+  async function persistMetadata(verifiedDetail?: DocumentDetail): Promise<boolean> {
+    // After a failed readback the rendered detail is deliberately discarded.
+    // A freshly verified detail may be supplied only by the recovery path,
+    // while the unconfirmed editor is preserved separately.
+    const currentDetail = verifiedDetail ?? detail;
+    if (!currentDetail || busy) return false;
+    if (editorMatchesDocument(editor, currentDetail.document)) {
+      if (!draftPendingVerificationRef.current) return true;
+      // The prior PATCH might have succeeded while the archive/list failed.
+      // Recheck BOTH independent sources; do not issue a duplicate write.
+      setBusy("metadata");
+      setError(null);
+      try {
+        const confirmed = await refreshAfterMutation(currentDetail.document.id, true);
+        if (!confirmed || !editorMatchesDocument(editor, confirmed.document)) {
+          setError("El guardado puede haberse realizado, pero falta verificar el documento y el listado. Conservamos el borrador para reintentarlo.");
+          return false;
+        }
+        draftPendingVerificationRef.current = false;
+        setDraftPendingVerification(false);
+        setNotice("Metadatos verificados sin repetir el guardado.");
+        return true;
+      } catch (caught) {
+        setAuthRecovery(authRecoveryFromError(caught));
+        setError(friendlyError(caught));
+        return false;
+      } finally {
+        setBusy(null);
+      }
+    }
     const cents = parseEuroToCents(editor.total);
     if (cents === undefined) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
@@ -617,27 +1491,31 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          action: "metadata", id: detail.document.id, type: editor.type,
+          action: "metadata", id: currentDetail.document.id, type: editor.type,
           documentDate: editor.documentDate || null,
           issuerName: editor.issuerName || null,
           totalCents: cents, notes: editor.notes,
         }),
       }));
       // No sustituir el editor con una relectura antigua hasta validar el PATCH.
-      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      const confirmed = await refreshAfterMutation(currentDetail.document.id, true);
       const persisted = confirmed?.document;
-      const matchesSave = persisted?.id === detail.document.id
+      const matchesSave = persisted?.id === currentDetail.document.id
         && persisted.type === editor.type
         && (persisted.documentDate ?? "") === editor.documentDate
         && (persisted.issuerName ?? "") === editor.issuerName.trim()
         && persisted.totalCents === cents
         && (persisted.notes ?? "") === editor.notes.trim();
       if (!matchesSave) {
-        // El PATCH pudo haberse aplicado, pero no se debe navegar ni afirmar éxito
-        // hasta que el backend permita releer el documento correcto.
+        // El PATCH pudo haberse aplicado: bloquea salir incluso si un GET
+        // de detalle aislado coincide, hasta validar también el listado.
+        draftPendingVerificationRef.current = true;
+        setDraftPendingVerification(true);
         setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
         return false;
       }
+      draftPendingVerificationRef.current = false;
+      setDraftPendingVerification(false);
       setEditor(editorFromDocument(confirmed!.document));
       setDesignationOpen(false);
       setDesignationReason("");
@@ -659,9 +1537,19 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function saveAndContinue() {
-    if (!pendingExit) return;
+    if (!pendingExit || busy) return;
     const target = pendingExit;
-    if (await persistMetadata()) continueDocumentExit(target);
+    // A previous PATCH may have succeeded while its readback failed.
+    // Restore a verified detail without ever replacing the unsaved editor;
+    // do not attempt another write until that read succeeds.
+    const verifiedDetail = !detail && detailLoadFailed && selectedIdRef.current
+      ? await loadDetail(selectedIdRef.current, true, true)
+      : undefined;
+    if (!detail && !verifiedDetail) {
+      setError("Antes de reintentar el guardado, necesitamos releer el documento. El borrador sigue conservado.");
+      return;
+    }
+    if (await persistMetadata(verifiedDetail ?? undefined)) continueDocumentExit(target);
   }
 
   function discardAndContinue() {
@@ -702,16 +1590,26 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       if (saved.contractVersion !== 3 || saved.document?.id !== id || saved.document.isTest !== isTest) {
         throw new Error("document_test_designation_incomplete");
       }
-      setDetail(saved);
+      // A PATCH acknowledgement does not prove the next GET reflects the
+      // designation or that the chosen archive scope is readable. Re-read
+      // the authoritative detail AND the target list before claiming success.
+      // Keep the owner's review intact if either reader fails; do not cause
+      // another write automatically or silently change the scope.
+      const verifiedDetail = await loadDetail(id, true, true);
+      if (verifiedDetail?.document.isTest !== isTest) {
+        throw new Error("document_revalidation_incomplete");
+      }
+      const next = new URL(listUrl, window.location.origin);
+      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
+      next.searchParams.set("offset", "0");
+      if (await loadList(next.toString(), true) !== true) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setScope(isTest ? "tests" : "ordinary");
       setOffset(0);
       setDesignationOpen(false);
       setDesignationReason("");
       setDesignationReviewed(false);
-      const next = new URL(listUrl, window.location.origin);
-      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
-      next.searchParams.set("offset", "0");
-      await loadList(next.toString(), true);
       setNotice(isTest ? "Documento designado como Prueba. Puedes encontrarlo en Pruebas y revertir el cambio." : "Documento devuelto a la vista ordinaria y a sus avisos correspondientes.");
     } catch (caught) {
       setAuthRecovery(authRecoveryFromError(caught));
@@ -720,15 +1618,41 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function openDocument() {
-    if (!detail) return;
+    if (!detail || busy || originalOpenInFlight.current) return;
+    const id = detail.document.id;
+    // A window opened after await fetch can be blocked by the browser.
+    // Open it synchronously and only navigate after validating the signed URL.
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError(friendlyError(new Error("document_open_blocked")));
+      return;
+    }
+    previewWindow.opener = null;
+    originalOpenInFlight.current = true;
     setBusy("open");
     setError(null);
     try {
-      const result = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(detail.document.id)}&mode=open`, { cache: "no-store" }));
-      if (typeof result.url !== "string") throw new Error("document_open_failed");
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+      const result = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}&mode=open`, { cache: "no-store" }));
+      // Do not open an old document if the user changed selection while fetching.
+      if (selectedIdRef.current !== id || previewWindow.closed) {
+        if (!previewWindow.closed) previewWindow.close();
+        return;
+      }
+      if (typeof result?.url !== "string") throw new Error("document_open_failed");
+      const destination = new URL(result.url);
+      if (destination.protocol !== "https:"
+        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
+        throw new Error("document_open_unsafe_url");
+      }
+      previewWindow.location.replace(destination.href);
+      setNotice("Original abierto en otra pestaña.");
+    } catch (caught) {
+      if (!previewWindow.closed) previewWindow.close();
+      if (selectedIdRef.current === id) setError(friendlyError(caught));
+    } finally {
+      originalOpenInFlight.current = false;
+      setBusy(null);
+    }
   }
 
   async function findCandidates() {
@@ -736,7 +1660,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setBusy("candidates");
     setError(null);
     try {
-      const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(detail.document.id)}&mode=candidates&days=7&limit=8`, { cache: "no-store" })) as CandidateResponse;
+      const documentId = detail.document.id;
+      const data = validatedCandidateResponse(
+        await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=candidates&days=7&limit=8`, { cache: "no-store" })),
+        documentId,
+      );
+      if (selectedIdRef.current !== documentId) return;
       setCandidates(data);
       if (!data.ready) setNotice("Añade fecha e importe al documento para poder sugerir movimientos.");
     } catch (caught) { setError(friendlyError(caught)); }
@@ -744,7 +1673,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function associate(transactionId: string, method: "manual" | "suggested") {
-    if (!detail) return;
+    if (!detail || busy || associationMutationInFlight.current || (method === "suggested" && metadataDirtyRef.current)) return;
+    associationMutationInFlight.current = true;
     setBusy(`associate-${transactionId}`);
     setError(null);
     try {
@@ -760,11 +1690,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setTransactions(null);
       setNotice(method === "suggested" ? "Sugerencia confirmada explícitamente." : "Movimiento asociado manualmente.");
     } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+    finally { associationMutationInFlight.current = false; setBusy(null); }
   }
 
   async function unassociate(transactionId: string) {
-    if (!detail) return;
+    if (!detail || busy || associationMutationInFlight.current) return;
+    associationMutationInFlight.current = true;
     setBusy(`unassociate-${transactionId}`);
     setError(null);
     try {
@@ -778,28 +1709,38 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
       setNotice("Asociación eliminada. El movimiento bancario no se ha modificado.");
     } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+    finally { associationMutationInFlight.current = false; setBusy(null); }
   }
 
   async function searchTransactions(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     const term = manualQuery.trim();
-    if (!term) {
-      setTransactions(null);
-      return;
-    }
+    const documentId = selectedIdRef.current;
+    const sequence = ++manualSearchSequence.current;
+    setTransactions(null);
+    setTransactionResultQuery(null);
+    if (!term || !documentId) return;
     setBusy("manual-search");
     setError(null);
     try {
-      const data = await readJson(await fetch(`/api/transactions?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" })) as TransactionSearch;
+      const data = validatedTransactionSearch(
+        await readJson(await fetch(`/api/transactions?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" })),
+      );
+      if (sequence !== manualSearchSequence.current || selectedIdRef.current !== documentId) return;
       setTransactions(data);
-    } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+      setTransactionResultQuery(term);
+    } catch (caught) {
+      if (sequence === manualSearchSequence.current && selectedIdRef.current === documentId) setError(friendlyError(caught));
+    } finally {
+      if (sequence === manualSearchSequence.current) setBusy(null);
+    }
   }
 
   // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
   const currentList = query === debouncedQuery && loadedListKey === listUrl ? list : null;
   const listPending = query !== debouncedQuery || loadingList || (!currentList && !listLoadFailed);
+  const visibleTransactions = transactionResultQuery === manualQuery.trim() ? transactions : null;
 
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0] ?? null;
@@ -862,8 +1803,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
           <p className={styles.heroText}>Guarda facturas y tickets desde cámara, galería, archivos o Drive, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
+          <a className={styles.archiveQuickLink} href="#archivo-documental">Ir al archivo documental ↓</a>
           <div className={styles.pills}>
-            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
+            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span>{!isDocumentOcrDeferred() && <span>OCR revisable · sin escrituras automáticas</span>}
           </div>
         </div>
         <a className={styles.driveLink} href={DRIVE_FOLDER_URL} target="_blank" rel="noreferrer">Abrir carpeta Documentos en Drive ↗</a>
@@ -878,7 +1820,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <div>
             <p className={styles.sectionEyebrow}>IMPORTACIÓN SEGURA</p>
             <h2 id="upload-title">Añadir documento</h2>
-            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada y el OCR nunca se ejecuta automáticamente al subir.</p>
+            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada; podrás revisar sus datos desde la ficha.</p>
           </div>
           <form className={styles.uploadForm} onSubmit={uploadDocument}>
             <label>Tipo
@@ -887,21 +1829,34 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               </select>
             </label>
             <label className={styles.fileField}>Cámara
-              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy === "upload"} />
+              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy !== null || uploadUnverified} />
               <span>Hacer foto con la cámara trasera</span>
             </label>
             <label className={styles.fileField}>Galería o archivo
-              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
+              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy !== null || uploadUnverified} />
               <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "PDF, JPG, PNG o WebP"}</span>
             </label>
-            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
+            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
+            {uploadUnverified ? (
+              <div role="status" data-testid="document-upload-unverified">
+                <p>Subida sin confirmar. La referencia de recuperación se conserva en este navegador tras cerrar la pestaña; no selecciones ni envíes una copia nueva.</p>
+                <button className={styles.secondaryButton} type="button" disabled={busy !== null}
+                  onClick={() => void verifyUncertainUpload()}>
+                  {busy === "upload-verify" ? "Recuperando subida…" : "Recuperar el mismo original"}
+                </button>
+              </div>
+            ) : null}
           </form>
         </section>
 
         <section className={styles.workspace}>
-          <aside className={styles.listPanel} aria-label="Listado de documentos">
+          <aside id="archivo-documental" className={styles.listPanel} aria-label="Listado de documentos" aria-busy={listPending}>
             <div className={styles.listHeader}>
-              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2></div>
+              <div>
+                <p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p>
+                <h2 aria-live="polite" aria-atomic="true">{currentList && !listPending && !listLoadFailed ? `${currentList.total} ${currentList.total === 1 ? "documento" : "documentos"}` : "Documentos"}</h2>
+                {selectedId ? <a className={styles.detailJump} href="#documento-seleccionado">Ir a la ficha seleccionada ↓</a> : null}
+              </div>
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={listPending} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
@@ -925,7 +1880,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : currentList?.items.length ? (
               <div className={styles.documentList}>
                 {currentList.items.map((item) => (
-                  <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
+                  <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} aria-pressed={selectedId === item.id} aria-controls="documento-seleccionado" onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
                     <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{item.isTest === true ? <small className={styles.syntheticNoteLabel}>Prueba · designación revisada</small> : hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>
@@ -960,10 +1915,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : (
               <div className={styles.empty} data-testid="documents-repository-empty">
                 <strong>No hay documentos</strong>
-                <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
+                <p>Añade el primero con cámara, galería/archivo o Drive; podrás revisar su ficha y sus datos posteriormente.</p>
               </div>
             )}
-            {!listLoadFailed && currentList?.contractVersion === 3 && currentList.total > 0 ? (
+            {!listLoadFailed && currentList && currentList.total > 0
+              && (currentList.contractVersion === 3 || unassociatedOnly) ? (
               <nav className={styles.pagination} aria-label="Paginación documental">
                 <span aria-live="polite">Mostrando {currentList.offset + 1}–{Math.min(currentList.offset + currentList.items.length, currentList.total)} de {currentList.total}</span>
                 <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset === 0}
@@ -974,11 +1930,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             ) : null}
           </aside>
 
-          <section className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
+          <section id="documento-seleccionado" className={styles.detailPanel} aria-live="polite">
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : detailLoadFailed || !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
-                <p>Los datos de otro documento no se muestran en esta selección.</p>
+                <p>No podemos verificar la ficha. Para proteger tus datos, se han desactivado la edición, el OCR y las asociaciones hasta que la consulta sea válida.</p>
+                {draftPendingVerification ? <p role="alert" data-testid="documents-draft-protected">Tu borrador sigue protegido en esta pestaña. Reintentar el detalle no sustituirá sus cambios; no cierres esta pestaña antes de guardarlos o descartarlos.</p> : null}
                 <button type="button" className={styles.secondaryButton} onClick={() => void loadDetail(selectedId)}>Reintentar detalle</button>
               </div>
             ) : (
@@ -1025,9 +1982,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                       Cambios de metadatos sin guardar. Guárdalos antes de cambiar de documento o salir.
                     </div>
                   ) : null}
-                  <div className={styles.formGrid}>
+                  <div className={`${styles.formGrid} ${styles.metadataGrid}`}>
                     <label>Tipo<select disabled={busy !== null} value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
-                    <label>Fecha<input disabled={busy !== null} type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
+                    <SpanishDateField disabled={busy !== null} value={editor.documentDate} onChange={(documentDate) => setEditor((value) => ({ ...value, documentDate }))} />
                     <label>Emisor<input disabled={busy !== null} value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
                     <label>Importe (€)<input disabled={busy !== null} inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
@@ -1035,14 +1992,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy !== null || !metadataDirty}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
-                <OcrReviewBoundary key={detail.document.id}>
-                  <OcrReviewPanel
-                    documentId={detail.document.id}
-                    storageProvider={detail.document.storageProvider}
-                    mimeType={detail.document.mimeType}
-                    onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
-                  />
-                </OcrReviewBoundary>
+                {!isDocumentOcrDeferred() && (
+                  <OcrReviewBoundary key={detail.document.id}>
+                    <OcrReviewPanel
+                      documentId={detail.document.id}
+                      storageProvider={detail.document.storageProvider}
+                      mimeType={detail.document.mimeType}
+                      onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
+                    />
+                  </OcrReviewBoundary>
+                )}
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
@@ -1056,16 +2015,17 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Sugerencias del motor financiero</h3><p>Se calculan en servidor por fecha e importe y nunca se guardan hasta que confirmes.</p></div><button className={styles.secondaryButton} onClick={() => void findCandidates()} disabled={busy !== null}>Buscar sugerencias</button></div>
-                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p>{candidate.categoryId ? <CategoryIdentity categoryId={candidate.categoryId} name={null} /> : null}<small>{formatMoneyCents(candidate.amountCents)} · diferencia {formatMoneyCents(candidate.amountDifferenceCents)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
+                  {metadataDirty && candidates?.ready && candidates.candidates.length ? <p className={styles.muted}>Guarda los cambios del documento antes de confirmar una sugerencia calculada con sus datos anteriores.</p> : null}
+                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p>{candidate.categoryId ? <CategoryIdentity categoryId={candidate.categoryId} name={null} /> : null}<small>{formatMoneyCents(candidate.amountCents)} · diferencia {formatMoneyCents(candidate.amountDifferenceCents)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null || metadataDirty}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
                 </section>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Asociación manual</h3><p>Busca por concepto en los movimientos efectivos.</p></div></div>
                   <form className={styles.manualSearch} onSubmit={searchTransactions}><label>Buscar movimiento<input value={manualQuery} maxLength={200} onChange={(event) => setManualQuery(event.target.value)} placeholder="Ej. comunidad, seguro, supermercado" /></label><button className={styles.secondaryButton} type="submit" disabled={busy === "manual-search"}>Buscar</button></form>
-                  {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
+                  {visibleTransactions ? visibleTransactions.rows.length ? <div className={styles.candidateList}>{visibleTransactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
-                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR persistente, revisable y trazable</span></div>
+                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span>{!isDocumentOcrDeferred() && <span>✓ OCR persistente, revisable y trazable</span>}</div>
               </>
             )}
           </section>

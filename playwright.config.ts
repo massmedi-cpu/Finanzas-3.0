@@ -37,6 +37,9 @@ export default defineConfig({
     // Playwright no puede interceptar peticiones tomadas por un Service Worker,
     // así que se bloquean en E2E para que los mocks sean deterministas.
     serviceWorkers: "block",
+    launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
+      : undefined,
   },
   projects: [
     {

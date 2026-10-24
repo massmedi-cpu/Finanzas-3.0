@@ -375,7 +375,7 @@ export default function OnboardingClient() {
             Avanza por objetivos sencillos. Financial App comprueba el estado real de tus datos y te muestra solo el siguiente paso útil, sin pedirte que entiendas la parte técnica.
           </p>
         </div>
-        <div className={styles.progress} aria-label="Progreso de puesta en marcha">
+        <div className={styles.progress} role="group" aria-label="Progreso de puesta en marcha">
           <strong>{loading ? "…" : `${completedCount}/5`}</strong>
           <span>{loading ? "Comprobando tu estado" : activationComplete ? "Ya puedes usar tu resumen" : "Objetivos completados"}</span>
         </div>

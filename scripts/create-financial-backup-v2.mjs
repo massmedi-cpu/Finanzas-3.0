@@ -240,7 +240,7 @@ try {
   );
 
   let storageArchive = null;
-  if (objectCount > 0 && storageArchivePath) {
+  if (storageArchivePath) {
     const archiveName = basename(storageArchivePath);
     if (["schema.sql", "data.sql", "manifest.json", "storage-inventory.json"].includes(archiveName)) {
       fail("FINANCIAL_APP_STORAGE_ARCHIVE filename conflicts with a reserved backup filename.");

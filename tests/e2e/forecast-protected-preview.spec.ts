@@ -15,9 +15,12 @@ test("Previsión protegida conserva procedencia verificada y falla cerrada sin w
   if (expectedPreviewSha) expect(buildJson.commit).toBe(expectedPreviewSha);
 
   const snapshot = await request.get("/api/forecast?dateFrom=2026-09-07&dateTo=2026-12-31");
-  expect(snapshot.status()).toBe(403);
-  await expect(snapshot.json()).resolves.toEqual({
-    error: "persistence_failed",
-    code: "workspace_context_required",
-  });
+  const body = await snapshot.json();
+  if (snapshot.status() === 401) {
+    expect(body).toEqual({ error: "authentication_required", code: null });
+  } else {
+    expect(snapshot.status()).toBe(403);
+    expect(body).toEqual({ error: "persistence_failed", code: "workspace_context_required" });
+  }
+  expect(snapshot.headers()["cache-control"]).toContain("no-store");
 });

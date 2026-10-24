@@ -23,7 +23,7 @@
   min-height: 2.75rem;
   padding: .75rem;
   border-radius: .9rem;
-  background: color-mix(in srgb, var(--surface, #0d1628) 88%, transparent);
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
 }
 
 .configuration-grid input,
@@ -35,9 +35,9 @@
   min-height: 2.75rem;
   padding: .55rem .7rem;
   border-radius: .75rem;
-  border: 1px solid var(--border, rgba(137, 173, 255, .18));
-  background: var(--surface, #0d1628);
-  color: inherit;
+  border: 1px solid var(--border-control);
+  background: var(--surface-control-strong, var(--surface-card));
+  color: var(--color-text);
 }
 
 .configuration-grid p,

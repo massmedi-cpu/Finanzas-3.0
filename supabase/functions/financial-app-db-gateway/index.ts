@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { gunzipSync } from "node:zlib";
+import { readGatewayJsonBody } from "../../../src/infrastructure/http/gateway-request-body.ts";
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error.ts";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleBudgetLogicAction } from "./budget-logic.ts";
@@ -34,8 +35,6 @@ const TEST_CATEGORY_IDS = [
   "20000000-0000-4000-8000-000000000001",
   "20000000-0000-4000-8000-000000000002",
 ] as const;
-const MAX_COMPRESSED_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
-const MAX_DECOMPRESSED_GATEWAY_BODY_BYTES = 16 * 1024 * 1024;
 
 const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "source.capabilities",
@@ -50,6 +49,7 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "merchant.resolve",
   "rule.list",
   "rule.evaluate",
+  "transaction.date_bounds",
   "transaction.query",
   "transaction.split_detail",
   "test.transaction_split_engine",
@@ -73,6 +73,9 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "source.google_policy",
   "source.google_connection_status",
   "source.status",
+  // Tenant-scoped read-only operation. Rows remain internal to Next.js;
+  // browser endpoint returns aggregate reconciliation only.
+  "source.postflight_rows",
 ]);
 
 function isPreviewProductionAccessAllowed(action: unknown) {
@@ -88,40 +91,6 @@ function json(body: unknown, status = 200) {
       "x-content-type-options": "nosniff",
     },
   });
-}
-
-function parseGatewayJsonBody(bytes: Uint8Array) {
-  if (bytes.byteLength === 0) return {};
-  try {
-    const value = JSON.parse(new TextDecoder().decode(bytes));
-    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-    return value as Record<string, unknown>;
-  } catch {
-    return {};
-  }
-}
-
-async function readGatewayJsonBody(req: Request) {
-  const contentEncoding = (req.headers.get("content-encoding") ?? "").trim().toLowerCase();
-  const bodyBytes = new Uint8Array(await req.arrayBuffer());
-
-  if (!contentEncoding || contentEncoding === "identity") {
-    if (bodyBytes.byteLength > MAX_DECOMPRESSED_GATEWAY_BODY_BYTES) {
-      throw new Error("gateway_body_too_large");
-    }
-    return parseGatewayJsonBody(bodyBytes);
-  }
-
-  if (contentEncoding !== "gzip") throw new Error("unsupported_content_encoding");
-  if (bodyBytes.byteLength > MAX_COMPRESSED_GATEWAY_BODY_BYTES) {
-    throw new Error("gateway_compressed_body_too_large");
-  }
-
-  const decompressed = gunzipSync(bodyBytes);
-  if (decompressed.byteLength > MAX_DECOMPRESSED_GATEWAY_BODY_BYTES) {
-    throw new Error("gateway_body_too_large");
-  }
-  return parseGatewayJsonBody(Uint8Array.from(decompressed));
 }
 
 function uuid(value: unknown, field: string): asserts value is string {
@@ -193,7 +162,7 @@ Deno.serve(async (req) => {
   try {
     identity = await verifyVercel(req);
   } catch (error) {
-    console.error("financial-app-db-gateway-auth", error instanceof Error ? error.message : String(error));
+    console.error("financial-app-db-gateway-auth", publicGatewayErrorCode(error));
     return json({ error: "unauthorized" }, 401);
   }
 
@@ -201,8 +170,9 @@ Deno.serve(async (req) => {
   try {
     body = await readGatewayJsonBody(req);
   } catch (error) {
-    console.error("financial-app-db-gateway-body", error instanceof Error ? error.message : String(error));
-    return json({ error: error instanceof Error ? error.message : "invalid_gateway_body" }, 400);
+    const code = publicGatewayErrorCode(error);
+    console.error("financial-app-db-gateway-body", code);
+    return json({ error: code }, 400);
   }
   const action = body?.action;
   const payload = body?.payload ?? {};
@@ -228,7 +198,13 @@ Deno.serve(async (req) => {
     void workspaceContext;
 
     if (action === "source.capabilities") {
-      return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
+      return json({
+        contractVersion: 3,
+        sourceAccountLifecycle: true,
+        canonicalProductSelection: true,
+        sourcePostflightRows: true,
+        sourceImmutableOriginalRows: identity.environment === "production",
+      });
     }
 
     if (action === "test.cleanup") {
@@ -347,8 +323,10 @@ Deno.serve(async (req) => {
     if (error instanceof WorkspaceContextError) {
       return json({ error: error.code }, error.status);
     }
-    console.error("financial-app-db-gateway", error instanceof Error ? error.message : String(error));
-    return json({ error: error instanceof Error ? error.message : "gateway_error" }, 400);
+    const code = publicGatewayErrorCode(error);
+    // SQL errors may include private values: log/return only bounded codes.
+    console.error("financial-app-db-gateway", code);
+    return json({ error: code }, 400);
   } finally {
     await sql.end({ timeout: 1 });
   }

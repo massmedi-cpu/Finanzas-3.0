@@ -1,6 +1,8 @@
+import { isReleaseHrefAvailable } from "./release-document-scope";
+
 export const MOBILE_FAVORITE_KEY = "financial-app:mobile-favorite";
 
-export const MOBILE_FAVORITE_OPTIONS = [
+const MOBILE_FAVORITE_HREFS = [
   "/review",
   "/cash-flow",
   "/compare",
@@ -11,7 +13,9 @@ export const MOBILE_FAVORITE_OPTIONS = [
   "/documents",
 ] as const;
 
-export type MobileFavoriteHref = (typeof MOBILE_FAVORITE_OPTIONS)[number];
+export type MobileFavoriteHref = (typeof MOBILE_FAVORITE_HREFS)[number];
+
+export const MOBILE_FAVORITE_OPTIONS = MOBILE_FAVORITE_HREFS.filter(isReleaseHrefAvailable);
 
 export function isMobileFavoriteHref(value: unknown): value is MobileFavoriteHref {
   return typeof value === "string" && (MOBILE_FAVORITE_OPTIONS as readonly string[]).includes(value);

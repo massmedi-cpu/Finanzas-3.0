@@ -5,6 +5,7 @@ import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
 } from "../../src/application/analysis/analysis-engine";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 
 const WIDTHS = [360, 430, 768, 1024, 1280, 1440] as const;
 
@@ -154,6 +155,75 @@ const SNAPSHOT = buildAnalysisSnapshot({
   gateway: GATEWAY,
 });
 
+// REC-CHART-021 · Visible drilldowns from the actual chart data use only the
+// observed day or the known merchant identity. Synthetic data; no bank writes.
+test("REC-CHART-021 · Análisis enlaza días observados y comercios a los movimientos correctos", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+
+  const daily = page.getByText("Ver datos diarios", { exact: true });
+  await daily.click();
+  await expect(daily.locator("..").getByRole("link", { name: "1 sept", exact: true }))
+    .toHaveAttribute("href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-01&kind=expense");
+  const noActivity = daily.locator("..").getByRole("row", { name: /^2 sept / });
+  await expect(noActivity).toBeVisible();
+  await expect(noActivity.getByRole("link")).toHaveCount(0);
+
+  const merchants = page.getByText("Ver datos de comercios", { exact: true });
+  await merchants.click();
+  const merchant = merchants.locator("..").getByRole("link", { name: "Mercado Central", exact: true });
+  await expect(merchant).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&merchantId=22222222-2222-4222-8222-222222222222",
+  );
+  await expect(merchants.locator("..").getByRole("link", { name: "Gasolinera", exact: true }))
+    .toHaveAttribute("href", /merchantId=44444444-4444-4444-8444-444444444444$/);
+  // Tappable and keyboard-accessible in both themes, without tiny SVG dots.
+  await expect(merchant).toBeVisible();
+  expect(await merchant.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+  await merchant.focus();
+  await expect(merchant).toBeFocused();
+});
+
+// REC-VIS-006 · Based on the retained 360px merchant chart screenshot:
+// ordinary merchant names must not be shortened when the SVG has room.
+test("REC-VIS-006 · el gráfico móvil conserva Mercado Central sin cortar el nombre", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.route("**/api/analysis**", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) }));
+  await page.route("**/api/analysis/source-freshness", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
+    }) }));
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+  await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+  const plot = page.getByRole("region", { name: "Gráfica de comercios" }).locator("svg");
+  await expect(plot).toBeVisible();
+  await expect.poll(() => plot.evaluate((svg) => (svg as SVGSVGElement).viewBox.baseVal.width)).toBeLessThan(480);
+  const label = plot.locator("text").filter({ hasText: /^Mercado Central$/ });
+  await expect(label).toHaveText("Mercado Central");
+  const bounds = await label.evaluate((node) => {
+    const box = (node as SVGGraphicsElement).getBBox();
+    const root = node.ownerSVGElement!;
+    return { left: box.x, right: box.x + box.width, total: root.viewBox.baseVal.width };
+  });
+  expect(bounds.left).toBeGreaterThanOrEqual(0);
+  expect(bounds.right).toBeLessThanOrEqual(bounds.total);
+});
+
 for (const width of WIDTHS) {
   test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }, testInfo) => {
     await page.route("**/api/analysis**", async (route) => {
@@ -165,7 +235,7 @@ for (const width of WIDTHS) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+        body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
       });
     });
 
@@ -424,7 +494,7 @@ test("QA Work · el texto atenuado de Análisis mantiene contraste AA en tema os
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -464,7 +534,7 @@ test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema clar
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -505,7 +575,7 @@ test("QA-04 · acumulado y ritmo diario respetan el calendario y representan dí
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -544,7 +614,7 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -623,13 +693,14 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
     ...source,
     id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
     name: `Categoría de prueba ${index + 1}`,
-    href: `/transactions?categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-15&kind=expense&categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
   }));
+  expect(isAnalysisSnapshot(expandedSnapshot), "AUD-E2E-ANA-001 category fixture must pass the production snapshot contract").toBe(true);
   await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
   await page.route("**/api/analysis/source-freshness", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-      available: true, latestMovementDate: "2026-09-15", sync: null,
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
     }) }));
   await page.goto("/analysis");
   const breakdown = page.locator("section").filter({ has: page.getByRole("heading", { name: "Dónde se concentra el gasto" }) });
@@ -681,6 +752,35 @@ test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de
   expect(categories).toBeGreaterThan(evolution);
   expect(patterns).toBeGreaterThan(categories);
   expect(anomalies).toBeGreaterThan(patterns);
+});
+
+test("REC-VIS-001 · importes grandes en Análisis conservan los céntimos sin recortarse en móvil", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const amount = page.locator('article[class*="kpi_income"] > strong');
+  await expect(amount).toBeVisible();
+  // Visual stress fixture only: never write the amount into banking data.
+  await amount.evaluate((element) => { element.textContent = "9.999.999,99\u00a0€"; });
+  // Eleven reference widths in both color schemes; keep the very same DOM
+  // stress fixture so this test measures layout only, not banking state.
+  const widths = [320, 360, 375, 390, 414, 430, 480, 768, 1024, 1280, 1440];
+  const cases = (["light", "dark"] as const).flatMap((colorScheme) => widths.map((width) => ({ width, colorScheme })));
+  for (const { width, colorScheme } of cases) {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize({ width, height: 950 });
+    const geometry = await amount.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { text: element.textContent, overflowWrap: css.overflowWrap, wordBreak: css.wordBreak,
+        whiteSpace: css.whiteSpace, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth };
+    });
+    expect(geometry.text).toBe("9.999.999,99\u00a0€");
+    expect(geometry.overflowWrap).toBe("normal");
+    expect(geometry.wordBreak).not.toBe("break-all");
+    expect(geometry.whiteSpace).toBe("nowrap");
+    expect(geometry.scrollWidth, `width ${width} does not clip euro cents`).toBeLessThanOrEqual(geometry.clientWidth + 2);
+  }
 });
 
 test("AUD-E2E-ANA-001 · concentración solo se abre desde ranking de comercios", async ({ page }) => {

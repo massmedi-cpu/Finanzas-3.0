@@ -1,0 +1,261 @@
+name: Product recovery browser matrix
+
+on:
+  pull_request:
+    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009, chat/compare-coverage-truth-20261009, chat/home-evolution-covered-scale-20261009, chat/analysis-history-coverage-20261009, chat/ocr-total-evidence-20261009, chat/ocr-tax-line-evidence-20261009, chat/analysis-accumulated-scale-truth-20261009, chat/analysis-all-merchants-20261009, chat/analysis-accumulated-axis-legibility-20261009, chat/theme-semantic-surfaces-20261009, chat/analysis-bidirectional-coverage-20261009, chat/analysis-account-coverage-scope-20261009, chat/analysis-legacy-range-trust-20261010, chat/ocr-numeric-boundaries-20261010, chat/ocr-refund-sign-integrity-20261010, chat/home-compare-e2e-coverage-20261010, chat/coverage-sync-integrity-20261010, chat/ocr-receipt-refund-consistency-20261010, chat/ocr-negative-numeric-columns-20261010, chat/source-freshness-empty-data-honesty-20261010, chat/ocr-invoice-amount-label-20261010, chat/ocr-iva-tax-table-20261010, chat/ocr-spanish-invoice-written-dates-20261010, chat/ocr-invoice-payment-domiciliation-20261010, chat/source-freshness-no-sync-truth-20261010, chat/premium-kpi-amount-legibility-20261010, chat/premium-light-theme-contrast-20261010, chat/eleven-width-currency-layout-gate-20261010, chat/visual-gate-execution-integrity-20261010, chat/navigation-route-responsive-smoke-20261010, chat/recovery-visual-gate-manifest-20261010, chat/twenty-one-routes-responsive-shell-20261010]
+    paths:
+      - 'app/**'
+      - 'src/design/**'
+      - 'src/application/source-*.ts'
+      - 'src/application/release-*.ts'
+      - 'src/application/local-preferences.ts'
+      - 'src/infrastructure/http/deferred-document-response.ts'
+      - 'src/domain/source-balance-continuity.ts'
+      - 'src/domain/source-postflight-reconciliation.ts'
+      - 'tests/helpers/verified-source-fixture.ts'
+      - 'src/domain/document-ocr-financial-interpretation.ts'
+      - 'src/infrastructure/ocr/pdf-native-coverage.ts'
+      - 'src/domain/private-document-content-address.ts'
+      - 'src/domain/private-document-replay.ts'
+      - 'src/domain/atomic-drive-document-batch.ts'
+      - 'src/infrastructure/google/google-drive-document-downloader.ts'
+      - 'src/infrastructure/google/google-drive-document-discovery.ts'
+      - 'src/infrastructure/http/limited-response-body.ts'
+      - 'src/infrastructure/http/gateway-request-body.ts'
+      - 'src/infrastructure/http/gateway-public-error.ts'
+      - 'supabase/functions/financial-app-db-gateway/document-logic.ts'
+      - 'supabase/functions/financial-app-db-gateway/index.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync-router.ts'
+      - 'src/application/source-stable-replay-proof.ts'
+      - 'src/application/document-drive-inventory.ts'
+      - 'src/application/document-drive-folder-scope.ts'
+      - 'src/application/private-document-original-detail.ts'
+      - 'src/application/document-ocr-confirmation-integrity.ts'
+      - 'src/application/document-ocr-error-messages.ts'
+      - 'src/application/dashboard/dashboard-envelope-integrity.ts'
+      - 'src/application/dashboard/dashboard-source-safety.ts'
+      - 'src/application/analysis/analysis-contract.ts'
+      - 'scripts/test-ocr-amount-label-selection.mjs'
+      - 'scripts/test-ocr-native-engine-smoke.mjs'
+      - 'scripts/test-document-drive-inventory.mjs'
+      - 'scripts/test-drive-atomic-batch.mjs'
+      - 'scripts/test-drive-discovery-integrity.mjs'
+      - 'scripts/verify-recovery-visual-suite-gate.mjs'
+      - 'scripts/verify-private-ocr-corpus-selection.mjs'
+      - 'scripts/rec-ap8-readiness-readonly.sql'
+      - 'tests/e2e/**'
+      - 'playwright*.ts'
+      - 'package*.json'
+      - 'vercel.json'
+      - '.github/workflows/product-recovery-ui.yml'
+      - '.github/workflows/production-backup-v2.yml'
+      - '.github/workflows/production-postflight.yml'
+      - '.github/workflows/protected-preview-readonly-source.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-ui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deferred-document-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DOCUMENTS: deferred
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies and browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build the exact deferred document profile
+        run: npm run build
+      - name: Verify optimized UI, deep links and HTTP denials with synthetic data
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
+          tests/e2e/release-document-scope-ui.spec.ts
+          --project=chromium-desktop
+      - name: Retain synthetic release profile screenshots
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: financial-app-deferred-documents-${{ github.event.pull_request.head.sha }}
+          path: test-results/
+          retention-days: 7
+
+  synthetic-browser-matrix:
+    runs-on: ubuntu-latest
+    # Full mobile + desktop integrated suite exceeded the 25-min previous limit.
+    # Keep the complete suite; bound CI with a realistic 40-min ceiling.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies and browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Certify Drive metadata batch atomicity and rollback
+        run: node --experimental-strip-types scripts/test-drive-atomic-batch.mjs
+      - name: Ensure Drive folder scope regressions are really included in the run
+        run: |
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const source = readFileSync('.github/workflows/product-recovery-ui.yml', 'utf8');
+          const stepName = ['name: Integrated module', 'regressions on the same optimized build'].join(' ');
+          const block = source.slice(source.indexOf(stepName));
+          for (const path of [
+            'tests/e2e/document-drive-folder-scope.spec.ts',
+            'tests/e2e/document-drive-folder-recursive.spec.ts',
+          ]) {
+            if (!block.includes(path)) throw new Error('mandatory_drive_folder_regression_not_selected');
+          }
+          console.log('mandatory_drive_folder_regressions_selected');
+          NODE
+      - name: Certify bounded Drive batch concurrency and atomic preflight
+        run: node --experimental-strip-types scripts/test-drive-batch-verification.mjs
+      - name: Certify Drive folder pagination and no fabricated empty result
+        run: node --experimental-strip-types scripts/test-drive-discovery-integrity.mjs
+      - name: Certify OCR labelled amounts against synthetic independent expected values
+        run: node scripts/test-ocr-amount-label-selection.mjs
+      - name: Certify read-only Drive inventory completeness and duplicate safety
+        run: node scripts/test-document-drive-inventory.mjs
+      - name: Certify PDF scanned-page Node rasterization
+        run: node scripts/test-pdf-render-smoke.mjs
+      - name: Certify OCR rotation fallback efficiency
+        run: node scripts/test-ocr-rotation-decision.mjs
+      - name: Certify Spanish Tesseract worker on a real synthetic raster
+        run: node scripts/test-ocr-native-engine-smoke.mjs
+      - name: Verify essential visual regressions are actually executed
+        run: node scripts/verify-recovery-visual-suite-gate.mjs
+      - name: Verify shared theme and typography guards on the supported product
+        run: |
+          npm run verify:premium-design
+          npm run verify:semantic-design
+      - name: Build optimized application and run cumulative guards
+        run: npm run build
+      - name: Browser coverage, theme, keyboard and layout checks
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
+          tests/e2e/product-recovery-coverage.spec.ts
+          tests/e2e/product-recovery-visual.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/inicio-privacy-visual.spec.ts
+          tests/e2e/theme-system-10.0.63.spec.ts
+          tests/e2e/navigation-performance-10.0.30.spec.ts
+          tests/e2e/module-context-navigation.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/dashboard-performance-contract.spec.ts
+          --project=chromium-desktop
+      - name: Retain isolated visual screenshots before Playwright clears its output directory
+        if: ${{ always() }}
+        run: |
+          mkdir -p recovery-evidence/visual
+          if [ -d test-results ]; then cp -R test-results/. recovery-evidence/visual/; fi
+          if [ -d playwright-report ]; then cp -R playwright-report recovery-evidence/visual-html-report; fi
+      - name: Integrated module regressions on the same optimized build
+        if: ${{ !cancelled() }}
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
+          tests/e2e/budgets.spec.ts
+          tests/e2e/budgets-accessibility.spec.ts
+          tests/e2e/documents.spec.ts
+          tests/e2e/release-ocr-scope.spec.ts
+          tests/e2e/release-document-scope.spec.ts
+          tests/e2e/protected-preview-release-profile.spec.ts
+          tests/e2e/document-test-designation.spec.ts
+          tests/e2e/private-document-content-address.spec.ts
+          tests/e2e/private-document-replay.spec.ts
+          tests/e2e/document-drive-authoritative-metadata.spec.ts
+          tests/e2e/document-drive-folder-scope.spec.ts
+          tests/e2e/document-drive-folder-recursive.spec.ts
+          tests/e2e/google-service-account.spec.ts
+          tests/e2e/source-metadata-auth-boundary.spec.ts
+          tests/e2e/source-preflight-summary.spec.ts
+          tests/e2e/source-postflight-reconciliation.spec.ts
+          tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/source-date-representation-audit.spec.ts
+          tests/e2e/ocr-g5-private-runner-contract.spec.ts
+          tests/e2e/ocr-g5-private-ledger.spec.ts
+          tests/e2e/ocr-g5-private-expectations.spec.ts
+          tests/e2e/ocr-g5-private-holdout-contract.spec.ts
+          tests/e2e/ap8-readiness-contract.spec.ts
+          tests/e2e/data-trust.spec.ts
+          tests/e2e/document-download-byte-limit.spec.ts
+          tests/e2e/document-api-json-limits.spec.ts
+          tests/e2e/document-ocr-json-byte-limit.spec.ts
+          tests/e2e/document-original-mime-evidence.spec.ts
+          tests/e2e/document-ocr-confirmation-integrity.spec.ts
+          tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/document-ocr-error-messages.spec.ts
+          tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts
+          tests/e2e/document-ocr-financial-interpretation.spec.ts
+          tests/e2e/document-ocr-pdf-native-coverage.spec.ts
+          tests/e2e/document-ocr-pdf-hybrid-provider.spec.ts
+          tests/e2e/gateway-request-body-limit.spec.ts
+          tests/e2e/deployment-region-contract.spec.ts
+          tests/e2e/dashboard-envelope-integrity.spec.ts
+          tests/e2e/financial-api-query-guards.spec.ts
+          tests/e2e/financial-api-json-byte-limits.spec.ts
+          tests/e2e/document-api-query-guards.spec.ts
+          tests/e2e/global-search.spec.ts
+          tests/e2e/dashboard-source-safety.spec.ts
+          tests/e2e/document-ocr-pdf-failures.spec.ts
+          tests/e2e/home-expense-average-coverage.spec.ts
+          tests/e2e/inicio-utility.spec.ts
+          tests/e2e/inicio-sync-feedback.spec.ts
+          tests/e2e/document-pagination.spec.ts
+          tests/e2e/drive-auto-detection-10.0.72.spec.ts
+          tests/e2e/transactions-race.spec.ts
+          tests/e2e/transactions.spec.ts
+          tests/e2e/accounts.spec.ts
+          tests/e2e/alerts-center.spec.ts
+          tests/e2e/global-alerts-engine.spec.ts
+          tests/e2e/cash-flow-evolution-plot.spec.ts
+          tests/e2e/cash-flow-accounting.spec.ts
+          tests/e2e/cash-flow-theme-contrast.spec.ts
+          tests/e2e/forecast-chart-timeline.spec.ts
+          tests/e2e/forecast-horizons-integrity.spec.ts
+          tests/e2e/comparison-ui.spec.ts
+          tests/e2e/recurrences.spec.ts
+          tests/e2e/recovery-route-shell-responsive.spec.ts
+          tests/e2e/premium-analysis-visual.spec.ts
+          tests/e2e/analysis-contract-navigation.spec.ts
+          tests/e2e/analysis-error-layout-recovery.spec.ts
+          tests/e2e/aud-e2e-analysis-light-contrast.spec.ts
+          tests/e2e/analysis.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
+      - name: Retain integrated module traces and screenshots
+        if: ${{ always() }}
+        run: |
+          mkdir -p recovery-evidence/modules
+          if [ -d test-results ]; then cp -R test-results/. recovery-evidence/modules/; fi
+          if [ -d playwright-report ]; then cp -R playwright-report recovery-evidence/modules-html-report; fi
+      - name: Upload isolated synthetic browser evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, Node.js 24
+        with:
+          name: financial-app-recovery-${{ github.event.pull_request.head.sha }}
+          path: recovery-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+      # Synthetic UI results are distinct from authenticated real persistence.
+      # Preserve only data created by local synthetic tests; never upload real banking originals or secrets.
+      # No financial originals, secrets or production access are used here.

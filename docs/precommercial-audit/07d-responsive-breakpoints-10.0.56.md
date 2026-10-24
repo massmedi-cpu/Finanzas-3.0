@@ -92,3 +92,8 @@ La matriz Playwright existente sigue verificando los cruces críticos 479/481, 7
 El objetivo de REL-056 no es rediseñar simultáneamente decenas de layouts heredados. Es establecer la gobernanza que faltaba, congelar la dispersión actual y permitir migraciones posteriores de excepciones hacia los límites del sistema con regresión visual controlada.
 
 ART-003 no cambia semántica financiera, persistencia, autenticación, PWA ni la fuente bancaria oficial. Google Drive/Sheets permanece en solo lectura.
+
+
+## Recuperación de producto · 2026-10-09
+
+Se incorpora `desktopNavigation: 1100px` al sistema compartido. Desde ese ancho, AppShell reserva una columna lateral de 14rem y organiza los destinos en vertical. Por debajo conserva la navegación horizontal de tablet y, hasta 768px, el dock móvil. La transición usa `width < 68.75rem`, sin huecos entre consultas. 1100px forma parte de la matriz solicitada; el contenido ocupa el ancho restante y no queda bajo la navegación. La certificación visual de esta recuperación se registra por separado de la auditoría histórica.

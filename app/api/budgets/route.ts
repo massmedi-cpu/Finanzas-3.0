@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   callPersistenceGatewayBatch,
@@ -10,7 +11,10 @@ import {
   type BudgetSnapshot,
 } from "../../../src/application/budgets/budget-planning";
 
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 64 * 1024;
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -72,15 +76,24 @@ async function addPlanningContext(month: string, snapshot: unknown) {
   } catch {
     // Presupuestos sigue disponible si falla únicamente el contexto de ingresos.
   }
-  return assembleBudgetPlanning(budgetSnapshot(snapshot), monthly);
+  return assembleBudgetPlanning(budgetSnapshot(snapshot, month), monthly);
 }
 
-function budgetSnapshot(value: unknown): BudgetSnapshot {
-  if (!isBudgetSnapshot(value)) throw new BudgetSnapshotContractError();
+function budgetSnapshot(value: unknown, expectedMonth: string): BudgetSnapshot {
+  if (!isBudgetSnapshot(value) || value.month !== expectedMonth) {
+    throw new BudgetSnapshotContractError();
+  }
   return value;
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "budget_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: HEADERS },
+    );
+  }
   if (error instanceof BudgetSnapshotContractError) {
     return Response.json(
       { error: "persistence_failed", code: error.message },
@@ -119,9 +132,10 @@ function apiError(error: unknown) {
     );
   }
 
-  if (error instanceof Error && error.message.startsWith("invalid_budget_")) {
+  const publicCode = publicGatewayErrorCode(error);
+  if (publicCode.startsWith("invalid_budget_")) {
     return Response.json(
-      { error: "invalid_request", code: error.message },
+      { error: "invalid_request", code: publicCode },
       { status: 400, headers: HEADERS },
     );
   }
@@ -136,14 +150,20 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const month = monthValue(searchParams.get("month"));
+    // The snapshot is for all accounts; an ignored account filter would be misleading.
+    if ([...searchParams.keys()].some((key) => key !== "month")) {
+      throw new Error("invalid_budget_query_parameters");
+    }
+    const requestedMonths = searchParams.getAll("month");
+    if (requestedMonths.length !== 1) throw new Error("invalid_budget_month");
+    const month = monthValue(requestedMonths[0]);
     const [budgetResult, monthlyResult] = await callPersistenceGatewayBatch([
       { action: "budget.snapshot", payload: { month } },
       { action: "financial.monthly", payload: monthlyPayload(month) },
     ]);
     if (budgetResult.status === "rejected") throw budgetResult.reason;
     const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : null;
-    const result = assembleBudgetPlanning(budgetSnapshot(budgetResult.value), monthly);
+    const result = assembleBudgetPlanning(budgetSnapshot(budgetResult.value, month), monthly);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);
@@ -152,7 +172,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const month = monthValue(row.month);
     const snapshot = await callPersistenceGateway("budget.refresh", { month });
     const result = await addPlanningContext(month, snapshot);
@@ -164,7 +184,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const month = monthValue(row.month);
     if (!Object.prototype.hasOwnProperty.call(row, "categoryId")) {
       throw new Error("invalid_budget_category_id");

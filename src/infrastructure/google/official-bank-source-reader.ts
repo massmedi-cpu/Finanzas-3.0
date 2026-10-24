@@ -178,9 +178,27 @@ function normalizeValueRanges(
   }
 
   return metadata.map((sheet, index) => {
-    const rawValues = response.valueRanges?.[index]?.values;
-    const values = Array.isArray(rawValues) ? rawValues : [];
-    const rows = values.filter(Array.isArray) as unknown[][];
+    const valueRange = response.valueRanges?.[index];
+    // The two official sheets have identical headers. Trusting the position of
+    // batchGet results alone can silently attribute one account's rows to the
+    // other sheet ID, changing every source identity on the next sync.
+    const expectedRange = `${quoteA1SheetTitle(sheet.title)}!A1:V${sheet.rowCount}`;
+    if (
+      valueRange?.range !== expectedRange ||
+      valueRange?.majorDimension !== "ROWS" ||
+      !Array.isArray(valueRange?.values) ||
+      valueRange.values.length > sheet.rowCount ||
+      valueRange.values.some((row) =>
+        !Array.isArray(row) || row.length > OFFICIAL_BANK_SOURCE_HEADERS.length
+      )
+    ) {
+      throw new GoogleOfficialSourceReadError(
+        "source_values_mismatch",
+        "Google Sheets no ha devuelto el rango y las filas exactas de una pestaña oficial. No se incorporarán movimientos de una fotografía ambigua.",
+      );
+    }
+
+    const rows = valueRange.values as unknown[][];
     const headers = rows[0] ?? [];
     const movements = rows.slice(1).filter(isNonEmptyRow);
 

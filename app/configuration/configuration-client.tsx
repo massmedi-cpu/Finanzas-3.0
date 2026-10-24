@@ -134,8 +134,18 @@ async function requestConfiguration(operation: string, payload: Record<string, u
   return data;
 }
 
-export default function ConfigurationClient() {
-  const [tab, setTab] = useState<Tab>("accounts");
+export default function ConfigurationClient({ initialTab = "accounts" }: { initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  useEffect(() => { setTab(initialTab); }, [initialTab]);
+
+  function changeTab(nextTab: Tab) {
+    setTab(nextTab);
+    // Keep the selected view shareable without navigating away from edits.
+    const url = new URL(window.location.href);
+    if (nextTab === "categories") url.searchParams.set("tab", "categories");
+    else url.searchParams.delete("tab");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }
   const [data, setData] = useState<ConfigPayload>({ accounts: [], categories: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -405,7 +415,7 @@ export default function ConfigurationClient() {
           <p className="eyebrow">FINANCIAL APP · CONFIGURACIÓN</p>
           <h1>Cuentas y categorías</h1>
         </div>
-        <div className="configuration-summary" aria-label="Resumen de configuración">
+        <div className="configuration-summary" role="group" aria-label="Resumen de configuración">
           <div><strong>{activeAccounts}</strong><span>Cuentas activas</span></div>
           <div><strong>{activeCategories}</strong><span>Categorías activas</span></div>
           <button className="icon-button" type="button" onClick={() => void load()} disabled={loading || busy} aria-label="Actualizar datos"><Icon name="refresh" /></button>
@@ -413,8 +423,8 @@ export default function ConfigurationClient() {
       </header>
 
       <nav className="config-tabs" aria-label="Secciones de configuración">
-        <button className={tab === "accounts" ? "active" : ""} onClick={() => setTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
-        <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
+        <button className={tab === "accounts" ? "active" : ""} onClick={() => changeTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
+        <button className={tab === "categories" ? "active" : ""} onClick={() => changeTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
       </nav>
 
       {error && <div className="config-message error" role="alert">{error}</div>}
@@ -430,7 +440,7 @@ export default function ConfigurationClient() {
                 : `${archiveImpact.transactionCount} movimientos históricos conservarán la categoría archivada.`}
             </p>
           </div>
-          <div className="impact-grid" aria-label="Impacto de la categoría">
+          <div className="impact-grid" role="group" aria-label="Impacto de la categoría">
             <span><strong>{archiveImpact.transactionCount}</strong> movimientos</span>
             <span><strong>{archiveImpact.ruleConditionCount + archiveImpact.ruleTargetCount}</strong> reglas activas</span>
             <span><strong>{archiveImpact.merchantCount}</strong> comercios</span>

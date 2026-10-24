@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const HOME_VISIT_KEY = "financial-app:home-last-visit:v1";
@@ -90,6 +91,20 @@ async function mockInicio(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    // The source exposes only its last imported date. Historical nonzero
+    // aggregates remain partial; earlier empty months remain unverified.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-16", sync: null,
+      });
+      return;
+    }
+    if (url.pathname === "/api/source/google/preflight") {
+      await json(route, syntheticSourcePreflight(12));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
@@ -177,7 +192,8 @@ test("Inicio inteligente resume el estado actual sin crear un segundo motor", as
   await expect(brief).toBeVisible();
   await expect(brief.getByRole("heading", { name: "Ahora mismo" })).toBeVisible();
   await expect(brief).toContainText("Balance registrado en positivo");
-  await expect(brief).toContainText("Presupuesto dentro del límite");
+  await expect(brief).toContainText("Presupuesto con datos parciales");
+  await expect(brief).not.toContainText("Presupuesto dentro del límite");
   await expect(brief).toContainText("Sin movimientos previstos");
   await expect(brief).toContainText("Datos hasta 16 sept");
 
@@ -318,22 +334,7 @@ test("QA-08 · Saldo se invalida al Actualizar datos aunque el periodo no cambie
       return;
     }
     refreshed = true;
-    await json(route, {
-      run: {
-        id: "run-refresh",
-        status: "success",
-        startedAt: "2026-09-16T06:10:00.000Z",
-        finishedAt: "2026-09-16T06:10:05.000Z",
-        rowsSeen: 12,
-        rowsInserted: 0,
-        rowsRevised: 0,
-        rowsSkipped: 12,
-        rowsFailed: 0,
-        errorCode: null,
-        errorMessage: null,
-      },
-      cursors: [],
-    });
+    await json(route, syntheticSourceSyncReceipt(12));
   });
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
@@ -382,8 +383,8 @@ test("Primera visita crea referencia para el futuro sin inventar cambios", async
   await page.goto("/");
 
   const brief = page.getByRole("region", { name: "Resumen inteligente" });
-  await expect(brief).toContainText("Primera referencia guardada");
-  await expect(brief).toContainText("A partir de la próxima visita");
+  await expect(brief).toContainText("Primera visita");
+  await expect(brief).toContainText("La próxima visita mostrará los cambios");
   await expect(brief).not.toContainText("movimientos nuevos");
 
   await expect.poll(async () => page.evaluate((key) => localStorage.getItem(key), HOME_VISIT_KEY)).not.toBeNull();
@@ -446,7 +447,7 @@ test("QA-05 · Inicio no atribuye al día de consulta un saldo agregado con fech
 });
 
 
-test("QA-11 · las gráficas no dibujan barras positivas para valores exactamente cero", async ({ page }) => {
+test("QA-11 · una mensualidad cero sin cobertura no se representa como gasto cero confirmado", async ({ page }) => {
   await mockInicio(page);
 
   await page.route("**/api/dashboard?**", async (route) => {
@@ -483,19 +484,20 @@ test("QA-11 · las gráficas no dibujan barras positivas para valores exactament
   await page.goto("/");
 
   const incomeExpense = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
-  const zeroIncomeExpenseBars = incomeExpense.locator('[data-zero="true"]');
-  await expect(zeroIncomeExpenseBars).toHaveCount(2);
-  for (const bar of await zeroIncomeExpenseBars.all()) {
-    await expect(bar).toHaveCSS("height", "0px");
-    await expect(bar).toHaveCSS("min-height", "0px");
-  }
+  // No imported movement is known inside August, so the all-zero row is not
+  // proof that August was a complete zero. Both bars stay unconfirmed.
+  await expect(incomeExpense.locator('[data-zero="true"]')).toHaveCount(0);
+  // The accessible income/expense chart uses a month-level missing marker,
+  // not the data-series-missing marker of the separate net-flow chart.
+  const unknownMonth = incomeExpense.locator('[data-month-coverage="unknown"]');
+  await expect(unknownMonth).toHaveCount(1);
+  await expect(unknownMonth).toHaveAccessibleName(/agosto de 2026: sin cobertura bancaria confirmada/);
+  await expect(unknownMonth.locator('span[style*="height"]')).toHaveCount(0);
 
   await page.getByRole("button", { name: "Flujo neto" }).click();
   const netChart = page.getByRole("group", { name: "Flujo neto por mes" });
-  const zeroNetBar = netChart.locator('[data-zero="true"]');
-  await expect(zeroNetBar).toHaveCount(1);
-  await expect(zeroNetBar).toHaveCSS("height", "0px");
-  await expect(zeroNetBar).toHaveCSS("min-height", "0px");
+  await expect(netChart.locator('[data-zero="true"]')).toHaveCount(0);
+  await expect(netChart.locator('[data-series-missing="true"]')).toHaveCount(1);
 });
 
 
@@ -554,7 +556,8 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
   expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 2);
   expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 2);
   expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
-  await expect(zero).toHaveCSS("height", "0px");
+  await expect(zero).toHaveCount(0);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(1);
 });
 
 test("QA-13 · Saldo explica una serie sin cuentas en lugar de dibujar ceros falsos", async ({ page }) => {
@@ -943,3 +946,81 @@ for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "incon
     expect(pageErrors).toEqual([]);
   });
 }
+
+
+test("REC-HOME-003 · importes históricos no cero siguen visibles pero no se certifican completos", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  await expect(chart).toBeVisible();
+  // The gateway only provides an upper date bound. Nonzero reconciled monthly
+  // aggregates are observed; a complete bank history is not established.
+  await expect(chart.locator('[data-month-coverage="partial"]')).toHaveCount(3);
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(0);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(0);
+  await expect(chart.getByRole("button", { name: /julio de 2026.*ingresos/i })).toBeVisible();
+  await expect(chart.getByRole("button", { name: /agosto de 2026.*ingresos/i })).toBeVisible();
+});
+
+test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de meses observados", async ({ page }) => {
+  await mockInicio(page);
+  // This regression deliberately simulates a bank source whose most recent
+  // transaction was in July, rather than an inconsistent September dashboard.
+  // Make the provenance endpoint match the activity snapshot so July remains
+  // observed and August/September are genuinely outside bank coverage.
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true, earliestMovementDate: null,
+      latestMovementDate: "2026-07-31", sync: null,
+    });
+  });
+  await page.route("**/api/dashboard?**", async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("scope");
+    if (scope === "activity") {
+      await json(route, {
+        contractVersion: 1, scope: "activity", asOfDate: "2026-09-16",
+        dataThroughDate: "2026-07-31", generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["transactions"], failedSources: [],
+        data: {
+          financial: null, monthly: null, budgets: null, forecast: null,
+          transactions: {
+            ...transactions,
+            rows: transactions.rows.map((row) => ({ ...row, bankDate: "2026-07-31" })),
+          },
+        },
+      });
+      return;
+    }
+    if (scope === "secondary") {
+      await json(route, {
+        contractVersion: 1, scope: "secondary", asOfDate: "2026-09-16",
+        dataThroughDate: "2026-07-31", generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"], failedSources: [],
+        data: {
+          financial: null,
+          monthly: {
+            dateFrom: "2026-07-01", dateTo: "2026-09-16",
+            rows: [
+              { monthStart: "2026-07-01", incomeCents: 20000, expenseCents: 10000, operatingNetCents: 10000 },
+              { monthStart: "2026-08-01", incomeCents: 999999999, expenseCents: 500000000, operatingNetCents: 499999999 },
+              { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
+            ],
+          },
+          budgets, forecast, transactions: null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  await expect(chart).toBeVisible();
+  await expect(page.getByTestId("financial-bar-scale-reference")).toContainText("200,00 €");
+  await expect(chart.locator('[data-month-coverage="none"]')).toHaveCount(2);
+  // Only the latest bank date is available: July is observed but the start
+  // of the account history is unknown, so it cannot be declared covered.
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(0);
+  await expect(chart.locator('[data-month-coverage="partial"]')).toHaveCount(1);
+});
