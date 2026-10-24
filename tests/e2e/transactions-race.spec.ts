@@ -1,4 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+// REC-REL-428: mobile React transitions can briefly expose two identically
+// labeled inputs during hydration. Wait for exactly one form/search field;
+// never arbitrarily select .first() and conceal persistent duplicate controls.
+async function uniqueSearchField(page: Page) {
+  const filters = page.getByRole("form", { name: "Filtros de movimientos" });
+  await expect(filters).toHaveCount(1);
+  const search = filters.getByRole("textbox", { name: "Buscar", exact: true });
+  await expect(search).toHaveCount(1);
+  return search;
+}
 
 const accountId = "10000000-0000-4000-8000-000000000191";
 const baseId = "60000000-0000-4000-8000-000000000191";
@@ -92,7 +103,7 @@ test("Movimientos conserva el filtro más nuevo aunque una petición anterior te
   await page.goto("/transactions");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
 
-  const search = page.getByLabel("Buscar", { exact: true });
+  const search = await uniqueSearchField(page);
   await search.fill("antigua");
   const slowStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "antigua");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
@@ -161,7 +172,7 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await paginationStarted;
 
-  await page.getByLabel("Buscar", { exact: true }).fill("nueva");
+  await (await uniqueSearchField(page)).fill("nueva");
   const filteredStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "nueva");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await filteredStarted;
