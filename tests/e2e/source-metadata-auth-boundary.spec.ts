@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { isSingleOwnerWorkspaceAccess } from "../../src/domain/workspace-context";
 import { GOOGLE_OAUTH_STATE_COOKIE } from "../../src/infrastructure/google/google-source-runtime";
 
 // Anonymous GET only. Never run a mutation against a financial source.
@@ -75,4 +76,26 @@ test("REC-AUTH-238 · GET de estado verifica workspace antes de resolver credenc
   expect(workspace).toBeGreaterThan(-1);
   expect(google).toBeGreaterThan(workspace);
   expect(gateway).toBeGreaterThan(google);
+});
+
+test("REC-AP2-415 · un solo propietario autorizado, nunca miembros ni varios usuarios", () => {
+  expect(isSingleOwnerWorkspaceAccess("owner", 1)).toBe(true);
+  for (const [role, count] of [
+    ["member", 1], ["owner", 2], ["owner", 0],
+    ["member", 2], ["viewer", 1], [null, 1],
+    ["owner", "1"], ["owner", null], [undefined, 1],
+  ] as Array<[unknown, unknown]>) {
+    expect(isSingleOwnerWorkspaceAccess(role, count), `role=${String(role)} count=${String(count)}`).toBe(false);
+  }
+
+  const edge = readFileSync("supabase/functions/financial-app-db-gateway/workspace-context.ts", "utf8");
+  const verify = edge.indexOf('await supabase.auth.getUser(userToken)');
+  const membershipLookup = edge.indexOf('const membership = memberships[0]');
+  const ownerGate = edge.indexOf('if (!isSingleOwnerWorkspaceAccess(');
+  const activate = edge.indexOf('await activateWorkspaceScope(');
+  expect(verify).toBeGreaterThan(-1);
+  expect(membershipLookup).toBeGreaterThan(verify);
+  expect(ownerGate).toBeGreaterThan(membershipLookup);
+  expect(activate).toBeGreaterThan(ownerGate);
+  expect(edge.slice(ownerGate, activate)).toContain('new WorkspaceContextError("workspace_access_denied", 403)');
 });
