@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import ts from "typescript";
+import * as ts from "typescript";
 
 /**
  * Dependency-free release lint using the TypeScript compiler parser.
