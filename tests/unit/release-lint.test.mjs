@@ -14,22 +14,21 @@ const forbidden = [
   ["/* @ts-nocheck */\nlet value = 42;", "unsound_ts_suppression"],
 ];
 for (const [source, rule] of forbidden) {
-  test(`rejects ${rule}: ${source.slice(0, 32)}`, () => {
-    assert.ok(lintSource(source).some(problem => problem.rule === rule));
+  test("rejects " + rule + ": " + source.slice(0, 28), () => {
+    assert.ok(lintSource(source).some(issue => issue.rule === rule));
   });
 }
-test("accepts ordinary TSX UI and deliberate error logging", () => {
-  const source = 'export const Example = () => <button onClick={() => console.error("error")}>Listo</button>';
-  assert.deepEqual(lintSource(source, "app/example.tsx"), []);
+test("accepts ordinary TSX and allowed console.error", () => {
+  assert.deepEqual(lintSource('export const Ex = () => <button onClick={() => console.error("error")}>OK</button>;', "app/Ex.tsx"), []);
 });
-test("ignores strings rather than executing or falsely reporting them", () => {
-  assert.deepEqual(lintSource('const text = "debugger; console.log(); eval(1)";'), []);
+test("ignores dangerous-looking text in strings and comments", () => {
+  assert.deepEqual(lintSource('const text = "debugger; console.log(); eval(1)";\n// console.log(1)\n/* eval(3) */'), []);
 });
-test("rejects invalid syntax", () => {
-  assert.ok(lintSource("export const x = ;").some(p => p.rule === "syntax_error"));
+test("reports positions but not confidential source text", () => {
+  assert.deepEqual(lintSource("const ok = true;\nconsole.log('private');"), [{ rule: "development_console", line: 2, column: 1 }]);
+  assert.ok(!JSON.stringify(lintSource("console.log('PRIVATE_SENTINEL');")).includes("PRIVATE_SENTINEL"));
 });
-test("returns location but never source text in a finding", () => {
-  const results = lintSource("const ok = true;\nconsole.log('private sentinel');");
-  assert.deepEqual(results, [{ rule: "development_console", line: 2, column: 1 }]);
-  assert.ok(!JSON.stringify(results).includes("private sentinel"));
+test("detects bracket syntax outside strings", () => {
+  assert.deepEqual(lintSource('const x = "console[\\\"log\\\"]()";'), []);
+  assert.ok(lintSource('/*hi*/ console["log"](42)').some(issue => issue.rule === "development_console"));
 });

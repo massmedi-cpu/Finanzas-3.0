@@ -1,61 +1,77 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { resolve, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import * as ts from "typescript";
 
 /**
- * Dependency-free release lint using the TypeScript compiler parser.
- * Focus: dangerous executable patterns, unsupported compiler suppressions
- * and syntax in production source. Type safety is enforced separately by
- * npm run typecheck; this is NOT a replacement for a full ESLint ruleset.
+ * Lexical safety scanner for production TS/JS. TypeScript 7.0 does not expose
+ * the old parser API. Full syntax and type checking stays in npm run typecheck.
+ * This deliberately limited check is NOT a substitute for a full ESLint suite.
  */
 export function lintSource(source, name = "fixture.ts") {
-  const kind = name.endsWith(".tsx") ? ts.ScriptKind.TSX
-    : name.endsWith(".jsx") ? ts.ScriptKind.JSX
-    : /\.(?:mjs|cjs|js)$/.test(name) ? ts.ScriptKind.JS : ts.ScriptKind.TS;
-  const parsed = ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true, kind);
-  const problems = [];
-  const report = (node, rule) => {
-    const at = parsed.getLineAndCharacterOfPosition(node.getStart(parsed));
-    problems.push({ rule, line: at.line + 1, column: at.character + 1 });
-  };
-  for (const diagnostic of parsed.parseDiagnostics) {
-    const at = parsed.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
-    problems.push({ rule: "syntax_error", line: at.line + 1, column: at.character + 1 });
-  }
-  // TypeScript directives must not silently suppress correctness checks.
-  const directive = /(?:^|\n)\s*(?:\/\/|\/\*+|\*)\s*@ts-(?:ignore|nocheck)\b/g;
-  for (const match of source.matchAll(directive)) {
-    const pos = match.index + match[0].lastIndexOf("@ts-");
-    const at = parsed.getLineAndCharacterOfPosition(pos);
-    problems.push({ rule: "unsound_ts_suppression", line: at.line + 1, column: at.character + 1 });
-  }
-  function visit(node) {
-    if (ts.isDebuggerStatement(node)) report(node, "debugger_statement");
-    if (ts.isCallExpression(node)) {
-      if (ts.isIdentifier(node.expression) && (node.expression.text === "eval" || node.expression.text === "Function")) {
-        report(node, "dynamic_code_execution");
+  const executable = source.split("");
+  const commentsRemoved = source.split("");
+  const commentText = Array.from(source, () => " ");
+  const blank = (target, i) => { if (source[i] !== "\n" && source[i] !== "\r") target[i] = " "; };
+  let mode = "code";
+  let quote = "";
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i], next = source[i + 1];
+    if (mode === "code") {
+      if (ch === "/" && next === "/") {
+        mode = "line-comment";
+        blank(executable, i); blank(executable, ++i);
+        blank(commentsRemoved, i - 1); blank(commentsRemoved, i);
+        commentText[i - 1] = "/"; commentText[i] = "/";
+        continue;
       }
-      const target = node.expression;
-      if (ts.isPropertyAccessExpression(target)
-        && ts.isIdentifier(target.expression) && target.expression.text === "console"
-        && (target.name.text === "log" || target.name.text === "debug")) {
-        report(node, "development_console");
+      if (ch === "/" && next === "*") {
+        mode = "block-comment";
+        blank(executable, i); blank(executable, ++i);
+        blank(commentsRemoved, i - 1); blank(commentsRemoved, i);
+        commentText[i - 1] = "/"; commentText[i] = "*";
+        continue;
       }
-      if (ts.isElementAccessExpression(target)
-        && ts.isIdentifier(target.expression) && target.expression.text === "console"
-        && ts.isStringLiteral(target.argumentExpression)
-        && ["log", "debug"].includes(target.argumentExpression.text)) {
-        report(node, "development_console");
+      if (ch === "'" || ch === '"' || ch === "\x60") {
+        quote = ch; mode = "string"; blank(executable, i);
+      }
+    } else if (mode === "string") {
+      blank(executable, i);
+      if (ch === "\\" && i + 1 < source.length) { blank(executable, ++i); continue; }
+      if (ch === quote) mode = "code";
+    } else if (mode === "line-comment") {
+      if (ch === "\n") { mode = "code"; continue; }
+      blank(executable, i); blank(commentsRemoved, i); commentText[i] = ch;
+    } else if (mode === "block-comment") {
+      blank(executable, i); blank(commentsRemoved, i); commentText[i] = ch;
+      if (ch === "*" && next === "/") {
+        ++i; blank(executable, i); blank(commentsRemoved, i);
+        commentText[i] = "/"; mode = "code";
       }
     }
-    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Function") {
-      report(node, "dynamic_code_execution");
-    }
-    ts.forEachChild(node, visit);
   }
-  visit(parsed);
-  return problems;
+  const code = executable.join("");
+  const withoutComments = commentsRemoved.join("");
+  const comments = commentText.join("");
+  const issues = [];
+  function report(rule, index) {
+    const before = source.slice(0, index);
+    const line = before.split("\n").length;
+    issues.push({ rule, line, column: index - before.lastIndexOf("\n") });
+  }
+  const rules = [
+    ["debugger_statement", /\bdebugger\s*;/g],
+    ["development_console", /\bconsole\s*(?:\.\s*(?:log|debug)|\[\s*(['"])(?:log|debug)\1\s*\])\s*\(/g],
+    ["dynamic_code_execution", /\b(?:eval|Function)\s*\(/g],
+  ];
+  for (const [rule, expression] of rules) {
+    for (const match of withoutComments.matchAll(expression)) {
+      if (code[match.index] !== " ") report(rule, match.index);
+    }
+  }
+  for (const match of comments.matchAll(/@ts-(?:ignore|nocheck)\b/g)) {
+    report("unsound_ts_suppression", match.index);
+  }
+  return issues.sort((a, b) => a.line - b.line || a.column - b.column);
 }
 
 function collect(root, prefix = "") {
