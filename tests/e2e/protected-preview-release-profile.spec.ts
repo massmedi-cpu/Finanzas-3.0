@@ -135,3 +135,22 @@ test("REC-REL-438 · candidate preview requires owner auth before all deferred d
     if (path === "/api/configuration") reply.cache = "public, max-age=3600";
   }, true)).exitCode).toBe(1);
 });
+
+test("REC-REL-439 · secondary PR accepts an earlier 401 without weakening candidate auth", async () => {
+  for (const releaseProfile of [enabled, deferred]) {
+    const result = await runGate(releaseProfile, (path, reply) => {
+      if (path.startsWith("/api/documents")) {
+        reply.status = 401;
+        reply.body = { error: "authentication_required", code: null };
+      }
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.requests).toHaveLength(9);
+  }
+  expect((await runGate(deferred, (path, reply) => {
+    if (path === "/api/documents") {
+      reply.status = 401;
+      reply.body = { error: "authentication_required", code: null, documents: ["PRIVATE_SENTINEL"] };
+    }
+  })).exitCode).toBe(1);
+});

@@ -239,13 +239,18 @@ jobs:
               // When the outer app-auth proxy is enforced, it must deny
               // anonymous requests before a deferred feature or Edge gateway.
               // Non-release previews retain their legacy read-only contract.
+              const earlyAuthDenied = response.status === 401
+                && body.error === 'authentication_required' && body.code === null;
+              // A second PR may test this SAME branch after its candidate
+              // auth flag is active. A 401 is stronger than legacy 403/404
+              // and is valid for every PR, but mandatory for the release PR.
               const denied = requireAppAuth
-                ? response.status === 401 && body.error === 'authentication_required' && body.code === null
-                : privateHistory
+                ? earlyAuthDenied
+                : earlyAuthDenied || (privateHistory
                   ? response.status === 401 && body.error === 'authentication_required'
                   : deferred
                     ? response.status === 404 && body.error === 'feature_deferred' && body.code === null
-                    : response.status === 403 && body.code === 'workspace_context_required';
+                    : response.status === 403 && body.code === 'workspace_context_required');
               if (!denied) {
                 // Diagnostic metadata only: never log a response body.
                 console.log('DOCUMENT_BOUNDARY|unexpected_http=' + response.status +
