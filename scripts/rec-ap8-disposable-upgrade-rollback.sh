@@ -2,7 +2,7 @@
 set -euo pipefail
 umask 077
 
-# REC-AP8-246: disposable PostgreSQL 17 only, zero bank/Drive/private data.
+# REC-REL-461: disposable PostgreSQL 17 only, zero bank/Drive/private data.
 # This is a synthetic 10.0.103-compatible schema and CANNOT certify a
 # migration applied to an authentic production 10.0.103 backup.
 local_admin='postgresql://postgres:postgres@127.0.0.1:5432/postgres'
@@ -51,4 +51,4 @@ psql_db -f supabase/tests/rec_ap8_delta_upgrade_rollback_disposable.sql
 
 # Under no condition use this result as evidence of authentic production
 # backup restore or of 2-user cloud G5 OCR acceptance.
-echo "REC_AP8_DELTA|status=ok|mode=disposable_only|baseline=synthetic_10_0_103_compatible|deltas=4|production_writes=false|sha=$AUD_VALIDATION_SHA"
+echo "REC_AP8_DELTA|status=ok|mode=disposable_only|baseline=synthetic_10_0_103_compatible|deltas=5|production_writes=false|sha=$AUD_VALIDATION_SHA"

@@ -1,4 +1,4 @@
--- REC-AP8-310 · PostgreSQL 17 authentic encrypted backup-v2 rehearsal, PR 619.
+-- REC-REL-461 · PostgreSQL 17 authentic encrypted backup-v2 rehearsal, PR 619.
 -- The baseline comes from the verified 2026-10-20 production 10.0.103 backup,
 -- restored on loopback in isolated GitHub Actions Postgres; NEVER query or write live Supabase.
 -- Never log originals, extracted banking rows, bearer credentials or backup contents.
@@ -113,7 +113,7 @@ SELECT p.oid::regprocedure::text AS signature,
        p.proowner, p.proacl, p.prosecdef, p.provolatile
 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
 WHERE n.nspname='financial_app'
-  AND p.proname IN ('financial_transaction_facts','query_effective_transactions_v4')
+  AND p.proname IN ('financial_transaction_facts','query_effective_transactions_v4','financial_balance_series')
   AND (p.proname='query_effective_transactions_v4'
        OR pg_get_function_identity_arguments(p.oid)='p_date_from date, p_date_to date, p_account_id uuid');
 
@@ -134,7 +134,7 @@ CREATE TEMP TABLE rec_ap8_rows(table_name text PRIMARY KEY, digest text NOT NULL
 DO $capture$
 DECLARE r record; v_digest text;
 BEGIN
-  IF (SELECT count(*) FROM rec_ap8_functions)<>2
+  IF (SELECT count(*) FROM rec_ap8_functions)<>3
     OR (SELECT count(*) FROM rec_ap8_policies)<>2 THEN
     RAISE EXCEPTION 'REC_AP8_BASELINE_SIGNATURE_OR_POLICY_MISSING';
   END IF;
@@ -160,10 +160,18 @@ END $capture$;
 \i supabase/migrations/20261017154629_optimize_transaction_category_labels.sql
 \i supabase/migrations/20261017160009_batch_transaction_split_facts.sql
 \i supabase/migrations/20261017160345_statement_workspace_policy_context.sql
+\i supabase/migrations/20261024145500_rec_rel_430_archived_balance_series_scope.sql
 
 DO $postflight$
 DECLARE r record; v_digest text;
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc p
+    WHERE p.oid='financial_app.financial_balance_series(date,date,uuid)'::regprocedure
+      AND pg_get_functiondef(p.oid) ILIKE '%when p_account_id is null then%'
+  ) THEN
+    RAISE EXCEPTION 'REC_AP8_ARCHIVED_ACCOUNT_BALANCE_FIX_MISSING';
+  END IF;
   IF to_regprocedure('financial_app.prevent_private_original_rewrite()') IS NULL
     OR NOT EXISTS (
       SELECT 1 FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
@@ -215,7 +223,7 @@ BEGIN
       RAISE EXCEPTION 'REC_AP8_MIGRATION_MUTATED_FINANCIAL_DATA table=%',r.table_name;
     END IF;
   END LOOP;
-  RAISE NOTICE 'REC_AP8_DELTA|upgrade=passed|routines=2|policies=2|rls_preserved=true|original_guard=true|data_unchanged=true';
+  RAISE NOTICE 'REC_AP8_DELTA|upgrade=passed|routines=3|policies=2|rls_preserved=true|original_guard=true|data_unchanged=true';
 END $postflight$;
 
 -- These existing real PostgreSQL fixtures run with the restricted gateway role.
@@ -278,4 +286,4 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'REC_AP8_DELTA|rollback=passed|routine_defs_acls_identical=true|rls_identical=true|financial_data_identical=true';
 END $final$;
-SELECT 'REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored|upgrade_migrations=4|rollback=true|live_production_writes=false' AS result;
+SELECT 'REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored|upgrade_migrations=5|rollback=true|live_production_writes=false' AS result;
