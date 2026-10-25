@@ -185,6 +185,39 @@ BEGIN
   END IF;
 END $capture$;
 
+-- REC-REL-464: prove the archived-account defect exists on the authentic
+-- 10.0.103 baseline. No balances, banking identifiers or account names logged.
+DO $archived_before$
+DECLARE
+  a record;
+  month_row jsonb;
+  series jsonb;
+  canonical jsonb;
+  month_count integer := 0;
+  mismatch_count integer := 0;
+BEGIN
+  SELECT id, workspace_id INTO a
+  FROM financial_app.accounts WHERE lifecycle = 'archived'
+  ORDER BY id LIMIT 1;
+  IF a.id IS NULL OR a.workspace_id IS NULL THEN
+    RAISE EXCEPTION 'REC_AP8_AUTHENTIC_ARCHIVED_ACCOUNT_REQUIRED';
+  END IF;
+  PERFORM pg_catalog.set_config('financial_app.workspace_id', a.workspace_id::text, true);
+  series := financial_app.financial_balance_series(date '2018-11-01', date '2026-10-25', a.id);
+  FOR month_row IN SELECT value FROM pg_catalog.jsonb_array_elements(series->'rows') LOOP
+    month_count := month_count + 1;
+    canonical := financial_app.financial_account_balances((month_row->>'asOfDate')::date, false, a.id);
+    IF (month_row->>'balanceCents')::bigint
+      IS DISTINCT FROM (canonical->>'totalBalanceCents')::bigint THEN
+      mismatch_count := mismatch_count + 1;
+    END IF;
+  END LOOP;
+  IF month_count <> 96 OR mismatch_count = 0 THEN
+    RAISE EXCEPTION 'REC_AP8_AUTHENTIC_ARCHIVED_DEFECT_NOT_REPRODUCED';
+  END IF;
+  RAISE NOTICE 'REC_AP8_ARCHIVED_BALANCE|baseline=defect_reproduced|months=%|mismatched=%|source=restored_backup', month_count, mismatch_count;
+END $archived_before$;
+
 \echo REC_AP8_DELTA|phase=upgrade|schema=restored_production_10_0_103
 \i supabase/migrations/20261011205000_ap1_private_document_original_immutable.sql
 \i supabase/migrations/20261017154629_optimize_transaction_category_labels.sql
@@ -255,6 +288,56 @@ BEGIN
   END LOOP;
   RAISE NOTICE 'REC_AP8_DELTA|upgrade=passed|routines=3|policies=2|rls_preserved=true|original_guard=true|data_unchanged=true';
 END $postflight$;
+
+-- REC-REL-464: on the restored real-data backup, the upgraded routine
+-- must equal the independent canonical balance for EVERY one of 96 months.
+-- The unfiltered timeline must still exclude archived-account balances.
+DO $archived_after$
+DECLARE
+  a record;
+  month_row jsonb;
+  series jsonb;
+  canonical jsonb;
+  month_count integer := 0;
+  archived_checked integer := 0;
+  general_count integer := 0;
+BEGIN
+  FOR a IN SELECT id,workspace_id FROM financial_app.accounts WHERE lifecycle='archived' ORDER BY id LOOP
+    archived_checked := archived_checked + 1;
+    PERFORM pg_catalog.set_config('financial_app.workspace_id', a.workspace_id::text, true);
+    series := financial_app.financial_balance_series(date '2018-11-01',date '2026-10-25',a.id);
+    IF pg_catalog.jsonb_array_length(series->'rows') <> 96 THEN
+      RAISE EXCEPTION 'REC_AP8_ARCHIVED_SERIES_MONTH_COUNT_MISMATCH';
+    END IF;
+    FOR month_row IN SELECT value FROM pg_catalog.jsonb_array_elements(series->'rows') LOOP
+      month_count := month_count + 1;
+      canonical := financial_app.financial_account_balances((month_row->>'asOfDate')::date,false,a.id);
+      IF (month_row->>'balanceCents')::bigint
+         IS DISTINCT FROM (canonical->>'totalBalanceCents')::bigint
+         OR month_row->>'monthStart' IS NULL
+         OR month_row->>'asOfDate' IS NULL THEN
+        RAISE EXCEPTION 'REC_AP8_ARCHIVED_BALANCE_NOT_CANONICAL';
+      END IF;
+    END LOOP;
+    series := financial_app.financial_balance_series(date '2018-11-01',date '2026-10-25',null);
+    IF pg_catalog.jsonb_array_length(series->'rows') <> 96 THEN
+      RAISE EXCEPTION 'REC_AP8_GENERAL_SERIES_MONTH_COUNT_MISMATCH';
+    END IF;
+    FOR month_row IN SELECT value FROM pg_catalog.jsonb_array_elements(series->'rows') LOOP
+      general_count := general_count + 1;
+      canonical := financial_app.financial_account_balances((month_row->>'asOfDate')::date,false,null);
+      IF (month_row->>'balanceCents')::bigint
+         IS DISTINCT FROM (canonical->>'activeBalanceCents')::bigint THEN
+        RAISE EXCEPTION 'REC_AP8_ARCHIVED_BALANCE_LEAKED_TO_GENERAL_SERIES';
+      END IF;
+    END LOOP;
+  END LOOP;
+  IF archived_checked=0 OR month_count <> 96 * archived_checked
+    OR general_count <> 96 * archived_checked THEN
+    RAISE EXCEPTION 'REC_AP8_ARCHIVED_ACCOUNT_MATRIX_INCOMPLETE';
+  END IF;
+  RAISE NOTICE 'REC_AP8_ARCHIVED_BALANCE|status=ok|archived_accounts=%|scoped_months=%|general_months=%|mismatches=0',archived_checked,month_count,general_count;
+END $archived_after$;
 
 -- These existing real PostgreSQL fixtures run with the restricted gateway role.
 -- Each wraps its synthetic fixture in BEGIN/ROLLBACK (no banking data).
