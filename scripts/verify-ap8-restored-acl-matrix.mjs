@@ -57,7 +57,18 @@ export function verifyRestoredAclSql(sql) {
     "REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored",
   ]) if (!sql.includes(required)) fail("AP8_ACL_REQUIRED_GUARD_MISSING");
   const pathPattern = /\\i supabase\/migrations\/20[0-9]+_[a-z0-9_]+\.sql/g;
-  if ([...sql.matchAll(pathPattern)].length !== 4) fail("AP8_ACL_FOUR_MIGRATIONS_REQUIRED");
+  const included = [...sql.matchAll(pathPattern)].map((m) => m[0]);
+  const requiredMigrations = [
+    "\\i supabase/migrations/20261011205000_ap1_private_document_original_immutable.sql",
+    "\\i supabase/migrations/20261017154629_optimize_transaction_category_labels.sql",
+    "\\i supabase/migrations/20261017160009_batch_transaction_split_facts.sql",
+    "\\i supabase/migrations/20261017160345_statement_workspace_policy_context.sql",
+    "\\i supabase/migrations/20261024145500_rec_rel_430_archived_balance_series_scope.sql",
+  ];
+  if (included.length !== requiredMigrations.length ||
+      !equalSets(new Set(included), new Set(requiredMigrations))) {
+    fail("AP8_ACL_REQUIRED_FIVE_MIGRATIONS_MISSING_OR_EXTRA");
+  }
   return { tables: expected.size, permittedTables: permittedTables.length };
 }
 function selfTest(sql) {
@@ -69,6 +80,7 @@ function selfTest(sql) {
     [sql.replace("GRANT SELECT, INSERT, UPDATE, DELETE ON financial_app.documents", "GRANT SELECT, UPDATE, DELETE ON financial_app.documents"), "AP8_ACL_GRANT_DIFFERS_FROM_MATRIX"],
     [sql.replace("('workspaces', ARRAY[]::text[])", "('workspaces', ARRAY['SELECT']::text[])"), "AP8_ACL_RESTRICTED_ROLE_BASELINE_BROKEN"],
     [sql.replace("REVOKE ALL ON ALL TABLES IN SCHEMA financial_app FROM financial_app_gateway;", "-- removed"), "AP8_ACL_REQUIRED_GUARD_MISSING"],
+    [sql.replace("\\i supabase/migrations/20261024145500_rec_rel_430_archived_balance_series_scope.sql", "-- missing archived fix"), "AP8_ACL_REQUIRED_FIVE_MIGRATIONS_MISSING_OR_EXTRA"],
   ];
   for (const [altered, code] of bad) {
     if (altered === sql) fail("AP8_ACL_TEST_FIXTURE_NOT_CHANGED");
@@ -79,4 +91,4 @@ function selfTest(sql) {
 const code = readFileSync(SQL_PATH, "utf8");
 const verified = selfTest(code);
 console.log("REC_AP8_ACL_STATIC|status=ok|tables="+verified.tables+
-  "|grants="+verified.permittedTables+"|negative_cases=4|database_access=false|private_values=false");
+  "|grants="+verified.permittedTables+"|negative_cases=5|database_access=false|private_values=false");
