@@ -30,24 +30,30 @@ test("REC-PERF-REGION-002 · region change keeps the protected production alias 
   expect(vercel.regions).toHaveLength(1);
 });
 
-test("REC-REL-424 · release preview selects only its verified canary, never changes the production target", () => {
-  const production = "https://synthetic.example/functions/v1/financial-app-db-gateway";
-  const canary = "https://synthetic.example/functions/v1/financial-app-db-gateway-candidate-619";
+test("REC-REL-460 · new production and release preview use v3; legacy URL stays available for rollback", () => {
+  const legacy = "https://synthetic.example/functions/v1/financial-app-db-gateway";
+  const v3 = "https://synthetic.example/functions/v1/financial-app-db-gateway-candidate-619";
   const branch = "chat/integrated-b-e-c-visual-20261010";
 
-  expect(resolveGatewayTarget(production, canary, {
-    VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: branch,
-  })).toBe(canary);
-
+  // The release uses v3 both before promotion and in its new production build.
   for (const environment of [
     { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: branch },
+    { VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main" },
+    { VERCEL_ENV: "production" },
+    { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: branch },
+  ]) {
+    expect(resolveGatewayTarget(legacy, v3, environment)).toBe(v3);
+  }
+
+  // Unrelated previews and local development must not access the isolated v3.
+  for (const environment of [
     { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "main" },
     { VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "chat/other-branch" },
     { VERCEL_ENV: "development", VERCEL_GIT_COMMIT_REF: branch },
     { VERCEL_ENV: "preview" },
     {},
   ]) {
-    expect(resolveGatewayTarget(production, canary, environment)).toBe(production);
+    expect(resolveGatewayTarget(legacy, v3, environment)).toBe(legacy);
   }
 
   const gateway = readFileSync(join(process.cwd(),
@@ -55,8 +61,10 @@ test("REC-REL-424 · release preview selects only its verified canary, never cha
   expect(gateway).toContain("const SUPABASE_GATEWAY_URL = resolveGatewayTarget(");
   expect(gateway).toContain("/financial-app-db-gateway-candidate-619");
   expect(gateway).toContain('"https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway"');
+  // The previous 10.0.103 deployment is immutable and still contains its
+  // own hardcoded v86 target; changing the resolver does not rewrite it.
 
-  // A preview, even when pointed at the canary, is forbidden to write production data.
+  // Vercel preview identity is still read-only even with v3 selected.
   const edge = readFileSync(join(process.cwd(),
     "supabase/functions/financial-app-db-gateway/index.ts"), "utf8");
   expect(edge).toContain('identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)');
