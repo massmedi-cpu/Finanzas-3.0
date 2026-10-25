@@ -138,7 +138,7 @@ jobs:
       github.event.pull_request.number == 619 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' &&
-      github.event.pull_request.base.ref == ('chat/twenty-one-routes-responsive-shell-20261010' ||
+      (github.event.pull_request.base.ref == 'chat/twenty-one-routes-responsive-shell-20261010' ||
        github.event.pull_request.base.ref == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 35
