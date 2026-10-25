@@ -15,7 +15,9 @@ expected_source='6dad59c6c2db3575618a7c91c49c3060a93bbba1'
 [[ "${EXPECTED_SOURCE_COMMIT:-}" == "$expected_source" ]] || fail baseline_sha_mismatch
 [[ "${EXPECTED_APP_VERSION:-}" == '10.0.103' ]] || fail baseline_version_mismatch
 [[ "${F13_POSTGRES_ADMIN_URL:-$local_admin}" == "$local_admin" ]] || fail external_admin_url_forbidden
-[[ "$(node -p "require('./package.json').version")" == '10.0.103' ]] || fail candidate_version_mismatch
+# The encrypted immutable source backup remains 10.0.103. The candidate
+# deliberately advances to the first unpublished version 10.0.104.
+[[ "$(node -p "require('./package.json').version")" == '10.0.104' ]] || fail candidate_version_mismatch
 for var in FINANCIAL_APP_DB_URL FINANCIAL_APP_DB_PASSWORD SUPABASE_SERVICE_ROLE_KEY SUPABASE_SECRET_KEY SUPABASE_ACCESS_TOKEN; do
   [[ -z "${!var:-}" ]] || fail external_credentials_forbidden
 done
