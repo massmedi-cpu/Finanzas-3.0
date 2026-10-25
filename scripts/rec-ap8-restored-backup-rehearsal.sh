@@ -62,4 +62,4 @@ NODE
 final_guard="$(psql "$local_db" -X -At -v ON_ERROR_STOP=1 -c \
  "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and not tgisinternal")"
 [[ "$final_guard" == 0 ]] || fail guard_not_rolled_back
-echo "REC_AP8_REAL_BACKUP|status=ok|authentic_restored=true|upgrade_migrations=4|rollback=true|data_digest_identical=true|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
+echo "REC_AP8_REAL_BACKUP|status=ok|authentic_restored=true|upgrade_migrations=5|rollback=true|data_digest_identical=true|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"

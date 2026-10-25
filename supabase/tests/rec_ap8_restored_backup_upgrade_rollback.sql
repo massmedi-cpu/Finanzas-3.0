@@ -1,4 +1,4 @@
--- REC-REL-461 · PostgreSQL 17 authentic encrypted backup-v2 rehearsal, PR 619.
+-- REC-REL-463 · PostgreSQL 17 authentic encrypted backup-v2 rehearsal, PR 619.
 -- The baseline comes from the verified 2026-10-20 production 10.0.103 backup,
 -- restored on loopback in isolated GitHub Actions Postgres; NEVER query or write live Supabase.
 -- Never log originals, extracted banking rows, bearer credentials or backup contents.
@@ -106,6 +106,36 @@ BEGIN
     RAISE EXCEPTION 'REC_AP8_RESTORED_GATEWAY_TABLES_MISMATCH';
   END IF;
 END $acl_check$;
+
+-- REC-REL-463: a pg_dump restored with --no-privileges drops function ACLs.
+-- Mirror the LIVE 10.0.103 function grant (confirmed read-only on 2026-10-25)
+-- INSIDE THE THROWAWAY DATABASE only, before capturing the baseline.
+-- This is NOT permission widening: gateway may EXECUTE; anon/authenticated
+-- and service_role cannot. The function remains SECURITY INVOKER.
+DO $archived_function_acl$
+DECLARE
+  target oid := 'financial_app.financial_balance_series(date,date,uuid)'::regprocedure;
+  actual text;
+BEGIN
+  IF current_database() <> 'financial_app_production_backup_restore_check'
+     OR current_user <> 'postgres'
+     OR (SELECT pg_get_userbyid(p.proowner) FROM pg_proc p WHERE p.oid=target) <> 'postgres'
+     OR (SELECT p.prosecdef FROM pg_proc p WHERE p.oid=target) IS DISTINCT FROM false
+  THEN
+    RAISE EXCEPTION 'REC_AP8_ARCHIVED_FUNCTION_ACL_WRONG_CONTEXT';
+  END IF;
+  EXECUTE 'REVOKE ALL ON FUNCTION financial_app.financial_balance_series(date,date,uuid) FROM PUBLIC, anon, authenticated, service_role';
+  EXECUTE 'GRANT EXECUTE ON FUNCTION financial_app.financial_balance_series(date,date,uuid) TO financial_app_gateway';
+  SELECT p.proacl::text INTO actual FROM pg_proc p WHERE p.oid=target;
+  IF actual <> '{postgres=X/postgres,financial_app_gateway=X/postgres}'
+    OR NOT has_function_privilege('financial_app_gateway',target,'EXECUTE')
+    OR has_function_privilege('anon',target,'EXECUTE')
+    OR has_function_privilege('authenticated',target,'EXECUTE')
+    OR has_function_privilege('service_role',target,'EXECUTE')
+  THEN
+    RAISE EXCEPTION 'REC_AP8_ARCHIVED_FUNCTION_ACL_DOES_NOT_MATCH_LIVE';
+  END IF;
+END $archived_function_acl$;
 
 CREATE TEMP TABLE rec_ap8_functions AS
 SELECT p.oid::regprocedure::text AS signature,
