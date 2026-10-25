@@ -58,3 +58,10 @@ test("REC-REL-455 · mantiene ambas URL literales y el bloqueo de escritura en p
   assert.match(source, /if \(environment !== "production"\)/);
   assert.match(source, /if \(action === "source\.original_rows"\)/);
 });
+
+test("REC-REL-456 · CI aislada redirige ambos gateways, nunca tráfico externo", () => {
+  const shim = readFileSync("scripts/aud-e2e-local-network.cjs", "utf8");
+  assert.match(shim, /financial-app-db-gateway-candidate-619/);
+  assert.match(shim, /const gateway = gatewayUrls\.has\(url\.href\)/);
+  assert.match(shim, /AUD_EXTERNAL_NETWORK_FORBIDDEN/);
+});

@@ -10,6 +10,7 @@ on:
       - 'src/application/source-sync-runtime-contract.ts'
       - 'supabase/functions/financial-app-db-gateway/**'
       - 'tests/unit/release-gateway-target.test.mjs'
+      - 'scripts/aud-e2e-local-network.cjs'
       - 'tests/e2e/source-runtime-contract.spec.ts'
       - '.github/workflows/release-gateway-routing.yml'
   workflow_dispatch:
