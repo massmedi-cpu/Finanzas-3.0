@@ -664,7 +664,7 @@
   line-height: 1.5;
 }
 
-@media (max-width: 1080px) {
+@container app-content (max-width: 1080px) {
   .hero {
     align-items: flex-start;
     flex-direction: column;
@@ -696,7 +696,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@container app-content (max-width: 720px) {
   .page {
     padding: 12px;
   }
@@ -796,7 +796,7 @@
   }
 }
 
-@media (max-width: 440px) {
+@container app-content (max-width: 440px) {
   .kpis {
     grid-template-columns: 1fr;
   }

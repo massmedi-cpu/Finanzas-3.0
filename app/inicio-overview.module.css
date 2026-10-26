@@ -612,7 +612,7 @@
   100% { background-position: -100% 0; }
 }
 
-@media (max-width: 70rem) {
+@container app-content (max-width: 70rem) {
   .decisionGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -643,7 +643,7 @@
   }
 }
 
-@media (max-width: 42.5rem) {
+@container app-content (max-width: 42.5rem) {
   .evolutionModes { width: 100%; display: flex; flex-wrap: wrap; }
 
   .evolutionModes button {
@@ -708,7 +708,7 @@
   }
 }
 
-@media (max-width: 27rem) {
+@container app-content (max-width: 27rem) {
   .header {
     align-items: flex-start;
   }

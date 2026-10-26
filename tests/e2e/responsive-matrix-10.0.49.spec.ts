@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 type ViewportCase = {
   name: string;
@@ -177,4 +178,41 @@ test.describe("Financial App 10.0.49 · contrato responsive Axioma §§72–76",
       }
     }
   });
+});
+
+test("REC-VIS-492 · Inicio adapta la cuadrícula a la anchura efectiva con barra lateral", async ({ page }) => {
+  await isolateShell(page);
+  for (const scenario of [
+    { viewportWidth: 1200, expectedColumns: 2 },
+    { viewportWidth: 1500, expectedColumns: 4 },
+  ]) {
+    await page.setViewportSize({ width: scenario.viewportWidth, height: 900 });
+    await page.goto("/");
+    const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+    await expect(summary).toBeVisible();
+    const layout = await page.evaluate(() => {
+      const content = document.getElementById("main-content");
+      const summary = document.querySelector('section[aria-label="Resumen financiero principal"]');
+      if (!content || !summary) return null;
+      return {
+        contentWidth: content.getBoundingClientRect().width,
+        columns: getComputedStyle(summary).gridTemplateColumns.trim().split(/\s+/).length,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      };
+    });
+    expect(layout).not.toBeNull();
+    expect(layout!.contentWidth).toBeLessThan(scenario.viewportWidth);
+    expect(layout!.columns, "las columnas deben depender del ancho útil").toBe(scenario.expectedColumns);
+    expect(layout!.overflow).toBeLessThanOrEqual(1);
+  }
+});
+
+test("REC-VIS-492 · las siete vistas usan el ancho de contenido y mantienen reglas accesibles", () => {
+  const paths = ["app/inicio-overview.module.css","app/accounts/accounts.module.css","app/analysis/analysis.module.css","app/transactions/transactions.module.css","app/budgets/budgets.module.css","app/forecast/forecast.module.css","app/compare/compare.module.css"];
+  for (const path of paths) {
+    const css = readFileSync(path, "utf8");
+    expect(css, path).toContain("@container app-content (max-width:");
+    expect(css, path).not.toMatch(/@media\s*\(\s*max-width\s*:/);
+    expect(css, path).toContain("grid-template-columns");
+  }
 });

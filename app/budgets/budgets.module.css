@@ -717,7 +717,7 @@
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-@media (max-width: 980px) {
+@container app-content (max-width: 980px) {
   .hero { grid-template-columns: 1fr; align-items: start; }
   .heroControls { justify-content: flex-start; min-width: 0; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -725,7 +725,7 @@
   .mainGrid { grid-template-columns: minmax(0, 1fr); }
 }
 
-@media (max-width: 620px) {
+@container app-content (max-width: 620px) {
   .shell { padding: 0.75rem; }
   .hero { padding: 1.2rem; border-radius: 1.15rem; }
   .heroControls { display: grid; grid-template-columns: 1fr; width: 100%; }
@@ -746,7 +746,7 @@
 }
 
 /* On compact phones, metric labels must not force the entire budget grid wider than the viewport. */
-@media (max-width: 400px) {
+@container app-content (max-width: 400px) {
   .summaryGrid { grid-template-columns: minmax(0, 1fr); }
   .planningHeader { grid-template-columns: minmax(0, 1fr); }
   .metricLabel { min-width: 0; overflow-wrap: anywhere; }
@@ -913,11 +913,11 @@
 .fieldError { color: var(--color-danger); font-size: .875rem; line-height: 1.35; }
 .categoryToolbar :is(input,select):focus-visible,
 .excessLink:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 2px; }
-@media (max-width: 768px) {
+@container app-content (max-width: 768px) {
   .categoryToolbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .categoryCount { grid-column: 1 / -1; min-height: auto; }
 }
-@media (max-width: 480px) {
+@container app-content (max-width: 480px) {
   .categoryToolbar { grid-template-columns: minmax(0, 1fr); }
   .categoryCount { grid-column: auto; }
 }

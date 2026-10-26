@@ -507,17 +507,17 @@
 
 /* Global navigation reduces the content width at the canonical wide breakpoint.
    Keep analysis title and filters stacked through the governed 1440px transition. */
-@media (max-width: 90rem) {
+@container app-content (max-width: 90rem) {
   .header { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
 }
 
-@media (max-width: 80rem) {
+@container app-content (max-width: 80rem) {
   .header { grid-template-columns: 1fr; align-items: stretch; }
   .quickRead { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .quickReadIntro { grid-column: 1 / -1; }
 }
 
-@media (max-width: 64rem) {
+@container app-content (max-width: 64rem) {
   .filters { grid-template-columns: 1fr 1fr auto; }
   .rangeSelector { grid-column: 1 / -1; }
   .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -525,7 +525,7 @@
   .intelligenceGrid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 48rem) {
+@container app-content (max-width: 48rem) {
   .shell { padding-inline: 0.78rem; }
   .filters { grid-template-columns: 1fr 1fr; }
   .rangeSelector { grid-column: 1 / -1; }
@@ -536,7 +536,7 @@
   .kpiDirection { max-width: 52%; }
 }
 
-@media (max-width: 30rem) {
+@container app-content (max-width: 30rem) {
   .shell { padding-inline: 0.65rem; }
   .filters { grid-template-columns: 1fr; }
   .rangeSelector { grid-column: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -563,7 +563,7 @@
   .skeletonGrid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 24rem) {
+@container app-content (max-width: 24rem) {
   .quickRead { grid-template-columns: 1fr; }
   .quickReadIntro { grid-column: auto; }
   .kpis { grid-template-columns: 1fr; }

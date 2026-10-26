@@ -241,7 +241,7 @@
 
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-top: 1px solid var(--color-border); color: var(--color-text-muted); font-size: .875rem; }
 
-@media (max-width: 1180px) {
+@container app-content (max-width: 1180px) {
   .hero { align-items: stretch; flex-direction: column; }
   .summary { width: 100%; }
   .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -265,7 +265,7 @@
   .reviewCard button { grid-column: 1 / -1; }
 }
 
-@media (max-width: 900px) {
+@container app-content (max-width: 900px) {
   .shell { padding: .85rem; }
   .hero, .panel { border-radius: 1.1rem; }
   .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -297,7 +297,7 @@
   .reviewCard > span, .reviewCard button { grid-column: 1 / -1; }
 }
 
-@media (max-width: 600px) {
+@container app-content (max-width: 600px) {
   .hero { padding: 1.05rem; }
   .summary { grid-template-columns: 1fr; }
   .summary > div { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; border-left: 0; border-top: 1px solid var(--color-border); }
@@ -373,13 +373,13 @@
 }
 .moreFiltersButton:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 3px; }
 .filterActions { grid-column: 1 / -1; }
-@media (max-width: 1180px) {
+@container app-content (max-width: 1180px) {
   .coreFilters, .advancedFilters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-@media (max-width: 900px) {
+@container app-content (max-width: 900px) {
   .coreFilters, .advancedFilters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-width: 600px) {
+@container app-content (max-width: 600px) {
   .coreFilters, .advancedFilters { grid-template-columns: 1fr; }
   .coreFilters .searchField { grid-column: auto; }
 }
