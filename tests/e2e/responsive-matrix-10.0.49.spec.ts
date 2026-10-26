@@ -255,7 +255,7 @@ test("REC-VIS-493 · el panel Fuente bancaria cambia a una columna según el con
   expect(css).toContain("@container app-content (max-width: 70rem)");
   expect(css).toContain("@container app-content (max-width: 35rem)");
   const tabs = readFileSync("app/configuration/configuration-area.module.css", "utf8");
-  expect(tabs).toContain("flex-wrap: wrap");
+  expect(tabs).toContain("grid-template-columns: repeat(7, minmax(0, 1fr))");
   expect(tabs).toContain("@container app-content (max-width: 48rem)");
 });
 
