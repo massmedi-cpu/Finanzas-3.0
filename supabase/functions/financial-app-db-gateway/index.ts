@@ -44,6 +44,8 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "account.get",
   "category.list",
   "category.get",
+  // REC-REL-491: impact is SELECT-only, used before category lifecycle changes.
+  "category.impact",
   "merchant.list",
   "merchant_alias.list",
   "merchant.resolve",
@@ -61,6 +63,8 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "financial.period",
   "financial.monthly",
   "financial.balances",
+  // REC-REL-491: read-only historical balances drive account trend and archive QA.
+  "financial.balance_series",
   "financial.reconciliation",
   "financial.snapshot",
   "budget.snapshot",

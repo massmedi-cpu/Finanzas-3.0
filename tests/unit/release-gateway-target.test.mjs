@@ -93,3 +93,44 @@ test("REC-REL-489 · protected preview must deny temporary transaction-split DML
   assert.match(edge, /identity\.environment === "preview" && !isPreviewProductionAccessAllowed\(action\)/);
   assert.match(edge, /preview_production_write_forbidden/);
 });
+
+test("REC-REL-491 · preview keeps read-only financial balance series and category impact without granting DML", () => {
+  const edge = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
+  const financial = readFileSync("supabase/functions/financial-app-db-gateway/financial-logic.ts", "utf8");
+  const category = readFileSync("supabase/functions/financial-app-db-gateway/categorization-rules.ts", "utf8");
+  const financialApi = readFileSync("app/api/financial/route.ts", "utf8");
+  const configurationApi = readFileSync("app/api/configuration/route.ts", "utf8");
+  const allowlistMatch = edge.match(/const PREVIEW_READ_ONLY_ACTIONS = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(allowlistMatch, "preview allowlist missing");
+  const allowed = [...allowlistMatch[1].matchAll(/^\s*"([a-z][a-z._]+)",?\s*$/gm)].map(m => m[1]);
+  const allowedSet = new Set(allowed);
+  assert.equal(allowed.length, allowedSet.size, "duplicate allowlist values");
+  for (const operation of ["financial.balance_series", "category.impact"]) {
+    assert.equal(allowedSet.has(operation), true, "read-only product route inaccessible: " + operation);
+  }
+  for (const operation of ["test.transaction_split_engine", "transaction.split_save",
+    "category.merge", "category.save", "account.save", "source.sync",
+    "test.cleanup", "document.upload_finalize", "source.original_rows"]) {
+    assert.equal(allowedSet.has(operation), false, "write/private route accidentally enabled: " + operation);
+  }
+  const financialRead = financial.slice(
+    financial.indexOf('if (action === "financial.balance_series") {'),
+    financial.indexOf('if (action === "financial.snapshot") {'),
+  );
+  assert.ok(financialRead.length > 60, "historical financial reader missing");
+  assert.match(financialRead, /select financial_app\.financial_balance_series\(/);
+  assert.doesNotMatch(financialRead, /\b(?:insert\s+into|update\s+financial_app|delete\s+from)\b/i);
+  const impactRead = category.slice(
+    category.indexOf('if (action === "category.impact") {'),
+    category.indexOf('if (action === "rule.list")'),
+  );
+  assert.ok(impactRead.length > 100, "category impact reader missing");
+  assert.match(impactRead, /select\s+[\s\S]*count\(\*\)::int/);
+  assert.doesNotMatch(impactRead, /\b(?:insert\s+into|update\s+financial_app|delete\s+from)\b/i);
+  assert.match(financialApi, /mode === "balance_series"/);
+  assert.match(financialApi, /"financial\.balance_series"/);
+  assert.match(configurationApi, /"category\.impact"/);
+  const deny = edge.indexOf('if (identity.environment === "preview" && !isPreviewProductionAccessAllowed(action))');
+  const connect = edge.indexOf('const databaseUrl = Deno.env.get("SUPABASE_DB_URL")');
+  assert.ok(deny >= 0 && connect > deny, "reject mutating preview request before connecting DB");
+});

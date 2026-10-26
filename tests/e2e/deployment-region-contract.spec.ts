@@ -70,3 +70,17 @@ test("REC-REL-460 · new production and release preview use v3; legacy URL stays
   expect(edge).toContain('identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)');
   expect(edge).toContain('return json({ error: "preview_production_write_forbidden" }, 403)');
 });
+
+test("REC-REL-491 · release preview can read historical balances and category impact but not mutate bank sources", () => {
+  const root = process.cwd();
+  const edge = readFileSync(join(root,
+    "supabase/functions/financial-app-db-gateway/index.ts"), "utf8");
+  const previewActions = edge.match(/const PREVIEW_READ_ONLY_ACTIONS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  for (const op of ["financial.balance_series", "category.impact"]) {
+    expect(previewActions).toContain('"' + op + '"');
+  }
+  expect(previewActions).not.toContain('"test.transaction_split_engine"');
+  expect(previewActions).not.toContain('"source.sync"');
+  expect(previewActions).not.toContain('"source.original_rows"');
+  expect(edge).toContain('preview_production_write_forbidden');
+});
