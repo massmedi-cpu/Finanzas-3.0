@@ -1,7 +1,7 @@
 name: REC AP8 Fresh Encrypted Backup Dispatch 619
 on:
   pull_request:
-    branches: [chat/twenty-one-routes-responsive-shell-20261010]
+    branches: [main, chat/twenty-one-routes-responsive-shell-20261010]
     types: [opened, synchronize, reopened]
     paths: ['.github/workflows/rec-ap8-fresh-backup-dispatch.yml']
 permissions:
@@ -17,7 +17,8 @@ jobs:
       github.event.pull_request.number == 619 &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' &&
-      github.event.pull_request.base.ref == 'chat/twenty-one-routes-responsive-shell-20261010'
+      (github.event.pull_request.base.ref == 'main' ||
+       github.event.pull_request.base.ref == 'chat/twenty-one-routes-responsive-shell-20261010')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -36,13 +37,18 @@ jobs:
             if (owner !== expected.owner || repo !== expected.repo) {
               throw new Error('REC_AP8_DISPATCH_WRONG_REPOSITORY');
             }
+            // REC-AP8-487: after #619 was retargeted to main, the old
+            // base-only workflow filter silently prevented future fresh backups.
+            // Require both a permitted base and equality with the LIVE PR;
+            // a stale retarget event must never dispatch.
             const event = context.payload.pull_request;
             const livePr = (await github.rest.pulls.get({owner,repo,pull_number:619})).data;
             if (!event || event.number !== 619 || livePr.state !== 'open'
               || livePr.head.sha !== event.head.sha
               || livePr.head.repo.full_name !== owner + '/' + repo
               || livePr.head.ref !== 'chat/integrated-b-e-c-visual-20261010'
-              || livePr.base.ref !== 'chat/twenty-one-routes-responsive-shell-20261010') {
+              || !['main', 'chat/twenty-one-routes-responsive-shell-20261010'].includes(livePr.base.ref)
+              || livePr.base.ref !== event.base.ref) {
               throw new Error('REC_AP8_DISPATCH_STALE_OR_UNTRUSTED_PR');
             }
             const response = await fetch('https://financialapp-home.vercel.app/api/build', {
