@@ -36,7 +36,9 @@ private_log="$(dirname "$backup_dir")/ap8-private.log"
 if ! bash scripts/restore-verify-production-backup-v2.sh "$backup_dir" >"$private_log" 2>&1; then
   fail backup_restore
 fi
-echo 'REC_AP8_REAL_BACKUP|stage=restore|status=ok|source=2026-10-20|version=10.0.103'
+# The exact artifact/run date is checked by the caller: do not falsely label
+# every fresh restore as a backup from an old calendar date.
+echo 'REC_AP8_REAL_BACKUP|stage=restore|status=ok|baseline_version=10.0.103|verified_artifact=true'
 if ! psql "$local_db" -X -v ON_ERROR_STOP=1 -q \
   -f supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql >"$private_log" 2>&1; then
   # SQL errors may contain user data: print only stable sanitized codes.

@@ -166,6 +166,8 @@ jobs:
           node-version: 24
       - name: Validate 32-table gateway ACL matrix and reject malformed SQL before backup download
         run: node scripts/verify-ap8-restored-acl-matrix.mjs
+      # REC-AP8-488: pin newly encrypted 26-Oct artifact from canonical main;
+      # validate run success, live release baseline, integrity and retention.
       - name: Verify specific immutable backup metadata (no plaintext access)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -185,9 +187,11 @@ jobs:
             return r.json();
           };
           (async () => {
-            const run = await get('/actions/runs/40186296002');
-            const a = await get('/actions/artifacts/12596173399');
+            const run = await get('/actions/runs/40274402678');
+            const a = await get('/actions/artifacts/12629204026');
             if (run.event !== 'workflow_dispatch' || run.conclusion !== 'success'
+              || !Number.isFinite(Date.parse(run.created_at))
+              || Date.parse(run.created_at) < Date.parse('2026-10-26T00:00:00Z')
               || run.head_branch !== 'main'
               || run.head_sha !== '29a517215fef82cb12bc80e521109c2aa326d46c'
               || run.path !== '.github/workflows/production-backup-v2.yml'
@@ -196,7 +200,7 @@ jobs:
               || !Number.isFinite(Date.parse(a.expires_at))
               || Date.parse(a.expires_at) - Date.now() < 45 * 60 * 1000
               || a.name !== 'financial-app-production-v2-6dad59c6c2db3575618a7c91c49c3060a93bbba1'
-              || a.digest !== 'sha256:ee47e40e3cdebde45ec51f6f5eb2239a136f54bbaf387a09ec9dbe8cdf30d2e0') {
+              || a.digest !== 'sha256:82127e8e63475ea726e8739f31d7944cfbfe8fb472b5a358a05e637a185b4211') {
               throw new Error('encrypted_backup_identity_or_retention_invalid');
             }
             process.stdout.write('REC_AP8_REAL_BACKUP|stage=artifact|status=ok|encrypted=true\n');
@@ -205,8 +209,8 @@ jobs:
       - name: Download only the pinned encrypted 10.0.103 backup
         uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          artifact-ids: '12596173399'
-          run-id: '40186296002'
+          artifact-ids: '12629204026'
+          run-id: '40274402678'
           github-token: ${{ github.token }}
           path: .ap8-private-restored-backup
       - name: Decrypt only on ephemeral CI runner, never upload plaintext
