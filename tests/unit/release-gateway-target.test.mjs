@@ -65,3 +65,31 @@ test("REC-REL-456 · CI aislada redirige ambos gateways, nunca tráfico externo"
   assert.match(shim, /const gateway = gatewayUrls\.has\(url\.href\)/);
   assert.match(shim, /AUD_EXTERNAL_NETWORK_FORBIDDEN/);
 });
+
+test("REC-REL-489 · protected preview must deny temporary transaction-split DML, even when test normally rolls back", () => {
+  const edge = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
+  const handler = readFileSync("supabase/functions/financial-app-db-gateway/transaction-management.ts", "utf8");
+  const match = edge.match(/const PREVIEW_READ_ONLY_ACTIONS = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(match, "missing exact preview allowlist");
+  const actions = [...match[1].matchAll(/^\s*"([a-z][a-z._]+)",?\s*$/gm)].map(row => row[1]);
+  const allowed = new Set(actions);
+  assert.equal(allowed.size, actions.length, "duplicate preview actions");
+  for (const action of ["source.capabilities", "health", "account.list",
+    "transaction.query", "transaction.split_detail", "test.invariants",
+    "source.postflight_rows"]) {
+    assert.ok(allowed.has(action), "read path unexpectedly removed: " + action);
+  }
+  for (const action of ["test.transaction_split_engine", "transaction.split_save",
+    "transaction.transfer_pair", "source.sync", "source.original_rows",
+    "document.upload_finalize", "test.cleanup"]) {
+    assert.equal(allowed.has(action), false, "mutable or private probe must be denied: " + action);
+  }
+  // The excluded probe actually changes the restored business tables inside
+  // sql.begin before deliberately throwing to roll back. Rollback after DML
+  // is not equivalent to never executing DML on the shared production DB.
+  assert.match(handler, /if \(action === "test\.transaction_split_engine"\)/);
+  assert.match(handler, /financial_app\.save_transaction_split\(/);
+  assert.match(handler, /__ROLLBACK_TRANSACTION_SPLIT_TEST__/);
+  assert.match(edge, /identity\.environment === "preview" && !isPreviewProductionAccessAllowed\(action\)/);
+  assert.match(edge, /preview_production_write_forbidden/);
+});

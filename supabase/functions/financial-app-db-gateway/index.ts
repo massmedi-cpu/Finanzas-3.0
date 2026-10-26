@@ -52,7 +52,9 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "transaction.date_bounds",
   "transaction.query",
   "transaction.split_detail",
-  "test.transaction_split_engine",
+  // REC-REL-489: this probe invokes save_transaction_split (temporary DML),
+  // then rolls back. A shared production database must never execute that
+  // mutation from a preview, even for an eventually reverted transaction.
   "transaction.facets",
   "transaction.duplicate_group",
   "transaction.transfer_candidates",
