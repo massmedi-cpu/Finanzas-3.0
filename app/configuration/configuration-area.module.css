@@ -5,18 +5,18 @@
 }
 
 .nav {
-  display: flex;
+  display: grid;
   width: 100%;
   max-width: 100%;
-  flex-wrap: wrap;
-  justify-content: center;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  align-items: stretch;
   gap: 0.35rem;
   padding: 0.35rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
-  /* The seven destinations must never be hidden at desktop widths. */
+  /* Keep all seven destinations together above the compact-content breakpoint. */
   overflow: visible;
 }
 
@@ -51,9 +51,7 @@
    No JS timing or horizontal scroll is needed to discover the selected page. */
 @container app-content (max-width: 48rem) {
   .nav {
-    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    justify-content: stretch;
     align-items: stretch;
     overflow: visible;
   }

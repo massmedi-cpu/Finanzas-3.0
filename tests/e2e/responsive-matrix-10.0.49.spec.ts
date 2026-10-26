@@ -298,3 +298,30 @@ test("REC-VIS-494 · Configuración no depende de un desplazamiento tardío de R
   expect(nav).not.toContain("scrollLeft");
   expect(nav).not.toContain("scrollIntoView");
 });
+
+test("REC-VIS-495 · Configuración coloca siete pestañas en una sola fila de escritorio", async ({ page }) => {
+  await isolateShell(page);
+  for (const viewportWidth of [1100, 1366, 1920]) {
+    await page.setViewportSize({ width: viewportWidth, height: 900 });
+    for (const route of ["/configuration/source", "/configuration/appearance"]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
+      await expect(nav).toBeVisible();
+      const geometry = await nav.evaluate(node => {
+        const frame = node.getBoundingClientRect();
+        const links = [...node.querySelectorAll("a")].map(element => element.getBoundingClientRect());
+        const tracks = getComputedStyle(node).gridTemplateColumns.trim().split(/\s+/);
+        return {
+          tracks: tracks.length,
+          rows: new Set(links.map(box => Math.round(box.top))).size,
+          visible: links.every(box => box.width >= 1 && box.height >= 44 &&
+            box.left >= frame.left - 1 && box.right <= frame.right + 1),
+        };
+      });
+      expect(geometry.tracks, route + " a " + viewportWidth + "px: 7 columnas").toBe(7);
+      expect(geometry.rows, route + " a " + viewportWidth + "px: sin pestaña huérfana").toBe(1);
+      expect(geometry.visible, route + " a " + viewportWidth + "px: todas visibles").toBe(true);
+      await expectNoViewportOverflow(page, viewportWidth);
+    }
+  }
+});
