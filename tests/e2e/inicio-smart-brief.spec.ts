@@ -701,9 +701,11 @@ test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas
   await page.goto("/");
   await page.getByRole("button", { name: "Saldo" }).click();
 
-  await expect(page.getByText(/Cobertura mixta:/)).toContainText("1 de 2 puntos");
-  await expect(page.getByText(/Cobertura mixta:/)).toContainText("saldo inicial + movimientos");
-  await expect(page.getByText(/Cobertura mixta:/)).toContainText("No se reconstruye desde Cash Flow");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("2 de 3 puntos");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("1 de 2 puntos disponibles");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("saldo inicial + movimientos");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("No se reconstruye desde Cash Flow");
+  await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" }).getByText("Sin dato", { exact: true })).toHaveCount(1);
 });
 
 test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({ page }) => {
@@ -761,6 +763,39 @@ test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({
   await expect(page.getByText(/Cobertura parcial:/)).toContainText("Sin dato");
   await expect(page.getByText(/Cobertura parcial:/)).toContainText("no como 0 €");
 });
+
+for (const missingMonth of ["2026-07-01", "2026-08-01", "2026-09-01"]) {
+  test(`REC-REL-498 · Saldo muestra como Sin dato el mes omitido ${missingMonth}`, async ({ page }) => {
+    await mockInicio(page);
+    const methods: string[] = [];
+    await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+      methods.push(route.request().method());
+      await json(route, {
+        dateFrom: "2026-07-01", dateTo: "2026-09-16", accountId: null,
+        rows: [
+          { monthStart: "2026-07-01", asOfDate: "2026-07-31", balanceCents: 100000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+          { monthStart: "2026-08-01", asOfDate: "2026-08-31", balanceCents: -25000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+          { monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 105000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+        ].filter((row) => row.monthStart !== missingMonth),
+        principles: { bankSource: "read_only", balanceSource: "financial_account_balances", cashFlowReconstruction: false, getHasSideEffects: false },
+      });
+    });
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto("/");
+    await page.getByRole("button", { name: "Saldo", exact: true }).click();
+    const chart = page.getByRole("group", { name: "Saldo bancario agregado por mes" });
+    await expect(chart).toBeVisible();
+    await expect(chart.locator('[data-series-bar="true"]')).toHaveCount(2);
+    await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(1);
+    await expect(chart.getByText("Sin dato", { exact: true })).toHaveCount(1);
+    await expect(chart.locator('[data-zero="true"]')).toHaveCount(0);
+    await expect(page.getByText(/Cobertura parcial:/)).toContainText("2 de 3 puntos");
+    await expect(page.getByText(/Cobertura: 2 de 2 puntos/)).toHaveCount(0);
+    expect(methods).toEqual(["GET"]);
+    expect(errors).toEqual([]);
+  });
+}
 
 test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
   await mockInicio(page);
@@ -909,7 +944,7 @@ test("AUD-E2E-INI-001 · saldo demorado termina a los 30 segundos y recupera sol
   }
 });
 
-for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "inconsistent_coverage", "repeated_month", "null_row"] as const) {
+for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "inconsistent_coverage", "repeated_month", "null_row", "early_snapshot", "early_month_end"] as const) {
   test(`AUD-E2E-INI-001 · saldo rechaza ${defect} y recupera un cero bancario válido`, async ({ page }) => {
     await mockInicio(page);
     const methods: string[] = [];
@@ -928,6 +963,8 @@ for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "incon
         if (defect === "inconsistent_coverage") row.explicitBalanceAccounts = 2;
         if (defect === "repeated_month") response.rows.push({ ...row });
         if (defect === "null_row") response.rows = [null];
+        if (defect === "early_snapshot") row.asOfDate = "2026-09-15";
+        if (defect === "early_month_end") { row.monthStart = "2026-07-01"; row.asOfDate = "2026-07-30"; }
       }
       await json(route, response);
     });

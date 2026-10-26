@@ -3,70 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { periodHasObservedData } from "../src/application/data-coverage";
+import { homeBalancePlotRows, isHomeBalanceSeries as isBalanceSeries, type HomeBalanceRow as BalanceRow, type HomeBalanceSeries as BalanceSeries, type HomeBalancePlotRow as BalancePlotRow } from "../src/application/dashboard/home-balance-series";
 import { resolveHomeBankCoverage, type HomeBankFreshness } from "../src/application/dashboard/home-bank-coverage";
 import { FinancialBarChart, monthlyTransactionsHref, type FinancialBarPoint } from "../src/design/financial-bar-chart";
 import styles from "./inicio-overview.module.css";
 
 type EvolutionMode = "balance" | "income_expense" | "net";
-
-type BalanceRow = {
-  monthStart: string;
-  asOfDate: string;
-  balanceCents: number;
-  accounts: number;
-  explicitBalanceAccounts: number;
-  reconstructedBalanceAccounts: number;
-};
-
-type BalanceSeries = {
-  dateFrom: string;
-  dateTo: string;
-  accountId: string | null;
-  rows: BalanceRow[];
-  principles: {
-    bankSource: "read_only";
-    balanceSource: "financial_account_balances";
-    cashFlowReconstruction: false;
-    getHasSideEffects: false;
-  };
-};
-
-function isCalendarDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T12:00:00Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function isBalanceSeries(value: unknown, dateFrom: string, dateTo: string): value is BalanceSeries {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Partial<BalanceSeries>;
-  const principles = candidate.principles;
-  const months = new Set<string>();
-  return candidate.dateFrom === dateFrom && candidate.dateTo === dateTo
-    && candidate.accountId === null
-    && Array.isArray(candidate.rows)
-    && principles?.bankSource === "read_only"
-    && principles?.balanceSource === "financial_account_balances"
-    && principles?.cashFlowReconstruction === false
-    && principles?.getHasSideEffects === false
-    && candidate.rows.every((row, index, rows) => {
-      if (!row || typeof row !== "object"
-        || !isCalendarDate(row.monthStart) || !row.monthStart.endsWith("-01")
-        || !isCalendarDate(row.asOfDate)
-        || row.monthStart < `${dateFrom.slice(0, 7)}-01` || row.monthStart > dateTo
-        || row.asOfDate < row.monthStart || row.asOfDate > dateTo
-        || row.asOfDate.slice(0, 7) !== row.monthStart.slice(0, 7)
-        || months.has(row.monthStart)
-        || (index > 0 && rows[index - 1].monthStart >= row.monthStart)
-        || !Number.isSafeInteger(row.balanceCents)
-        || !Number.isSafeInteger(row.accounts) || row.accounts < 0
-        || !Number.isSafeInteger(row.explicitBalanceAccounts) || row.explicitBalanceAccounts < 0
-        || !Number.isSafeInteger(row.reconstructedBalanceAccounts) || row.reconstructedBalanceAccounts < 0
-        || row.explicitBalanceAccounts + row.reconstructedBalanceAccounts !== row.accounts) return false;
-      months.add(row.monthStart);
-      return true;
-    });
-}
 
 function SingleSeriesBars({
   rows,
@@ -79,14 +21,14 @@ function SingleSeriesBars({
   availableFor,
   drilldown = false,
 }: {
-  rows: Array<FinancialBarPoint | BalanceRow>;
-  valueFor: (row: FinancialBarPoint | BalanceRow) => number;
+  rows: Array<FinancialBarPoint | BalancePlotRow>;
+  valueFor: (row: FinancialBarPoint | BalancePlotRow) => number;
   label: string;
   valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   signed?: boolean;
-  availableFor?: (row: FinancialBarPoint | BalanceRow) => boolean;
+  availableFor?: (row: FinancialBarPoint | BalancePlotRow) => boolean;
   drilldown?: boolean;
 }) {
   const availableRows = availableFor ? rows.filter(availableFor) : rows;
@@ -266,7 +208,7 @@ export default function HomeEvolution({
     };
   }, [balanceCache?.key, balanceKey, balanceRetry, dateFrom, dateTo, mode]);
 
-  const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
+  const balanceRows = useMemo(() => balances ? homeBalancePlotRows(balances) : [], [balances]);
   const reconstructedBalancePoints = useMemo(
     () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
     [balanceRows],
@@ -278,7 +220,7 @@ export default function HomeEvolution({
   const balanceMissingPoints = balanceRows.length - balanceAvailablePoints;
   const balanceHasAccounts = balanceAvailablePoints > 0;
   const balanceHasNegative = useMemo(
-    () => balanceRows.some((row) => row.accounts > 0 && row.balanceCents < 0),
+    () => balanceRows.some((row) => row.balanceCents !== null && row.accounts > 0 && row.balanceCents < 0),
     [balanceRows],
   );
   const balanceCoverageMessage = useMemo(() => {
@@ -363,7 +305,7 @@ export default function HomeEvolution({
         <>
           <SingleSeriesBars
             rows={balanceRows}
-            valueFor={(row) => (row as BalanceRow).balanceCents}
+            valueFor={(row) => (row as BalancePlotRow).balanceCents ?? 0}
             availableFor={(row) => (row as BalanceRow).accounts > 0}
             label="Saldo bancario agregado por mes"
             valuesVisible={valuesVisible}
