@@ -258,3 +258,43 @@ test("REC-VIS-493 · el panel Fuente bancaria cambia a una columna según el con
   expect(tabs).toContain("flex-wrap: wrap");
   expect(tabs).toContain("@container app-content (max-width: 48rem)");
 });
+
+test("REC-VIS-494 · las siete pestañas de Configuración son visibles antes de la hidratación", async ({ page }) => {
+  await isolateShell(page);
+  for (const width of [360, 430, 820, 1100, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const route of ["/configuration/source", "/configuration/appearance", "/configuration/data"]) {
+      await page.goto(route, { waitUntil: "domcontentloaded" });
+      const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
+      await expect(nav).toBeVisible();
+      const geometry = await nav.evaluate((node) => {
+        const container = node.getBoundingClientRect();
+        const links = [...node.querySelectorAll("a")];
+        const hidden = links.filter(link => {
+          const box = link.getBoundingClientRect();
+          return box.width < 60 || box.height < 44 ||
+            box.left < container.left - 1 || box.right > container.right + 1 ||
+            box.top < container.top - 1 || box.bottom > container.bottom + 1;
+        });
+        const selected = node.querySelector('[aria-current="page"]');
+        const rows = [...new Set(links.map(link => Math.round(link.getBoundingClientRect().top)))].length;
+        return { count: links.length, hiddenCount: hidden.length, hasSelected: !!selected, rows };
+      });
+      expect(geometry.count, "Los siete destinos deben estar siempre presentes").toBe(7);
+      expect(geometry.hasSelected, "Página activa: " + route).toBe(true);
+      expect(geometry.hiddenCount, route + " a " + width + "px no puede ocultar tabs").toBe(0);
+      if (width === 360 || width === 430) {
+        expect(geometry.rows, "En móvil deben existir varias filas para no ocultar pestañas").toBeGreaterThanOrEqual(3);
+      }
+      await expectNoViewportOverflow(page, width);
+    }
+  }
+});
+
+test("REC-VIS-494 · Configuración no depende de un desplazamiento tardío de React", () => {
+  const css = readFileSync("app/configuration/configuration-area.module.css", "utf8");
+  expect(css).toContain("grid-template-columns: repeat(2, minmax(0, 1fr))");
+  const nav = readFileSync("app/configuration/configuration-area-nav.tsx", "utf8");
+  expect(nav).not.toContain("scrollLeft");
+  expect(nav).not.toContain("scrollIntoView");
+});
