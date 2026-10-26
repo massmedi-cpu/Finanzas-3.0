@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import styles from "./configuration-area.module.css";
 
@@ -16,10 +17,23 @@ const ITEMS = [
 
 export default function ConfigurationAreaNav() {
   const pathname = usePathname();
+  const navigationRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const navigation = navigationRef.current;
+    const selected = navigation?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!navigation || !selected || navigation.scrollWidth <= navigation.clientWidth + 1) return;
+
+    // Only horizontal motion. scrollIntoView would also jump the document
+    // vertically when the active tab changes in a long configuration page.
+    const visible = navigation.getBoundingClientRect();
+    const item = selected.getBoundingClientRect();
+    navigation.scrollLeft += item.left - visible.left - (visible.width - item.width) / 2;
+  }, [pathname]);
 
   return (
     <div className={styles.wrap}>
-      <nav className={styles.nav} aria-label="Áreas de configuración">
+      <nav ref={navigationRef} className={styles.nav} aria-label="Áreas de configuración">
         {ITEMS.map((item) => {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (

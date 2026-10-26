@@ -5,15 +5,19 @@
 }
 
 .nav {
-  display: inline-flex;
+  display: flex;
+  width: 100%;
   max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.35rem;
   padding: 0.35rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--surface-card);
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.18);
-  overflow-x: auto;
+  /* The seven destinations must never be hidden at desktop widths. */
+  overflow: visible;
 }
 
 .link {
@@ -27,7 +31,9 @@
   font-size: var(--font-button);
   font-weight: 750;
   text-decoration: none;
-  white-space: nowrap;
+  min-width: 0;
+  text-align: center;
+  white-space: normal;
 }
 
 .link:hover {
@@ -41,12 +47,21 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary-bright) 26%, transparent);
 }
 
-@media (max-width: 520px) {
+/* On narrow content use a single-row scroller; navigation automatically
+   centers the selected destination after client hydration. */
+@container app-content (max-width: 48rem) {
   .nav {
-    width: 100%;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    scroll-padding-inline: 0.6rem;
   }
 
   .link {
-    flex: 1 0 auto;
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 }

@@ -216,3 +216,45 @@ test("REC-VIS-492 · las siete vistas usan el ancho de contenido y mantienen reg
     expect(css, path).toContain("grid-template-columns");
   }
 });
+
+test("REC-VIS-493 · Configuración muestra todas las pestañas sin recorte en escritorio y la activa en móvil", async ({ page }) => {
+  await isolateShell(page);
+  for (const width of [360, 820, 1100, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/configuration/source");
+    const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
+    const selected = nav.getByRole("link", { name: "Fuente bancaria" });
+    const final = nav.getByRole("link", { name: "Datos y privacidad" });
+    await expect(nav).toBeVisible();
+    await expect(selected).toHaveAttribute("aria-current", "page");
+    await expect.poll(async () => nav.evaluate((element) => {
+      const active = element.querySelector('[aria-current="page"]');
+      if (!active) return false;
+      const parent = element.getBoundingClientRect();
+      const box = active.getBoundingClientRect();
+      return box.left >= parent.left - 1 && box.right <= parent.right + 1;
+    }), { message: "La pestaña Fuente bancaria no debe estar oculta a " + width + "px" })
+      .toBe(true);
+    if (width > 768) {
+      const visible = await nav.evaluate((element) => {
+        const last = [...element.querySelectorAll("a")].at(-1);
+        if (!last) return false;
+        const parent = element.getBoundingClientRect();
+        const box = last.getBoundingClientRect();
+        return box.left >= parent.left - 1 && box.right <= parent.right + 1;
+      });
+      expect(visible, "Datos y privacidad cortado a " + width + "px").toBe(true);
+      await expect(final).toBeVisible();
+    }
+    await expectNoViewportOverflow(page, width);
+  }
+});
+
+test("REC-VIS-493 · el panel Fuente bancaria cambia a una columna según el contenido real", () => {
+  const css = readFileSync("app/configuration/source/source-overview.module.css", "utf8");
+  expect(css).toContain("@container app-content (max-width: 70rem)");
+  expect(css).toContain("@container app-content (max-width: 35rem)");
+  const tabs = readFileSync("app/configuration/configuration-area.module.css", "utf8");
+  expect(tabs).toContain("flex-wrap: wrap");
+  expect(tabs).toContain("@container app-content (max-width: 48rem)");
+});
