@@ -181,3 +181,47 @@ await test('AP8 readiness rejects ineffective document guards in synthetic Postg
     await db.close();
   }
 });
+
+await test('AP8 readiness fails closed for document child relations', async t => {
+  const documentEnd = '  source_drive_file_id text, notes text, updated_at timestamptz\n);';
+  assert.ok(setup.includes(documentEnd), 'synthetic documents table shape must match the fixture');
+
+  for (const kind of ['partitioned', 'inherited']) {
+    await t.test(`${kind} documents cannot report ready when a child can rewrite an original`, async () => {
+      const replacement = kind === 'partitioned'
+        ? '  source_drive_file_id text, notes text, updated_at timestamptz\n) PARTITION BY RANGE (id);\n' +
+          'CREATE TABLE financial_app.documents_child PARTITION OF financial_app.documents FOR VALUES FROM (0) TO (100);\n' +
+          'ALTER TABLE financial_app.documents_child ENABLE ROW LEVEL SECURITY;'
+        : `${documentEnd}\nCREATE TABLE financial_app.documents_child () INHERITS (financial_app.documents);\n` +
+          'ALTER TABLE financial_app.documents_child ENABLE ROW LEVEL SECURITY;';
+      const db = new PGlite();
+      try {
+        await db.exec(setup.replace(documentEnd, replacement));
+        await db.exec(migration);
+        if (kind === 'partitioned') {
+          // The cloned guard runs first. A child-only trigger can change NEW later.
+          await db.exec(`CREATE FUNCTION financial_app.child_rewrite() RETURNS trigger LANGUAGE plpgsql
+            AS $$ BEGIN NEW.storage_key := 'changed-after-guard'; RETURN NEW; END; $$;
+            CREATE TRIGGER z_child_rewrite BEFORE UPDATE ON financial_app.documents_child
+            FOR EACH ROW EXECUTE FUNCTION financial_app.child_rewrite();`);
+          await db.exec("UPDATE financial_app.documents SET notes='edited' WHERE id=1");
+          const row = (await db.query('SELECT storage_key FROM financial_app.documents WHERE id=1')).rows[0];
+          assert.equal(row.storage_key, 'changed-after-guard');
+        } else {
+          // PostgreSQL table inheritance does not clone the parent's row guard.
+          await db.exec(`INSERT INTO financial_app.documents_child VALUES
+            (2, 'supabase', 'original', 'synthetic.pdf', 'application/pdf', 42, 'synthetic-drive-id', '', now());`);
+          await db.exec("UPDATE financial_app.documents SET storage_key='changed-without-guard' WHERE id=2");
+          const row = (await db.query('SELECT storage_key FROM financial_app.documents WHERE id=2')).rows[0];
+          assert.equal(row.storage_key, 'changed-without-guard');
+        }
+        const result = (await db.exec(readinessSql)).find(item => item.rows?.[0]?.ap8_db_readiness)?.rows[0];
+        assert.ok(result, 'read-only query must return a readiness row');
+        assert.equal(result.ap8_db_readiness, 'blocked');
+        assert.ok(result.blockers.includes('document_relation_shape_unverified'));
+      } finally {
+        await db.close();
+      }
+    });
+  }
+});

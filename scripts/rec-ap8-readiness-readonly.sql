@@ -16,6 +16,14 @@ WITH document_columns AS (
    (SELECT existing FROM document_columns) AS document_columns,
    (SELECT tables FROM relations) AS table_count,
    (SELECT protected_tables FROM relations) AS tables_with_rls,
+   -- Parent checks do not cover extra triggers on partitions, and ordinary
+   -- table inheritance does not clone the parent's row guard. Fail closed for
+   -- either shape until all related tables and write paths are reviewed.
+   (SELECT count(*)::int FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+      WHERE n.nspname='financial_app' AND c.relname='documents'
+      AND c.relkind='r' AND NOT c.relispartition
+      AND NOT EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhparent=c.oid OR i.inhrelid=c.oid)
+   ) AS standalone_document_table,
    (SELECT count(*)::int FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
       JOIN pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='financial_app' AND c.relname='documents'
@@ -77,6 +85,7 @@ WITH document_columns AS (
  ARRAY_REMOVE(ARRAY[
   CASE WHEN document_columns<>6 THEN 'document_columns_missing'::text END,
   CASE WHEN table_count<>tables_with_rls OR table_count<1 THEN 'financial_rls_incomplete'::text END,
+  CASE WHEN standalone_document_table<>1 THEN 'document_relation_shape_unverified'::text END,
   CASE WHEN original_guards<>1 OR invoker_guard_functions<>1 THEN 'original_immutability_missing'::text END,
   CASE WHEN unverified_document_update_triggers<>0 THEN 'document_update_trigger_unverified'::text END,
   CASE WHEN source_records<>transactions OR transactions_without_source<>0 OR sources_without_transaction<>0
@@ -89,7 +98,7 @@ WITH document_columns AS (
  FROM checks
 )
 SELECT CASE WHEN cardinality(blockers)=0 THEN 'ready' ELSE 'blocked' END AS ap8_db_readiness,
- blockers, document_columns, table_count, tables_with_rls, original_guards,
+ blockers, document_columns, table_count, tables_with_rls, standalone_document_table, original_guards,
  invoker_guard_functions, unverified_document_update_triggers, source_records, transactions,
  transactions_without_source, sources_without_transaction
 FROM output;

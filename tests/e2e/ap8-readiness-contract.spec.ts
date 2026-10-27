@@ -19,6 +19,8 @@ test("REC-AP8-308 · la comprobación productiva AP8 es estrictamente de lectura
     `p.proconfig=ARRAY['search_path=""']::text[]`,
     "sha256(convert_to(p.prosrc,'UTF8'))",
     "unverified_document_update_triggers",
+    "standalone_document_table",
+    "document_relation_shape_unverified",
     "document_update_trigger_unverified",
     "table_count<>tables_with_rls",
     "t.source_record_id",
