@@ -4,7 +4,10 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { APP_VERSION, TARGET_VERSION, getBuildInfo } from "../../src/core/build-info";
 
-const EXPECTED_LOCK_SEMANTIC_FINGERPRINT = "3c2dfcc6dc59f6c78f81c97c13e5085c51474c427de0f3981deeb16161748ca1";
+// REC-SEC-500: intentionally updated after reviewing the security upgrades to
+// Next.js/sharp/source-map-js/Zod and the synthetic PostgreSQL test dependency.
+// Keep guarding all remaining lockfile semantics when the app version changes.
+const EXPECTED_LOCK_SEMANTIC_FINGERPRINT = "ef187da4cd740e91ce46883a0855d232f43fe8169fb224c8e1c06056afb68058";
 
 function semanticLockFingerprint(packageLock: { version: string; packages?: Record<string, { version?: string }> }) {
   const normalized = structuredClone(packageLock);
