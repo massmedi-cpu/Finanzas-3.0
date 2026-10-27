@@ -16,6 +16,7 @@ test("REC-AP8-308 · la comprobación productiva AP8 es estrictamente de lectura
     "t.tgtype=19",
     "cardinality(t.tgattr::smallint[])=0",
     "t.tgqual IS NULL",
+    `p.proconfig=ARRAY['search_path=""']::text[]`,
     "sha256(convert_to(p.prosrc,'UTF8'))",
     "unverified_document_update_triggers",
     "document_update_trigger_unverified",

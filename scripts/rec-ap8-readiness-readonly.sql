@@ -32,6 +32,10 @@ WITH document_columns AS (
       WHERE n.nspname='financial_app' AND p.proname='prevent_private_original_rewrite'
       AND p.oid=to_regprocedure('financial_app.prevent_private_original_rewrite()')
       AND NOT p.prosecdef AND l.lanname='plpgsql' AND NOT p.proretset
+      -- The reviewed function also fixes an empty search path. An unchanged
+      -- body with a reset or hostile path can resolve a different text
+      -- operator and silently bypass its original-file checks.
+      AND p.proconfig=ARRAY['search_path=""']::text[]
       -- A text search can match comments in a function that merely RETURNs NEW.
       -- Fail closed unless the stored body is byte-identical to the reviewed
       -- 20261011205000 migration. Update this digest and its test together only

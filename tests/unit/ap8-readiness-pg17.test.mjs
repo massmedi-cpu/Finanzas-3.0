@@ -77,6 +77,30 @@ await test('AP8 readiness rejects ineffective document guards in synthetic Postg
       await db.exec("UPDATE financial_app.documents SET notes='allowed' WHERE id=1");
       assert.equal((await db.query('SELECT notes FROM financial_app.documents WHERE id=1')).rows[0].notes, 'allowed');
     });
+    await t.test('a reset or hostile guard search path cannot report ready', async () => {
+      await reset();
+      await db.exec('ALTER FUNCTION financial_app.prevent_private_original_rewrite() RESET search_path');
+      await expectBlocked('original_immutability_missing');
+
+      // Keep the reviewed body byte-for-byte unchanged. A hostile operator on
+      // the function search path can still change the result of its checks.
+      await db.exec(`CREATE SCHEMA hostile;
+        CREATE SEQUENCE hostile.op_count;
+        CREATE FUNCTION hostile.text_equal(text, text) RETURNS boolean LANGUAGE sql VOLATILE
+          AS $$ SELECT nextval('hostile.op_count') % 4 <> 0 $$;
+        CREATE OPERATOR hostile.= (LEFTARG=text, RIGHTARG=text, FUNCTION=hostile.text_equal);
+        ALTER FUNCTION financial_app.prevent_private_original_rewrite()
+          SET search_path TO hostile, pg_catalog;`);
+      await expectBlocked('original_immutability_missing');
+      await db.exec("UPDATE financial_app.documents SET original_file_name='altered.pdf' WHERE id=1");
+      assert.equal((await db.query('SELECT original_file_name FROM financial_app.documents WHERE id=1')).rows[0].original_file_name, 'altered.pdf');
+
+      await db.exec('DROP TRIGGER documents_private_original_rewrite_guard ON financial_app.documents');
+      await db.exec("UPDATE financial_app.documents SET original_file_name='synthetic.pdf' WHERE id=1");
+      await db.exec('DROP SCHEMA hostile CASCADE');
+      await reset();
+      assert.equal((await status()).ap8_db_readiness, 'ready');
+    });
     await t.test('column-specific guard cannot report ready', async () => {
       await reset();
       await db.exec(`DROP TRIGGER documents_private_original_rewrite_guard ON financial_app.documents;
