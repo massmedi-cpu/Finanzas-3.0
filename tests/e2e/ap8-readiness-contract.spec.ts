@@ -58,7 +58,7 @@ test("REC-AP8-487 · el backup cifrado sigue disponible tras mover #619 a main s
   expect(workflow).not.toContain("SUPABASE_SERVICE_ROLE_KEY: ${{");
 });
 
-test("REC-AP8-488 · rehearse SQL migrations from 26-Oct encrypted backup, not stale backup", () => {
+test("REC-AP8-503 · rehearse against the newest independently verified recent encrypted backup", () => {
   const workflow = readFileSync(".github/workflows/aud-e2e-production-backup-preflight.yml", "utf8");
   const start = workflow.indexOf("  restored-production-103-ap8-619:");
   expect(start).toBeGreaterThan(-1);
@@ -66,25 +66,35 @@ test("REC-AP8-488 · rehearse SQL migrations from 26-Oct encrypted backup, not s
   for (const marker of [
     "github.event.pull_request.number == 619",
     "github.event.pull_request.base.ref == 'main'",
-    "run = await get('/actions/runs/40274402678')",
-    "a = await get('/actions/artifacts/12629204026')",
-    "run.conclusion !== 'success'",
-    "run.head_branch !== 'main'",
-    "run.head_sha !== '29a517215fef82cb12bc80e521109c2aa326d46c'",
-    "run.path !== '.github/workflows/production-backup-v2.yml'",
-    "Date.parse('2026-10-26T00:00:00Z')",
-    "a.expired",
-    "a.workflow_run.id !== run.id",
-    "Date.parse(a.expires_at) - Date.now() < 45 * 60 * 1000",
-    "sha256:82127e8e63475ea726e8739f31d7944cfbfe8fb472b5a358a05e637a185b4211",
-    "artifact-ids: '12629204026'",
-    "run-id: '40274402678'",
+    "node --test tests/unit/ap8-verified-backup.test.mjs",
+    "id: recent_backup",
+    "node scripts/rec-ap8-verified-backup.mjs",
+    "artifact-ids: ${{ steps.recent_backup.outputs.artifact_id }}",
+    "run-id: ${{ steps.recent_backup.outputs.run_id }}",
+    "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+    "digest-mismatch: error",
+    "node scripts/rec-ap8-verified-backup.mjs --verify-release-identity",
     "rec-ap8-restored-backup-rehearsal.sh",
     "Restore authentic backup, upgrade five migrations, rollback and compare all data",
     "Always destroy private restored database and temporary files",
-  ]) expect(release, "Missing AP8-488 guard: " + marker).toContain(marker);
-  expect(release).not.toContain("12596173399");
-  expect(release).not.toContain("40186296002");
+  ]) expect(release, "Missing AP8-503 guard: " + marker).toContain(marker);
+  expect(release).not.toContain("artifact-ids: '12629204026'");
+  expect(workflow).toContain("'scripts/rec-ap8-verified-backup.mjs'");
+  expect(workflow).toContain("'tests/unit/ap8-verified-backup.test.mjs'");
+  const selector = readFileSync("scripts/rec-ap8-verified-backup.mjs", "utf8");
+  for (const marker of [
+    "29a517215fef82cb12bc80e521109c2aa326d46c",
+    "6dad59c6c2db3575618a7c91c49c3060a93bbba1",
+    "dpl_34WhAcvVpP6YrdbxAckDgm3TWwz5",
+    "repositoryId: 1340586543",
+    "workflowId: 369930224",
+    "productionVersion: '10.0.103'",
+    "maxAgeMs: 24 * 60 * 60 * 1000",
+    "minRemainingMs: 45 * 60 * 1000",
+    "restore-verify-v2",
+    "backup_run_untrusted",
+    "backup_artifact_untrusted",
+  ]) expect(selector, "Missing AP8-503 policy: " + marker).toContain(marker);
   const runner = readFileSync("scripts/rec-ap8-restored-backup-rehearsal.sh", "utf8");
   expect(runner).toContain("baseline_version=10.0.103|verified_artifact=true");
   expect(runner).not.toContain("source=2026-10-20");
