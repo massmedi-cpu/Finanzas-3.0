@@ -10,14 +10,15 @@ test("REC-AP8-308 · la comprobación productiva AP8 es estrictamente de lectura
   for (const proof of [
     "documents_private_original_rewrite_guard",
     "prevent_private_original_rewrite",
-    // REC-AP1-338: catalogue preflight cannot accept a trigger with the right
-    // name but a wrong function, timing or operation, nor one missing Drive ID.
+    // Catalogue preflight also rejects conditional or column-restricted guards
+    // and a function whose comments imitate the expected checks.
     "t.tgfoid=to_regprocedure('financial_app.prevent_private_original_rewrite()')",
-    "(t.tgtype & 1)=1",
-    "(t.tgtype & 2)=2",
-    "(t.tgtype & 16)=16",
-    "pg_get_functiondef(p.oid)",
-    "NEW.source_drive_file_id IS DISTINCT FROM OLD.source_drive_file_id",
+    "t.tgtype=19",
+    "cardinality(t.tgattr::smallint[])=0",
+    "t.tgqual IS NULL",
+    "sha256(convert_to(p.prosrc,'UTF8'))",
+    "unverified_document_update_triggers",
+    "document_update_trigger_unverified",
     "table_count<>tables_with_rls",
     "t.source_record_id",
     "transactions_without_source",
@@ -29,6 +30,8 @@ test("REC-AP8-308 · la comprobación productiva AP8 es estrictamente de lectura
     "original_immutability_missing",
   ]) expect(sql, "Falta la comprobación AP8: " + proof).toContain(proof);
   expect(sql).not.toContain("source_postflight_verified=true");
+  const workflow = readFileSync(".github/workflows/product-recovery-ui.yml", "utf8");
+  expect(workflow).toContain("node --test tests/unit/ap8-readiness-pg17.test.mjs");
 });
 
 test("REC-AP8-487 · el backup cifrado sigue disponible tras mover #619 a main sin confiar en eventos obsoletos", () => {

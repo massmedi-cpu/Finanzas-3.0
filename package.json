@@ -87,7 +87,7 @@
   "dependencies": {
     "@tesseract.js-data/spa": "1.0.0",
     "@vercel/oidc": "3.8.5",
-    "next": "16.3.8",
+    "next": "16.4.3",
     "pdfjs-dist": "6.2.108",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -95,10 +95,16 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
+    "@electric-sql/pglite": "0.3.0",
     "@playwright/test": "1.62.1",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "typescript": "7.0.2"
+  },
+  "overrides": {
+    "@vercel/cli-config": {
+      "zod": "4.6.7"
+    }
   }
 }

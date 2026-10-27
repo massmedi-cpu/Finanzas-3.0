@@ -44,6 +44,10 @@ on:
       - 'scripts/verify-recovery-visual-suite-gate.mjs'
       - 'scripts/verify-private-ocr-corpus-selection.mjs'
       - 'scripts/rec-ap8-readiness-readonly.sql'
+      - 'supabase/migrations/20261011205000_ap1_private_document_original_immutable.sql'
+      - 'supabase/migrations/20260903200004_financial_app_foundations.sql'
+      - 'tests/unit/ap8-readiness-pg17.test.mjs'
+      - 'tests/unit/oidc-config-compat.test.mjs'
       - 'tests/e2e/**'
       - 'playwright*.ts'
       - 'package*.json'
@@ -112,6 +116,10 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npx playwright install --with-deps chromium
+      - name: Verify AP8 readiness against ineffective triggers in isolated PostgreSQL 17
+        run: node --test tests/unit/ap8-readiness-pg17.test.mjs
+      - name: Verify OIDC configuration compatibility with patched dependencies
+        run: node --test tests/unit/oidc-config-compat.test.mjs
       - name: Certify Drive metadata batch atomicity and rollback
         run: node --experimental-strip-types scripts/test-drive-atomic-batch.mjs
       - name: Ensure Drive folder scope regressions are really included in the run
