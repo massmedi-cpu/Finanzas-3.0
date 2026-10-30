@@ -295,6 +295,11 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   expect(await hiddenNet.locator('[data-series-bar="true"]').evaluateAll((bars) => (
     bars.map((bar) => (bar as HTMLElement).style.height)
   ))).toEqual(Array(monthly.rows.length).fill("36%"));
+  // Privacy must remove literal money from the DOM as well as hide signs and heights.
+  // The prior UI masked bars yet left each <strong> amount readable in both views.
+  const netLabels = await hiddenNet.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(netLabels.some((label) => label.includes("€"))).toBe(false);
+  expect(netLabels.some((label) => label.includes("••••"))).toBe(true);
 
   await page.getByRole("button", { name: "Saldo" }).click();
   const hiddenBalance = page.getByRole("group", { name: /Saldo bancario agregado por mes.*signos y proporciones ocultos/i });
@@ -304,6 +309,9 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   expect(await hiddenBalance.locator('[data-series-bar="true"]').evaluateAll((bars) => (
     bars.map((bar) => (bar as HTMLElement).style.height)
   ))).toEqual(Array(balanceSeries.rows.length).fill("36%"));
+  const balanceLabels = await hiddenBalance.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(balanceLabels.some((label) => label.includes("€"))).toBe(false);
+  expect(balanceLabels.some((label) => label.includes("••••"))).toBe(true);
 
   await page.getByRole("button", { name: "Mostrar importes" }).click();
   const visibleBalance = page.getByRole("group", { name: /^Saldo bancario agregado por mes$/i });
@@ -311,5 +319,7 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   await expect(visibleBalance.locator('[data-sign="negative"]')).toHaveCount(1);
   await expect(visibleBalance.locator('[data-sign="positive"]')).toHaveCount(2);
   await expect(visibleBalance.locator('[data-sign="zero"]')).toHaveCount(1);
+  const restoredLabels = await visibleBalance.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(restoredLabels.some((label) => label.includes("€"))).toBe(true);
 });
 
