@@ -57,6 +57,18 @@ export type CashFlowEvolutionPoint = {
 
 export type CashFlowForecastCounts = Record<CashFlowEventState, number>;
 
+// FA-UI-024: keep calendar labels compact without mistaking missing bank data
+// for a genuine zero. Full coverage is announced on each day's button.
+export function cashFlowCalendarCountLabel(realCount: number | null, plannedCount: number | null): string {
+  if (realCount || plannedCount) {
+    return [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null]
+      .filter(Boolean).join(" · ");
+  }
+  if (realCount === null) return "s/d";
+  if (plannedCount === null) return "Previsión no disponible";
+  return "—";
+}
+
 export type CashFlowView = {
   month: string;
   dateFrom: string;
