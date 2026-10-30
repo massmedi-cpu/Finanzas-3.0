@@ -286,12 +286,6 @@
   .navigationProgress { position: absolute; inset: 0; margin: 0; }
 }
 
-/* The desktop sidebar offset must not survive any responsive breakpoint.
-   At 360px a stale 14rem offset leaves only 136px for the entire app. */
-@media (max-width: 68.74rem) {
-  .content { margin-left: 0; }
-}
-
 @media (max-width: 48rem) {
   .root {
     padding-bottom: calc(5.2rem + env(safe-area-inset-bottom));
