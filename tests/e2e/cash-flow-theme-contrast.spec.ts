@@ -67,3 +67,25 @@ for (const theme of ["light", "dark"] as const) {
     }).toPass({ timeout: 3000 });
   });
 }
+
+// FA-UI-012: a browser may be en-US, but the product's full Spanish date
+// must not be CSS title-cased into «De Octubre De».
+test.describe("Cash Flow date headings independent of browser language", () => {
+  test.use({ locale: "en-US" });
+  test("FA-UI-012 · preposiciones y mes en español sin capitalización inglesa", async ({ page }) => {
+    for (const theme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      for (const width of [360, 820, 1366]) {
+        await page.setViewportSize({ width, height: 920 });
+        await page.goto("/cash-flow?month=2026-10");
+        const calendar = page.getByRole("group", { name: "Días de octubre de 2026" });
+        await expect(calendar).toBeVisible();
+        await calendar.getByRole("button").first().click();
+        const title = page.locator("#cash-flow-day-detail h3");
+        await expect(title).toHaveText("jueves, 1 de octubre de 2026");
+        await expect(title).toHaveCSS("text-transform", "none");
+        expect(await title.evaluate(node => getComputedStyle(node, "::first-letter").textTransform)).toBe("uppercase");
+      }
+    }
+  });
+});
