@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath, cashFlowSelectedDayIndex } from "../../src/application/cash-flow/evolution-plot";
-import { cashFlowObservedDaySignal, type CashFlowEvolutionPoint, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowObservedDaySignal, cashFlowCalendarCountLabel, type CashFlowEvolutionPoint, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
+
+test("FA-UI-024 · a missing bank day never looks like a confirmed zero", () => {
+  expect(cashFlowCalendarCountLabel(null, null)).toBe("s/d");
+  expect(cashFlowCalendarCountLabel(null, 0)).toBe("s/d");
+  expect(cashFlowCalendarCountLabel(0, null)).toBe("Previsión no disponible");
+  expect(cashFlowCalendarCountLabel(0, 0)).toBe("—");
+  expect(cashFlowCalendarCountLabel(2, 1)).toBe("2 real · 1 prev.");
+  expect(cashFlowCalendarCountLabel(null, 3)).toBe("3 prev.");
+});
 
 function point(date: string, value: number | null): CashFlowEvolutionPoint {
   return { date, realCumulativeCents: value, plannedCumulativeCents: null, combinedCumulativeCents: null };
