@@ -65,7 +65,7 @@ function SingleSeriesBars({
                 <span className={styles.evolutionMissingMarker} data-series-missing="true" />
               )}
             </div>
-            <strong>{available ? formatMoney(value) : "Sin dato"}</strong>
+            <strong>{available ? valuesVisible ? formatMoney(value) : "••••" : "Sin dato"}</strong>
             {drilldown && available ? <Link prefetch={false} href={monthlyTransactionsHref(row.monthStart)} aria-label={`Ver movimientos de ${formatMonth(row.monthStart)}`}>{formatMonth(row.monthStart)}</Link> : <span>{formatMonth(row.monthStart)}</span>}
           </div>
         );
