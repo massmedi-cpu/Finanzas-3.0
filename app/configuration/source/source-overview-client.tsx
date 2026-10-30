@@ -182,6 +182,7 @@ export default function SourceOverviewClient() {
     void load();
   }, [load]);
 
+  const sourceVerified = google !== null && !loading;
   const connected = Boolean(google?.configured && google.connection?.connected);
   const runtimeReady = runtime?.compatible === true;
   const firstImport = connected && syncStatus.cursors.length === 0;
@@ -275,8 +276,10 @@ export default function SourceOverviewClient() {
     }
   }
 
-  const stateLabel = !connected
-    ? "Sin conectar"
+  const stateLabel = !sourceVerified
+    ? "Sin verificar"
+    : !connected
+      ? "Sin conectar"
     : !runtimeReady
       ? "Requiere atención"
       : hasProblem
@@ -297,7 +300,7 @@ export default function SourceOverviewClient() {
           <p className="hero-copy">Conecta y actualiza tus movimientos sin modificar el archivo original de Google.</p>
         </div>
         <div className="configuration-summary" role="group" aria-label="Resumen de la fuente bancaria">
-          <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
+          <div><strong>{!sourceVerified ? "—" : connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
           <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Última actualización</span></div>
           <div><strong>{stateLabel}</strong><span>Estado</span></div>
         </div>
@@ -319,7 +322,7 @@ export default function SourceOverviewClient() {
             <div className="panel-heading">
               <div>
                 <p className="panel-kicker">ESTADO</p>
-                <h2 id="source-overview-heading">{connected ? "Google conectado" : "Conecta tu fuente bancaria"}</h2>
+                <h2 id="source-overview-heading">{!sourceVerified ? "Estado de Google sin verificar" : connected ? "Google conectado" : "Conecta tu fuente bancaria"}</h2>
               </div>
               <span className="status-chip">Solo lectura</span>
             </div>
@@ -327,15 +330,15 @@ export default function SourceOverviewClient() {
             <dl className={styles.statusGrid}>
               <div>
                 <dt>Archivo</dt>
-                <dd>{google?.connection?.sourceFileName ?? "Sin fuente conectada"}</dd>
+                <dd>{google?.connection?.sourceFileName ?? (sourceVerified ? "Sin fuente conectada" : "No verificado")}</dd>
               </div>
               <div>
                 <dt>Cuenta</dt>
-                <dd>{google?.connection?.accountEmail ?? "Sin cuenta conectada"}</dd>
+                <dd>{google?.connection?.accountEmail ?? (sourceVerified ? "Sin cuenta conectada" : "No verificado")}</dd>
               </div>
               <div>
                 <dt>Último resultado</dt>
-                <dd>{run?.status === "success" ? "Completado" : run?.status === "failed" ? "Fallido" : "Sin actualizaciones"}</dd>
+                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? "Completada" : run?.status === "failed" ? "Fallida" : run ? "En revisión" : "Sin actualizaciones"}</dd>
               </div>
               <div>
                 <dt>Cambios de la última actualización</dt>

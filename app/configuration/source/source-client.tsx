@@ -282,6 +282,8 @@ export default function SourceClient() {
     })();
   }, [load]);
 
+  const sourceVerified = google !== null && !loading;
+  const runtimeVerified = runtime !== null && !loading;
   const connected = Boolean(google?.configured && google.connection?.connected);
   const serviceAccountMode = google?.authMode === "service-account";
   const managedConnection = google?.connection?.managed === true;
@@ -397,9 +399,9 @@ export default function SourceClient() {
           </p>
         </div>
         <div className="configuration-summary" role="group" aria-label="Estado de la fuente bancaria">
-          <div><strong>{google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
-          <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{runtimeReady ? "Sí" : "No"}</strong><span>Sincronización disponible</span></div>
+          <div><strong>{!sourceVerified ? "—" : google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
+          <div><strong>{!sourceVerified ? "—" : connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
+          <div><strong>{!runtimeVerified ? "—" : runtimeReady ? "Sí" : "No"}</strong><span>Sincronización disponible</span></div>
         </div>
       </header>
 
@@ -427,7 +429,7 @@ export default function SourceClient() {
             <div className={styles.statusList}>
               <div>
                 <span>Configuración privada</span>
-                <strong>{google?.configured ? "Preparada" : "Pendiente"}</strong>
+                <strong>{!sourceVerified ? "Sin verificar" : google?.configured ? "Preparada" : "Pendiente"}</strong>
                 <p>
                   {google?.configured
                     ? serviceAccountMode
@@ -438,13 +440,13 @@ export default function SourceClient() {
               </div>
               <div>
                 <span>Protección de la importación</span>
-                <strong>{runtimeReady ? "Preparada" : "No disponible"}</strong>
+                <strong>{!runtimeVerified ? "Sin verificar" : runtimeReady ? "Preparada" : "No disponible"}</strong>
                 <p>{runtimeReady ? "Se comprueban las cuentas y los movimientos antes de incorporarlos. La fuente original permanece intacta." : "La sincronización permanece bloqueada de forma segura."}</p>
               </div>
               <div>
                 <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>
-                <strong>{google?.connection?.accountEmail ?? "Sin conectar"}</strong>
-                <p>{google?.connection?.sourceFileName ?? "No se ha autorizado ninguna fuente."}</p>
+                <strong>{google?.connection?.accountEmail ?? (sourceVerified ? "Sin conectar" : "No verificado")}</strong>
+                <p>{google?.connection?.sourceFileName ?? (sourceVerified ? "No se ha autorizado ninguna fuente." : "No se ha podido comprobar la fuente.")}</p>
                 {managedConnection && <p>Conexión gestionada por el servidor; no requiere autorización manual periódica.</p>}
                 {google?.connection?.lastVerifiedAt && <p>Última verificación: {formatDateTime(google.connection.lastVerifiedAt)}</p>}
               </div>
@@ -518,7 +520,7 @@ export default function SourceClient() {
                 </h2>
               </div>
               <span className={`lifecycle ${syncStatus.run?.status === "success" ? "active" : "archived"}`}>
-                {syncStatus.run?.status ?? "Sin ejecuciones"}
+                {syncStatus.run?.status === "success" ? "Completada" : syncStatus.run?.status === "failed" ? "Fallida" : syncStatus.run?.status === "partial" ? "Parcial" : syncStatus.run?.status === "started" ? "En curso" : syncStatus.run ? "Pendiente de revisar" : "Sin ejecuciones"}
               </span>
             </div>
 

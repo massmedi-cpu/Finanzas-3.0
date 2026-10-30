@@ -338,8 +338,8 @@ function QuickRead({ snapshot, comparisonReliable, currentObserved }: { snapshot
       )}
       <Link prefetch={false} className={styles.quickReadItem} href="#anomalies-heading">
         <span>Anomalías</span>
-        <strong>{formatInteger(anomalyCount)}</strong>
-        <small>{anomalyLabel}</small>
+        <strong>{currentObserved ? formatInteger(anomalyCount) : "Sin cobertura"}</strong>
+        <small>{!currentObserved ? "No se pueden evaluar anomalías" : !comparisonReliable ? "Según los movimientos disponibles" : anomalyLabel}</small>
       </Link>
       <Link prefetch={false} className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
@@ -741,10 +741,12 @@ export default function AnalysisClient({
                   <p>ANOMALÍAS</p>
                   <h2 id="anomalies-heading">Movimientos que merecen la pena revisar</h2>
                 </div>
-                <span>{formatInteger(snapshot.anomalies.length)}</span>
+                <span>{coverageHasObservedData ? formatInteger(snapshot.anomalies.length) : "—"}</span>
               </div>
-              {snapshot.anomalies.length === 0 ? (
-                <p className={styles.empty}>No se han detectado importes que superen de forma clara el comportamiento histórico disponible.</p>
+              {!coverageHasObservedData ? (
+                <p className={styles.empty}>No se pueden evaluar anomalías sin cobertura bancaria confirmada.</p>
+              ) : snapshot.anomalies.length === 0 ? (
+                <p className={styles.empty}>{coverageIncomplete ? "No se han detectado anomalías en los movimientos disponibles; faltan datos del periodo." : "No se han detectado importes que superen de forma clara el comportamiento histórico disponible."}</p>
               ) : (
                 <div className={styles.anomalyList}>
                   {snapshot.anomalies.map((item) => (

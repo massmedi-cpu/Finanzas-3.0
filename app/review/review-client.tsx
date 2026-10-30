@@ -217,8 +217,8 @@ export default function ReviewClient() {
           <h1>Para revisar</h1>
         </div>
         <div className={styles.heroStatus} aria-live="polite">
-          <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
-          <span>{loading ? "Comprobando" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          <strong>{loading ? "…" : unavailableItems.length > 0 ? formatInteger(unavailableItems.length) : formatInteger(actionableCount)}</strong>
+          <span>{loading ? "Comprobando" : unavailableItems.length > 0 ? unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
         </div>
       </header>
 
@@ -250,13 +250,13 @@ export default function ReviewClient() {
               </div>
             ) : (
               <div className={styles.allClear} role="status">
-                <strong>No hay acciones confirmadas pendientes</strong>
-                <span>Las fuentes disponibles no han detectado nada que requiera intervención.</span>
+                <strong>{unavailableItems.length > 0 ? "Revisión incompleta" : "No hay acciones pendientes"}</strong>
+                <span>{unavailableItems.length > 0 ? "Hay comprobaciones sin verificar. No es posible confirmar que todo esté en orden." : "Todas las fuentes revisadas han confirmado que no hay acciones pendientes."}</span>
               </div>
             )}
           </section>
 
-          {clearItems.length > 0 && (
+          {clearItems.length > 0 && unavailableItems.length === 0 && (
             <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
               <div className={styles.compactHeading}>
                 <div>
