@@ -57,8 +57,25 @@
   min-height: 2.85rem; border-radius: .8rem; padding: .65rem .9rem; cursor: pointer; font-size: var(--font-button); font-weight: 800;
 }
 .primaryButton, .pagination button { border: 1px solid color-mix(in srgb, var(--color-primary-bright) 42%, transparent); background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 95%, transparent), color-mix(in srgb, var(--color-primary-bright) 84%, transparent)); color: var(--color-on-primary); }
-.secondaryButton { border: 1px solid var(--color-border); background: color-mix(in srgb, var(--color-text) 4%, transparent); color: var(--color-text); }
+.secondaryButton {
+  border: 1px solid var(--color-border-strong);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+}
+.secondaryButton:hover:not(:disabled) {
+  border-color: var(--border-primary-strong);
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+}
+.secondaryButton:focus-visible {
+  outline: 3px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
 .primaryButton:disabled, .secondaryButton:disabled, .pagination button:disabled { cursor: not-allowed; opacity: .45; }
+.secondaryButton:disabled {
+  background: var(--surface-card-muted);
+  border-color: var(--color-border);
+}
 
 .bulkBar {
   display: grid;
