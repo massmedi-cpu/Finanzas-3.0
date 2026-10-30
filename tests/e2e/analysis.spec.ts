@@ -385,6 +385,26 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
     "href",
     "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
   );
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const width of [360, 1366]) {
+      await page.setViewportSize({ width, height: 920 });
+      const layout = await page.evaluate(() => {
+        const nav = document.querySelector('nav[aria-label="Continuar desde Análisis"]');
+        const main = document.querySelector("main");
+        if (!nav || !main) throw new Error("Missing analysis navigation or content");
+        return {
+          afterContent: Boolean(main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING),
+          columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\\s+/).filter(Boolean).length,
+          overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        };
+      });
+      expect(layout.afterContent, "FA-UI-030: navegación después de los datos").toBe(true);
+      expect(layout.columns).toBe(width === 360 ? 2 : 4);
+      expect(layout.overflow).toBeLessThanOrEqual(1);
+    }
+  }
 });
 
 test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora", async ({ page }) => {
