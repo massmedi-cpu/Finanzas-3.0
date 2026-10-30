@@ -375,6 +375,10 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <i /><i /><i /><i />
         <span>Mayor gasto</span>
       </div>
+      <ChartData label="Consultar importes diarios del mapa de calor" columns={["Fecha", "Gasto", "Movimientos"]}
+        rows={chart.days.map((day) => ({ key: day.key,
+          cells: [day.rows > 0 ? { label: formatDate(day.key), href: dailyExpenseHref(snapshot, day.key) } : formatDate(day.key), formatMoney(day.expenseCents), formatInteger(day.rows)],
+        }))} />
     </div>
   );
 }

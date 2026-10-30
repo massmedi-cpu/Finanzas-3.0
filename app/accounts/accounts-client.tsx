@@ -223,6 +223,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [transactions, setTransactions] = useState<TransactionsResponse | null>(null);
   const [loadingBalances, setLoadingBalances] = useState(true);
+  const [retryBalances, setRetryBalances] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
@@ -246,13 +247,13 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
         });
       })
       .catch(() => {
-        if (!cancelled) setError("No se ha podido cargar la vista de cuentas.");
+        if (!cancelled) { setBalances(null); setSelectedId(""); setError("No se han podido verificar las cuentas ni sus saldos."); }
       })
       .finally(() => {
         if (!cancelled) setLoadingBalances(false);
       });
     return () => { cancelled = true; };
-  }, [showArchived]);
+  }, [showArchived, retryBalances]);
 
   const selectedAccount = useMemo(
     () => balances?.accounts.find((account) => account.id === selectedId) ?? null,
@@ -336,7 +337,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     return () => { cancelled = true; };
   }, [showReconciliation, selectedAccount, balances]);
 
-  const activeCount = balances?.accounts.filter((account) => account.lifecycle === "active").length ?? 0;
+  const activeCount = balances?.accounts.filter((account) => account.lifecycle === "active").length ?? null;
   const scale = monthlyScale(snapshot?.monthly.rows ?? []);
   const balanceDate = balances?.asOfDate ?? null;
   const activeAccounts = balances?.accounts.filter((account) => account.lifecycle === "active") ?? [];
@@ -369,7 +370,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
         <div className={styles.totalCard} role="group" aria-label="Saldo total en cuentas">
           <span>Saldo total en cuentas</span>
           <strong>{balances ? formatMoney(balances.activeBalanceCents) : "—"}</strong>
-          <small>{activeCount} {activeCount === 1 ? "cuenta activa" : "cuentas activas"} · datos hasta {formatDate(balanceDate)}</small>
+          <small>{balances ? `${activeCount} ${activeCount === 1 ? "cuenta activa" : "cuentas activas"}${balanceDate ? ` · datos hasta ${formatDate(balanceDate)}` : " · fecha bancaria no disponible"}` : "Estado sin verificar · saldo y fecha desconocidos"}</small>
           {mixedBalanceReferences ? (
             <small className={styles.balanceDateNotice}>
               Aviso: los saldos individuales proceden de fechas o métodos distintos. Consulta cada cuenta; el total no es un saldo bancario simultáneo confirmado.
@@ -378,7 +379,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
         </div>
       </header>
 
-      {error ? <div className={styles.alert} role="alert">{error}</div> : null}
+      {error ? <div className={styles.alert} role="alert">{error}{!balances && !loadingBalances ? <button type="button" onClick={() => setRetryBalances((value) => value + 1)}>Reintentar lectura</button> : null}</div> : null}
 
       <section className={styles.workspace} aria-label="Cuentas y detalle financiero">
         <aside className={styles.accountsPanel}>

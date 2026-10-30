@@ -148,6 +148,8 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
   }
   const [data, setData] = useState<ConfigPayload>({ accounts: [], categories: [] });
   const [loading, setLoading] = useState(true);
+  const [verified, setVerified] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -167,13 +169,20 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     setError(null);
     try {
       const response = await fetch("/api/configuration", { cache: "no-store" });
       if (!response.ok) throw new Error("No se pudo cargar la configuración.");
-      setData((await response.json()) as ConfigPayload);
+      const payload = (await response.json()) as ConfigPayload;
+      if (!Array.isArray(payload.accounts) || !Array.isArray(payload.categories)) throw new Error("Respuesta de configuración incompleta.");
+      setData(payload);
+      setVerified(true);
+      return true;
     } catch (cause) {
+      setLoadFailed(true);
       setError(cause instanceof Error ? cause.message : "Error al cargar la configuración.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -181,6 +190,7 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
 
   useEffect(() => { void load(); }, [load]);
 
+  const dataCurrent = verified && !loadFailed && !loading;
   const activeAccounts = useMemo(() => data.accounts.filter((item) => item.lifecycle === "active").length, [data.accounts]);
   const activeCategories = useMemo(() => data.categories.filter((item) => item.lifecycle === "active").length, [data.categories]);
   const editingCategory = editingCategoryId ? data.categories.find((item) => item.id === editingCategoryId) ?? null : null;
@@ -266,7 +276,7 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
     setNotice(null);
     try {
       await action();
-      await load();
+      if (!(await load())) throw new Error("Cambio enviado, pero sin comprobación posterior. Actualiza antes de continuar.");
       setNotice(success);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "La operación no se pudo completar.");
@@ -416,15 +426,15 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
           <h1>Cuentas y categorías</h1>
         </div>
         <div className="configuration-summary" role="group" aria-label="Resumen de configuración">
-          <div><strong>{activeAccounts}</strong><span>Cuentas activas</span></div>
-          <div><strong>{activeCategories}</strong><span>Categorías activas</span></div>
+          <div><strong>{dataCurrent ? activeAccounts : "—"}</strong><span>Cuentas activas</span></div>
+          <div><strong>{dataCurrent ? activeCategories : "—"}</strong><span>Categorías activas</span></div>
           <button className="icon-button" type="button" onClick={() => void load()} disabled={loading || busy} aria-label="Actualizar datos"><Icon name="refresh" /></button>
         </div>
       </header>
 
       <nav className="config-tabs" aria-label="Secciones de configuración">
-        <button className={tab === "accounts" ? "active" : ""} onClick={() => changeTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
-        <button className={tab === "categories" ? "active" : ""} onClick={() => changeTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
+        <button className={tab === "accounts" ? "active" : ""} onClick={() => changeTab("accounts")}><Icon name="account" />Cuentas <span>{dataCurrent ? data.accounts.length : "—"}</span></button>
+        <button className={tab === "categories" ? "active" : ""} onClick={() => changeTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{dataCurrent ? activeCategories : "—"}</span></button>
       </nav>
 
       {error && <div className="config-message error" role="alert">{error}</div>}
@@ -460,7 +470,9 @@ export default function ConfigurationClient({ initialTab = "accounts" }: { initi
         </section>
       )}
 
-      {loading ? <section className="config-panel loading-state">Cargando configuración…</section> : tab === "accounts" ? (
+      {loading ? <section className="config-panel loading-state">Cargando configuración…</section> : !dataCurrent ? (
+        <section className="config-panel" role="status"><h2>Configuración sin verificar</h2><p>No se han confirmado cuentas ni categorías. Se ocultan las altas para evitar duplicados.</p><button type="button" className="secondary-button" onClick={() => void load()}>Reintentar lectura</button></section>
+      ) : tab === "accounts" ? (
         <div className="config-layout">
           <section className="config-panel list-panel" aria-labelledby="accounts-heading">
             <div className="panel-heading"><h2 id="accounts-heading">Cuentas</h2><span className="status-chip">Datos guardados</span></div>

@@ -16,6 +16,6 @@
 }
 
 .financial-privacy-shield span {
-  color: var(--text-secondary, #8d98aa);
+  color: var(--color-text-secondary);
   max-width: 34rem;
 }
