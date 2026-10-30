@@ -398,19 +398,39 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
           afterContent: Boolean(main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING),
           columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-          overflowElements: [...document.querySelectorAll("body *")].map(node => {
+          // A screen-reader-only 1px container may contain a 1,800px
+          // table without creating visible page overflow. Exclude elements
+          // clipped by any ancestor instead of ranking their raw rects.
+          visibleOffenders: [...document.querySelectorAll("body *")].flatMap(node => {
+            if (!(node instanceof HTMLElement || node instanceof SVGElement)) return [];
             const bounds = node.getBoundingClientRect();
-            const style = getComputedStyle(node);
-            return {
-              element: node.tagName.toLowerCase(),
+            if (bounds.right <= document.documentElement.clientWidth + 1) return [];
+            let ancestor: Element | null = node.parentElement;
+            while (ancestor && ancestor !== document.body) {
+              const a = getComputedStyle(ancestor);
+              const clipped = ["hidden", "clip", "auto", "scroll"].includes(a.overflowX);
+              if (clipped && ancestor.getBoundingClientRect().right <= document.documentElement.clientWidth + 1) return [];
+              ancestor = ancestor.parentElement;
+            }
+            const computed = getComputedStyle(node);
+            return [{
+              tag: node.tagName.toLowerCase(),
               className: typeof node.className === "string" ? node.className.slice(0, 95) : "",
               left: Math.round(bounds.left), right: Math.round(bounds.right),
-              width: Math.round(bounds.width), overflowX: style.overflowX,
+              width: Math.round(bounds.width),
+              minWidth: computed.minWidth, display: computed.display, overflowX: computed.overflowX,
               scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
-              position: style.position,
-            };
-          }).filter(node => node.right > document.documentElement.clientWidth + 1)
-            .sort((a, b) => b.right - a.right).slice(0, 14),
+            }];
+          }).sort((a,b) => b.right - a.right).slice(0,18),
+          rootBoxes: [...document.querySelectorAll("html,body,main,header,main > *,main > * > *")]
+            .slice(0,28).map(node => ({
+              tag: node.tagName.toLowerCase(),
+              className: typeof node.className === "string" ? node.className.slice(0,65) : "",
+              left: Math.round(node.getBoundingClientRect().left),
+              right: Math.round(node.getBoundingClientRect().right),
+              width: Math.round(node.getBoundingClientRect().width),
+              scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+            })),
           chartGeometry: [...document.querySelectorAll('[class*="monthViewport"],[class*="monthRail"],[class*="evolution"]')]
             .slice(0, 10).map(node => ({
               className: typeof node.className === "string" ? node.className.slice(0, 95) : "",
@@ -424,7 +444,7 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
       });
       expect(layout.afterContent, "FA-UI-030: navegación después de los datos").toBe(true);
       expect(layout.columns).toBe(width === 360 ? 2 : 4);
-      expect(layout.overflow, `FA-UI-030 at ${width}px/${theme}: ${JSON.stringify({ offenders: layout.overflowElements, chart: layout.chartGeometry })}`).toBeLessThanOrEqual(1);
+      expect(layout.overflow, `FA-UI-030 at ${width}px/${theme}: ${JSON.stringify({ offenders: layout.visibleOffenders, roots: layout.rootBoxes, chart: layout.chartGeometry })}`).toBeLessThanOrEqual(1);
       if (width === 360) {
         // Keep all twelve month buttons accessible to keyboard and touch
         // without letting the long rail expand the page.
