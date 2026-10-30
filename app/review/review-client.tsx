@@ -260,7 +260,7 @@ export default function ReviewClient() {
           </section>
 
           {clearItems.length > 0 && (
-            <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
+            <section className={`${styles.compactPanel} ${unavailableItems.length > 0 ? styles.partialClear : ""}`} aria-labelledby="review-clear-heading">
               <div className={styles.compactHeading}>
                 <div>
                   <p className={styles.kicker}>SIN INCIDENCIAS</p>

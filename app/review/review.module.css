@@ -342,3 +342,7 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
+
+/* FA-UI-017: verified clear groups must never appear as all-green when others failed. */
+.partialClear .compactList li { border-color: var(--color-border); background: var(--surface-interactive-soft); }
+.partialClear .compactList li > span:first-child { color: var(--color-text-secondary); }

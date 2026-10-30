@@ -223,9 +223,16 @@ test("REC-VIS-493 · Configuración muestra todas las pestañas sin recorte en e
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/configuration/source");
     const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
-    const selected = nav.getByRole("link", { name: "Fuente bancaria" });
-    const final = nav.getByRole("link", { name: "Datos y privacidad" });
+    const disclosure = nav.locator("details");
+    const compact = await disclosure.isVisible();
     await expect(nav).toBeVisible();
+    if (compact) {
+      await expect(disclosure.locator("summary")).toContainText("Fuente bancaria");
+      await disclosure.locator("summary").click();
+    }
+    const links = compact ? disclosure : nav.locator("[data-desktop-areas]");
+    const selected = links.getByRole("link", { name: "Fuente bancaria" });
+    const final = links.getByRole("link", { name: "Datos y privacidad" });
     await expect(selected).toHaveAttribute("aria-current", "page");
     await expect.poll(async () => nav.evaluate((element) => {
       const active = element.querySelector('[aria-current="page"]');
@@ -235,9 +242,9 @@ test("REC-VIS-493 · Configuración muestra todas las pestañas sin recorte en e
       return box.left >= parent.left - 1 && box.right <= parent.right + 1;
     }), { message: "La pestaña Fuente bancaria no debe estar oculta a " + width + "px" })
       .toBe(true);
-    if (width > 768) {
+    if (!compact) {
       const visible = await nav.evaluate((element) => {
-        const last = [...element.querySelectorAll("a")].at(-1);
+        const last = [...element.querySelectorAll("[data-desktop-areas] a")].at(-1);
         if (!last) return false;
         const parent = element.getBoundingClientRect();
         const box = last.getBoundingClientRect();
@@ -259,7 +266,7 @@ test("REC-VIS-493 · el panel Fuente bancaria cambia a una columna según el con
   expect(tabs).toContain("@container app-content (max-width: 48rem)");
 });
 
-test("REC-VIS-494 · las siete pestañas de Configuración son visibles antes de la hidratación", async ({ page }) => {
+test("FA-UI-007 / REC-VIS-494 · siete enlaces accesibles sin hidratación; navegación compacta en móvil", async ({ page }) => {
   await isolateShell(page);
   for (const width of [360, 430, 820, 1100, 1366]) {
     await page.setViewportSize({ width, height: 900 });
@@ -267,7 +274,21 @@ test("REC-VIS-494 · las siete pestañas de Configuración son visibles antes de
       await page.goto(route, { waitUntil: "domcontentloaded" });
       const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
       await expect(nav).toBeVisible();
-      const geometry = await nav.evaluate((node) => {
+      const disclosure = nav.locator("details");
+      const compact = await disclosure.isVisible();
+      if (compact) {
+        const summary = disclosure.locator("summary");
+        await expect(summary).toBeVisible();
+        expect(await summary.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        await expect(summary).toContainText(
+          route === "/configuration/appearance" ? "Apariencia" : route === "/configuration/data" ? "Datos y privacidad" : "Fuente bancaria"
+        );
+        await expect(disclosure).not.toHaveAttribute("open", "");
+        await summary.click();
+        await expect(disclosure).toHaveAttribute("open", "");
+      }
+      const linksContainer = compact ? disclosure : nav.locator("[data-desktop-areas]");
+      const geometry = await linksContainer.evaluate((node) => {
         const container = node.getBoundingClientRect();
         const links = [...node.querySelectorAll("a")];
         const hidden = links.filter(link => {
@@ -277,15 +298,11 @@ test("REC-VIS-494 · las siete pestañas de Configuración son visibles antes de
             box.top < container.top - 1 || box.bottom > container.bottom + 1;
         });
         const selected = node.querySelector('[aria-current="page"]');
-        const rows = [...new Set(links.map(link => Math.round(link.getBoundingClientRect().top)))].length;
-        return { count: links.length, hiddenCount: hidden.length, hasSelected: !!selected, rows };
+        return { count: links.length, hiddenCount: hidden.length, hasSelected: !!selected };
       });
-      expect(geometry.count, "Los siete destinos deben estar siempre presentes").toBe(7);
+      expect(geometry.count, "Siete destinos reales incluso sin JS").toBe(7);
       expect(geometry.hasSelected, "Página activa: " + route).toBe(true);
-      expect(geometry.hiddenCount, route + " a " + width + "px no puede ocultar tabs").toBe(0);
-      if (width === 360 || width === 430) {
-        expect(geometry.rows, "En móvil deben existir varias filas para no ocultar pestañas").toBeGreaterThanOrEqual(3);
-      }
+      expect(geometry.hiddenCount, route + " a " + width + "px: enlaces disponibles").toBe(0);
       await expectNoViewportOverflow(page, width);
     }
   }
@@ -308,9 +325,10 @@ test("REC-VIS-495 · Configuración coloca siete pestañas en una sola fila de e
       const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
       await expect(nav).toBeVisible();
       const geometry = await nav.evaluate(node => {
-        const frame = node.getBoundingClientRect();
-        const links = [...node.querySelectorAll("a")].map(element => element.getBoundingClientRect());
-        const tracks = getComputedStyle(node).gridTemplateColumns.trim().split(/\s+/);
+        const desktop = node.querySelector("[data-desktop-areas]")!;
+        const frame = desktop.getBoundingClientRect();
+        const links = [...desktop.querySelectorAll("a")].map(element => element.getBoundingClientRect());
+        const tracks = getComputedStyle(desktop).gridTemplateColumns.trim().split(/\s+/);
         return {
           tracks: tracks.length,
           rows: new Set(links.map(box => Math.round(box.top))).size,

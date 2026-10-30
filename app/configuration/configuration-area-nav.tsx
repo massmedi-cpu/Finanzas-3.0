@@ -14,25 +14,41 @@ const ITEMS = [
   { href: "/configuration/data", label: "Datos y privacidad", exact: false },
 ] as const;
 
+function isSelected(pathname: string, item: typeof ITEMS[number]) {
+  return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+}
+
+function AreaLinks({ pathname }: { pathname: string }) {
+  return ITEMS.map((item) => (
+    <Link
+      prefetch={false}
+      key={item.href}
+      href={item.href}
+      className={`${styles.link} ${isSelected(pathname, item) ? styles.active : ""}`}
+      aria-current={isSelected(pathname, item) ? "page" : undefined}
+    >
+      {item.label}
+    </Link>
+  ));
+}
+
 export default function ConfigurationAreaNav() {
   const pathname = usePathname();
+  const current = ITEMS.find(item => isSelected(pathname, item)) ?? ITEMS[0];
   return (
     <div className={styles.wrap}>
       <nav className={styles.nav} aria-label="Áreas de configuración">
-        {ITEMS.map((item) => {
-          const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
-          return (
-            <Link
-              prefetch={false}
-              key={item.href}
-              href={item.href}
-              className={`${styles.link} ${active ? styles.active : ""}`}
-              aria-current={active ? "page" : undefined}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
+        <details className={styles.mobileDisclosure} key={pathname}>
+          <summary>
+            <span>Sección de configuración</span>
+            <strong>{current.label}</strong>
+            <span aria-hidden="true" className={styles.chevron}>⌄</span>
+          </summary>
+          <div className={styles.mobileLinks}><AreaLinks pathname={pathname} /></div>
+        </details>
+        <div className={styles.desktopLinks} data-desktop-areas>
+          <AreaLinks pathname={pathname} />
+        </div>
       </nav>
     </div>
   );
