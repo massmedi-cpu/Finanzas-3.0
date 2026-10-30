@@ -117,6 +117,77 @@ test("REC-VIS-251 · forecast primary CTA text meets AA contrast at phone and de
   }
 });
 
+// FA-UI-003/004/005/013–017: verify the actual browser state after an API
+// error, at the three representative viewports and in both visual themes.
+// Synthetic API failures prove presentation only, never backend correctness.
+for (const theme of ["light", "dark"] as const) {
+  test(`FA-UI · fallos de lectura no se presentan como cero confirmado · ${theme}`, async ({ page }, info) => {
+    await mockRecoveryHome(page, "none");
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 960 });
+      await page.goto("/configuration");
+      await expect(page.getByRole("heading", { name: "Configuración sin verificar" })).toBeVisible();
+      await expect(page.locator(".configuration-summary strong").first()).toHaveText("—");
+      await expect(page.getByRole("button", { name: "Crear cuenta" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      await noOverflow(page, width);
+
+      await page.goto("/configuration/rules");
+      await expect(page.getByRole("heading", { name: "Reglas sin verificar" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "+ Nueva regla" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      await noOverflow(page, width);
+
+      await page.goto("/configuration/merchants");
+      await expect(page.getByRole("heading", { name: "Comercios sin verificar" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "+ Nuevo comercio" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      await noOverflow(page, width);
+
+      await page.goto("/accounts");
+      await expect(page.getByText("Estado sin verificar · saldo y fecha desconocidos")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      await noOverflow(page, width);
+
+      await page.goto("/configuration/source");
+      await expect(page.getByRole("heading", { name: "Estado de Google sin verificar" })).toBeVisible();
+      await expect(page.locator(".configuration-summary strong").first()).toHaveText("—");
+      await noOverflow(page, width);
+
+      await page.goto("/review");
+      await expect(page.getByText("Revisión incompleta", { exact: true })).toBeVisible();
+      await expect(page.getByText("Todo en orden", { exact: true })).toHaveCount(0);
+      await noOverflow(page, width);
+
+      // Preserve a visual artifact of the regression state for human review.
+      await page.screenshot({ path: info.outputPath(`review-unverified-${theme}-${width}.png`), fullPage: true });
+    }
+  });
+
+  test(`FA-UI · Preferencias legibles y radios semánticos · ${theme}`, async ({ page }, info) => {
+    await mockRecoveryHome(page, "covered");
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 960 });
+      await page.goto("/configuration/preferences");
+      const group = page.getByRole("group", { name: "Vista por defecto" });
+      await expect(group.getByRole("radio")).toHaveCount(2);
+      const names = await group.getByRole("radio").evaluateAll((nodes) =>
+        nodes.map((node) => (node as HTMLInputElement).name));
+      expect(names).toEqual(["budget-focus", "budget-focus"]);
+      const panel = page.locator(".configuration-grid .config-panel").first();
+      expect(await panel.evaluate((node) => parseFloat(getComputedStyle(node).paddingLeft))).toBeGreaterThanOrEqual(16);
+      await noOverflow(page, width);
+      if (width === 360) {
+        const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+        expect(accessibility.violations.map((v) => v.id)).toEqual([]);
+      }
+      await page.screenshot({ path: info.outputPath(`preferences-${theme}-${width}.png`), fullPage: true });
+    }
+  });
+}
+
 // This matrix verifies browser rendering with synthetic data and unavailable states.
 // Real persistence is evaluated separately by authenticated isolation, without mocks.
 for (const theme of ["light", "dark"] as const) {
