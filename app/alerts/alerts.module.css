@@ -150,6 +150,8 @@
   font-size: var(--font-section-title);
 }
 
+.sectionHint { margin: 0.35rem 0 0; color: var(--color-text-secondary); font-size: var(--font-helper); line-height: 1.5; max-width: 46ch; }
+
 .sectionHeading > strong {
   min-width: 42px;
   padding: 7px 10px;
