@@ -245,6 +245,7 @@
 .legend { margin: var(--space-4) 0; }
 .evolutionLegend span,
 .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .coverageKey { flex-basis: 100%; color: var(--color-text-secondary); font-size: var(--font-helper); line-height: 1.45; overflow-wrap: anywhere; }
 .evolutionLegend i,
 .signals i,
 .legend i { width: 0.58rem; height: 0.58rem; flex: 0 0 auto; display: inline-block; border-radius: 50%; }
