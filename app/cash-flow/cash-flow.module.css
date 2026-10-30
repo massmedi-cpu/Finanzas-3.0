@@ -362,7 +362,9 @@
 }
 
 .detailTitle { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
-.detail h3 { margin: 0; font-size: 1.15rem; text-transform: capitalize; }
+/* Capitalize only the opening letter, not Spanish prepositions such as «de». */
+.detail h3 { margin: 0; font-size: 1.15rem; text-transform: none; }
+.detail h3::first-letter { text-transform: uppercase; }
 .dayTotals { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: var(--space-4) 0; }
 .dayTotals p { margin: 0; color: var(--color-text-secondary); }
 .dayTotals strong { display: block; color: var(--color-text); font-variant-numeric: tabular-nums; }
