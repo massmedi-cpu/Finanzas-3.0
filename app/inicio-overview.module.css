@@ -712,6 +712,21 @@
   .header {
     align-items: flex-start;
   }
+
+  /* FA-UI-009: do not squeeze long balances and coverage into 160px cards.
+     Preserve the full amount and readable type at phone widths. */
+  .decisionGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .decisionCard {
+    min-height: 0;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+  }
+  .decisionCard > strong {
+    font-size: var(--font-kpi-primary);
+    overflow-wrap: anywhere;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
