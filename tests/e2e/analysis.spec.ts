@@ -396,7 +396,7 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
         if (!nav || !main) throw new Error("Missing analysis navigation or content");
         return {
           afterContent: Boolean(main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING),
-          columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\\s+/).filter(Boolean).length,
+          columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         };
       });
