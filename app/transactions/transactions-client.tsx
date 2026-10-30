@@ -1112,8 +1112,7 @@ async function saveEdit(row: TransactionRow) {
           <p className={styles.eyebrow}>FINANCIAL APP · MOVIMIENTOS</p>
           <h1>Movimientos</h1>
           <p>
-            Consulta y gestiona el histórico persistido sin alterar el origen bancario. Cada cambio manual se
-            guarda como cambio manual separado y conserva la trazabilidad hasta la fila original.
+            Consulta y edita tus movimientos sin modificar el extracto bancario original.
           </p>
         </div>
         <div className={styles.summary} role="group" aria-label="Resumen del listado">
@@ -1127,7 +1126,7 @@ async function saveEdit(row: TransactionRow) {
         <div className={styles.coreFilters}>
         <label className={styles.searchField}>
           <span>Buscar</span>
-          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, contraparte, categoría, canal o nota" />
+          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Busca un movimiento, comercio o categoría" />
         </label>
         <label>
           <span>Cuenta</span>
@@ -1175,7 +1174,7 @@ async function saveEdit(row: TransactionRow) {
           <span role="status" aria-live="polite">
             {advancedAppliedCount > 0
               ? `${advancedAppliedCount} filtros avanzados activos`
-              : "Búsqueda, cuenta, categoría, tipo y periodo disponibles arriba"}
+              : "Ajusta los filtros para encontrar tus movimientos"}
           </span>
         </div>
         <div id="movement-advanced-filters" className={styles.advancedFilters} hidden={!advancedOpen}>

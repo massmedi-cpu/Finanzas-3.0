@@ -383,3 +383,32 @@
   .coreFilters, .advancedFilters { grid-template-columns: 1fr; }
   .coreFilters .searchField { grid-column: auto; }
 }
+
+/* FA-UI-008/011: compact readable filters on phones, preserving every
+   field and explicit Apply/Clear. Dates remain full width. */
+@container app-content (max-width: 600px) {
+  .hero { gap: .65rem; }
+  .hero .eyebrow { letter-spacing: .09em; }
+  .hero p:not(.eyebrow) { margin-top: .4rem; line-height: 1.35; }
+  .summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .25rem; }
+  .summary > div,
+  .summary > div:first-child {
+    display: grid;
+    align-content: center;
+    justify-content: start;
+    min-width: 0;
+    gap: .2rem;
+    padding: .5rem .35rem;
+    border: 0;
+    border-top: 1px solid var(--color-border);
+  }
+  .summary strong { font-size: clamp(1.05rem, 4.5vw, 1.35rem); overflow-wrap: anywhere; }
+  .summary span { font-size: .75rem; line-height: 1.25; }
+  .coreFilters { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .65rem; }
+  .coreFilters .searchField { grid-column: 1 / -1; }
+  .coreFilters > label:nth-last-child(-n + 2) { grid-column: 1 / -1; }
+  .filterActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+  .filterActions .resultCount { grid-column: 1 / -1; }
+  .filterActions button { min-width: 0; width: 100%; }
+  .moreFiltersHeader > span { font-size: .8rem; }
+}

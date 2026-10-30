@@ -188,6 +188,34 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+// FA-UI-008: keep search and essentials usable without seven single-column rows.
+for (const theme of ["light", "dark"] as const) {
+  test(`FA-UI-008 · filtros esenciales en móvil ${theme}`, async ({ page }) => {
+    await mockRecoveryHome(page, "none");
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 390]) {
+      await page.setViewportSize({ width, height: 920 });
+      await page.goto("/transactions");
+      const form = page.getByRole("form", { name: "Filtros de movimientos" });
+      await expect(form).toBeVisible();
+      const essential = page.locator("main form").filter({ has: page.locator('[data-testid="account-filter"]') });
+      const layout = await essential.locator('[class*="coreFilters"]').evaluate(node => {
+        const style = getComputedStyle(node);
+        return { tracks: style.gridTemplateColumns.split(/\\s+/).filter(Boolean).length, gap: style.columnGap };
+      });
+      expect(layout.tracks).toBe(2);
+      const dates = form.getByText("Desde", { exact: true });
+      await expect(dates.first()).toBeVisible();
+      const more = form.getByRole("button", { name: /Más filtros/ });
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await more.click();
+      await expect(more).toHaveAttribute("aria-expanded", "true");
+      await expect(form.getByText("Revisión", { exact: true })).toBeVisible();
+      await noOverflow(page, width);
+    }
+  });
+}
+
 // This matrix verifies browser rendering with synthetic data and unavailable states.
 // Real persistence is evaluated separately by authenticated isolation, without mocks.
 for (const theme of ["light", "dark"] as const) {
