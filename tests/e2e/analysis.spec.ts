@@ -398,11 +398,34 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
           afterContent: Boolean(main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING),
           columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          overflowElements: [...document.querySelectorAll("main *")].filter(node => {
+            const bounds = node.getBoundingClientRect();
+            return bounds.right > document.documentElement.clientWidth + 1
+              && getComputedStyle(node).position !== "absolute";
+          }).slice(0, 8).map(node => ({
+            element: node.tagName.toLowerCase(),
+            className: typeof node.className === "string" ? node.className.slice(0, 95) : "",
+            right: Math.round(node.getBoundingClientRect().right),
+          })),
         };
       });
       expect(layout.afterContent, "FA-UI-030: navegación después de los datos").toBe(true);
       expect(layout.columns).toBe(width === 360 ? 2 : 4);
-      expect(layout.overflow).toBeLessThanOrEqual(1);
+      expect(layout.overflow, `FA-UI-030: horizontal overflow at ${width}px/${theme}: ${JSON.stringify(layout.overflowElements)}`).toBeLessThanOrEqual(1);
+      if (width === 360) {
+        // Keep all twelve month buttons accessible to keyboard and touch
+        // without letting the long rail expand the page.
+        const monthViewport = page.locator('[class*="monthViewport"]').first();
+        await expect(monthViewport).toBeVisible();
+        const before = await monthViewport.evaluate(node => ({
+          scrollWidth: node.scrollWidth, clientWidth: node.clientWidth,
+        }));
+        expect(before.scrollWidth).toBeGreaterThan(before.clientWidth);
+        await monthViewport.locator("button").last().focus();
+        await expect.poll(() => monthViewport.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
+          .toBeLessThanOrEqual(1);
+      }
     }
   }
 });
