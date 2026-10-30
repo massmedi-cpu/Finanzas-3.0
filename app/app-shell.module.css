@@ -228,6 +228,7 @@
 
 .content {
   min-width: 0;
+  margin-left: 0;
   container-type: inline-size;
   container-name: app-content;
 }
@@ -283,6 +284,12 @@
   .link { justify-content: flex-start; padding: var(--space-3); }
   .content { margin-left: 14rem; }
   .navigationProgress { position: absolute; inset: 0; margin: 0; }
+}
+
+/* The desktop sidebar offset must not survive any responsive breakpoint.
+   At 360px a stale 14rem offset leaves only 136px for the entire app. */
+@media (max-width: 68.74rem) {
+  .content { margin-left: 0; }
 }
 
 @media (max-width: 48rem) {
