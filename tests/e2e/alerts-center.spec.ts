@@ -217,7 +217,9 @@ test("AUD-E2E-REG-001 · Alertas traduce prioridad a importancia y reserva índi
   const documentAlert = page.locator("article").filter({ hasText: "1 documento sin asociar" });
   await expect(documentAlert).toContainText("Información útil");
   await expect(documentAlert).not.toContainText("Prioridad 68");
+  await expect(page.getByText("El total cuenta avisos, no documentos ni movimientos distintos.")).toBeVisible();
   const detail = documentAlert.locator("details");
+  await expect(detail.locator("summary")).toHaveText("Cómo se ha ordenado");
   await expect(detail).not.toHaveAttribute("open");
   await detail.locator("summary").click();
   await expect(detail).toContainText("Índice de prioridad 68");
