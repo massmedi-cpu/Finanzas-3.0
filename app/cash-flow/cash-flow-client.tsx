@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CashFlowDay, CashFlowEventState, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
-import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow, cashFlowObservedDaySignal } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow, cashFlowObservedDaySignal, cashFlowCalendarCountLabel } from "../../src/application/cash-flow/cash-flow-model";
 import { formatMoneyCents } from "../../src/core/money";
 import { dateHasConfirmedCoverage, periodComparisonIsReliable } from "../../src/application/data-coverage";
 import { CashFlowEvolution } from "./cash-flow-evolution";
@@ -193,9 +193,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
                   aria-label={`${formatDate(day.date)}: ${signals || (!dayActualCovered ? "sin cobertura bancaria confirmada" : forecastReady ? "sin actividad registrada" : "previsión no disponible")}`}
                   aria-pressed={selected === day.date} onClick={() => setSelected(day.date)}>
                   <strong>{Number(day.date.slice(-2))}</strong>
-                  <span className={styles.dayCounts}>{realCount || plannedCount
-                    ? [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null].filter(Boolean).join(" · ")
-                    : realCount === null ? "s/d" : plannedCount === null ? "Previsión no disponible" : "—"}</span>
+                  <span className={styles.dayCounts}>{cashFlowCalendarCountLabel(realCount, plannedCount)}</span>
                   <span className={styles.signals} aria-hidden="true">
                     {cashFlowObservedDaySignal(day, dayActualCovered, "income") ? <i className={styles.realIncome} /> : null}
                     {cashFlowObservedDaySignal(day, dayActualCovered, "expense") ? <i className={styles.realExpense} /> : null}
