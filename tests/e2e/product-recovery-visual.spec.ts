@@ -99,6 +99,36 @@ test("FA-UI-018 · progreso no verificado tras fallos de lectura", async ({ page
   }
 });
 
+// FA-UI-009: no phone-size KPI should need to squeeze a long amount into two
+// very narrow columns; verify the actual grid and its visible amount bounds.
+test("FA-UI-009 · Inicio muestra importes completos en tarjetas móviles", async ({ page }) => {
+  await mockRecoveryHome(page, "covered");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 390, 820, 1366]) {
+      await page.setViewportSize({ width, height: 940 });
+      await page.goto("/");
+      const grid = page.locator('[class*="decisionGrid"]').first();
+      await expect(grid).toBeVisible();
+      const tracks = await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+      if (width <= 390) expect(tracks, `Inicio ${theme}/${width}`).toBe(1);
+      else expect(tracks).toBeGreaterThanOrEqual(2);
+      const readings = await grid.locator("strong").evaluateAll(nodes => nodes.map(node => {
+        const parent = node.closest('[class*="decisionCard"]')!;
+        return { text: node.textContent, amountWidth: node.getBoundingClientRect().width,
+          cardWidth: parent.getBoundingClientRect().width, clipped: getComputedStyle(node).textOverflow === "ellipsis" };
+      }));
+      expect(readings.length).toBeGreaterThanOrEqual(3);
+      for (const reading of readings) {
+        expect(reading.text?.trim().length).toBeGreaterThan(0);
+        expect(reading.amountWidth).toBeLessThanOrEqual(reading.cardWidth + 1);
+        expect(reading.clipped).toBe(false);
+      }
+      await noOverflow(page, width);
+    }
+  }
+});
+
 // REC-VIS-251: a visually blue button in the light theme used the regular dark
 // text token and scored only ~2.74:1. Axe found no issue on an unloaded screen,
 // so explicitly measure the rendered call-to-action on both real browser themes.
