@@ -495,7 +495,6 @@ export default function AnalysisClient({
 
   return (
     <>
-      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
       <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
       <header className={styles.header}>
         <div className={styles.headerTitle}>
@@ -852,6 +851,7 @@ export default function AnalysisClient({
         </>
       )}
       </main>
+      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
     </>
   );
 }
