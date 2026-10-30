@@ -394,7 +394,58 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
         const nav = document.querySelector('nav[aria-label="Continuar desde Análisis"]');
         const main = document.querySelector("main");
         if (!nav || !main) throw new Error("Missing analysis navigation or content");
+        const describeShell = (element: Element | null) => {
+          if (!element) return null;
+          const rect = element.getBoundingClientRect();
+          const css = getComputedStyle(element);
+          return {
+            tag: element.tagName.toLowerCase(),
+            className: typeof element.className === "string" ? element.className.slice(0, 110) : "",
+            left: Math.round(rect.left), right: Math.round(rect.right), width: Math.round(rect.width),
+            marginLeft: css.marginLeft, paddingLeft: css.paddingLeft, position: css.position,
+            display: css.display, boxSizing: css.boxSizing,
+            scrollWidth: element.scrollWidth, clientWidth: element.clientWidth,
+          };
+        };
+        const content = document.getElementById("main-content");
+        const shellDiagnostics = {
+          viewport: {
+            innerWidth: window.innerWidth, outerWidth: window.outerWidth,
+            clientWidth: document.documentElement.clientWidth,
+            rootFontSize: getComputedStyle(document.documentElement).fontSize,
+            desktopSidebarMatches: matchMedia("(min-width: 68.75rem)").matches,
+            mobileDockMatches: matchMedia("(max-width: 48rem)").matches,
+            scrollX: window.scrollX,
+          },
+          root: describeShell(document.querySelector('[data-app-shell="shared"]')),
+          content: describeShell(content),
+          main: describeShell(main),
+          parent: describeShell(main.parentElement),
+          navigation: describeShell(document.querySelector('[class*="navigationFrame"]')),
+          matchingOffsetRules: [...document.styleSheets].flatMap(sheet => {
+            try {
+              const matched: Array<{ selector: string; media: string; active: boolean; marginLeft: string }> = [];
+              const visit = (rules: CSSRuleList, media = "all", active = true) => {
+                for (const rule of Array.from(rules)) {
+                  if (rule instanceof CSSMediaRule) {
+                    visit(rule.cssRules, rule.conditionText, active && matchMedia(rule.conditionText).matches);
+                  } else if (rule instanceof CSSStyleRule
+                    && rule.selectorText.includes("content")
+                    && rule.style.getPropertyValue("margin-left")) {
+                    matched.push({
+                      selector: rule.selectorText.slice(0, 100), media, active,
+                      marginLeft: rule.style.getPropertyValue("margin-left"),
+                    });
+                  }
+                }
+              };
+              visit(sheet.cssRules);
+              return matched.slice(0, 16);
+            } catch { return []; }
+          }).slice(0, 32),
+        };
         return {
+          shellDiagnostics,
           afterContent: Boolean(main.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING),
           columns: getComputedStyle(nav.querySelector('[class*="links"]')!).gridTemplateColumns.split(/\s+/).filter(Boolean).length,
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -444,7 +495,7 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
       });
       expect(layout.afterContent, "FA-UI-030: navegación después de los datos").toBe(true);
       expect(layout.columns).toBe(width === 360 ? 2 : 4);
-      expect(layout.overflow, `FA-UI-030 at ${width}px/${theme}: ${JSON.stringify({ offenders: layout.visibleOffenders, roots: layout.rootBoxes, chart: layout.chartGeometry })}`).toBeLessThanOrEqual(1);
+      expect(layout.overflow, `FA-UI-030 at ${width}px/${theme}: ${JSON.stringify({ shell: layout.shellDiagnostics, offenders: layout.visibleOffenders, roots: layout.rootBoxes, chart: layout.chartGeometry })}`).toBeLessThanOrEqual(1);
       if (width === 360) {
         // Keep all twelve month buttons accessible to keyboard and touch
         // without letting the long rail expand the page.
