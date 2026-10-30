@@ -277,7 +277,7 @@ test("FA-UI-002 · Editar activo contrasta y es distinguible de disabled en móv
         return { contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
           enabledOpacity: Number(css.opacity), disabledOpacity, background: css.backgroundColor };
       });
-      expect(colors.background, `fondo opaco ${theme}/${width}`).toMatch(/^rgb\(/);
+      expect(colors.background, `fondo de control ${theme}/${width}`).toMatch(/^rgba?\(/);
       expect(colors.contrast, `contraste botón activo ${theme}/${width}`).toBeGreaterThanOrEqual(4.5);
       expect(colors.enabledOpacity).toBe(1);
       expect(colors.disabledOpacity).toBeLessThanOrEqual(0.55);
