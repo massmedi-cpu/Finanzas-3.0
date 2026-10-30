@@ -82,10 +82,13 @@
     width: min(100% - 1rem, var(--content-max));
     padding: 0.5rem;
   }
-
+  /* FA-UI-030: four stacked exits needlessly bury the following content.
+     Keep them usable in two compact, full-height touch targets. */
+  .intro { padding: .35rem .5rem; }
   .links {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .link { overflow-wrap: anywhere; }
 }
 
 
