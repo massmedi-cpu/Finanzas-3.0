@@ -206,10 +206,15 @@ for (const theme of ["light", "dark"] as const) {
       expect(layout.tracks).toBe(2);
       const dates = form.getByText("Desde", { exact: true });
       await expect(dates.first()).toBeVisible();
-      const more = form.getByRole("button", { name: /Más filtros/ });
+      // The accessible name changes when expanded ("Ocultar filtros avanzados").
+      // Locate the same disclosure by its stable relationship to the panel.
+      const more = form.locator('button[aria-controls="movement-advanced-filters"]');
+      await expect(more).toHaveCount(1);
       await expect(more).toHaveAttribute("aria-expanded", "false");
+      await expect(more).toHaveText(/Más filtros/);
       await more.click();
       await expect(more).toHaveAttribute("aria-expanded", "true");
+      await expect(more).toHaveText(/Ocultar filtros avanzados/);
       await expect(form.getByText("Revisión", { exact: true })).toBeVisible();
       await noOverflow(page, width);
     }
