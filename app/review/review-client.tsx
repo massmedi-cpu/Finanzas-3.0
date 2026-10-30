@@ -217,8 +217,11 @@ export default function ReviewClient() {
           <h1>Para revisar</h1>
         </div>
         <div className={styles.heroStatus} aria-live="polite">
-          <strong>{loading ? "…" : unavailableItems.length > 0 ? formatInteger(unavailableItems.length) : formatInteger(actionableCount)}</strong>
-          <span>{loading ? "Comprobando" : unavailableItems.length > 0 ? unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
+          <span>{loading ? "Comprobando" : unavailableItems.length > 0 ? actionableCount === 1 ? "acción pendiente confirmada" : "acciones pendientes confirmadas" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          {!loading && unavailableItems.length > 0 && (
+            <span role="status">{formatInteger(unavailableItems.length)} {unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"}</span>
+          )}
         </div>
       </header>
 
@@ -256,12 +259,12 @@ export default function ReviewClient() {
             )}
           </section>
 
-          {clearItems.length > 0 && unavailableItems.length === 0 && (
+          {clearItems.length > 0 && (
             <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
               <div className={styles.compactHeading}>
                 <div>
                   <p className={styles.kicker}>SIN INCIDENCIAS</p>
-                  <h2 id="review-clear-heading">Todo en orden</h2>
+                  <h2 id="review-clear-heading">{unavailableItems.length > 0 ? "Sin incidencias en áreas verificadas" : "Todo en orden"}</h2>
                 </div>
                 <strong>{formatInteger(clearItems.length)}</strong>
               </div>
