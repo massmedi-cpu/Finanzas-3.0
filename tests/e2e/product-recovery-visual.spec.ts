@@ -110,7 +110,7 @@ test("FA-UI-009 · Inicio muestra importes completos en tarjetas móviles", asyn
       await page.goto("/");
       const grid = page.locator('[class*="decisionGrid"]').first();
       await expect(grid).toBeVisible();
-      const tracks = await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+      const tracks = await grid.evaluate(node => getComputedStyle(node).gridTemplateColumns.split(/\s+/).filter(Boolean).length);
       if (width <= 390) expect(tracks, `Inicio ${theme}/${width}`).toBe(1);
       else expect(tracks).toBeGreaterThanOrEqual(2);
       const readings = await grid.locator("strong").evaluateAll(nodes => nodes.map(node => {
