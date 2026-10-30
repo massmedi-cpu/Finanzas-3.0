@@ -246,6 +246,53 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   expect(controlsTooSmall).toBe(0);
 });
 
+test("FA-UI-002 · Editar activo contrasta y es distinguible de disabled en móvil/escritorio", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 950 });
+      await page.goto("/transactions");
+      const edit = page.getByTestId(`edit-${firstId}`);
+      await expect(edit).toBeVisible();
+      await expect(edit).toBeEnabled();
+      const colors = await edit.evaluate((node) => {
+        const css = getComputedStyle(node);
+        const rgb = (text: string) => (text.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+        const luminance = (color: string) => {
+          const channels = rgb(color).map(value => {
+            const normalized = value / 255;
+            return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const fg = luminance(css.color);
+        const bg = luminance(css.backgroundColor);
+        const clone = node.cloneNode(true) as HTMLButtonElement;
+        clone.disabled = true;
+        node.parentElement!.appendChild(clone);
+        const disabledOpacity = Number(getComputedStyle(clone).opacity);
+        clone.remove();
+        return { contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
+          enabledOpacity: Number(css.opacity), disabledOpacity, background: css.backgroundColor };
+      });
+      expect(colors.background, `fondo opaco ${theme}/${width}`).toMatch(/^rgb\(/);
+      expect(colors.contrast, `contraste botón activo ${theme}/${width}`).toBeGreaterThanOrEqual(4.5);
+      expect(colors.enabledOpacity).toBe(1);
+      expect(colors.disabledOpacity).toBeLessThanOrEqual(0.55);
+      await edit.focus();
+      const outline = await edit.evaluate((node) => getComputedStyle(node).outlineStyle);
+      expect(outline).not.toBe("none");
+      await edit.click();
+      await expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+      expect(patches).toHaveLength(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
 test.describe("Fechas de Movimientos con navegador en inglés", () => {
   test.use({ locale: "en-US" });
 
