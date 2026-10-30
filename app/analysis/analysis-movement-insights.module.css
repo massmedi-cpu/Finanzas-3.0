@@ -146,6 +146,11 @@
 .chartData { margin-top: 0.7rem; color: var(--color-text-secondary); }
 .chartData summary {
   width: fit-content;
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  padding: .4rem .55rem;
+  border-radius: .4rem;
   cursor: pointer;
   font-size: max(var(--font-helper), 0.76rem);
   font-weight: 700;

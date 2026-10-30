@@ -798,3 +798,50 @@ test("AUD-E2E-ANA-001 · concentración solo se abre desde ranking de comercios"
   await concentration.click();
   await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toHaveCount(0);
 });
+
+
+/* FA-UI-029: the map is an illustration; the daily table is its real
+ * keyboard/touch drilldown. These are synthetic observations, not bank QA. */
+test.describe("FA-UI-029 · detalle diario del mapa de calor", () => {
+  test.use({ hasTouch: true });
+  for (const theme of ["light", "dark"] as const) {
+    test(`teclado y toque con ${theme} a 360/820/1366 px`, async ({ page }) => {
+      await page.route("**/api/analysis**", (route) => route.fulfill({
+        status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT),
+      }));
+      await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
+      }));
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+
+      for (const width of [360, 820, 1366]) {
+        await page.setViewportSize({ width, height: 960 });
+        await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+        await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+        await page.getByRole("button", { name: "Aplicar", exact: true }).click();
+        await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+
+        const label = page.getByText("Consultar importes diarios del mapa de calor", { exact: true });
+        await expect(label).toBeVisible();
+        expect(await label.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+        await label.focus();
+        await expect(label).toBeFocused();
+        await page.keyboard.press("Enter");
+        const details = label.locator("..");
+        await expect(details).toHaveAttribute("open", "");
+        const observed = details.getByRole("link", { name: "1 sept", exact: true });
+        await expect(observed).toHaveAttribute("href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-01&kind=expense");
+        await expect(details.getByRole("row", { name: /^2 sept / }).getByRole("link")).toHaveCount(0);
+        expect(await observed.evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+
+        await label.tap();
+        await expect(details).not.toHaveAttribute("open", "");
+        await label.tap();
+        await expect(details).toHaveAttribute("open", "");
+        await observed.tap();
+        await expect(page).toHaveURL(/\/transactions\?dateFrom=2026-09-01&dateTo=2026-09-01&kind=expense/);
+      }
+    });
+  }
+});
