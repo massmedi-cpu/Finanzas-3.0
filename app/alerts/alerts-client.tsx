@@ -503,7 +503,7 @@ export default function AlertsClient() {
 
       <section className={styles.alertSection} aria-labelledby="active-alerts-title">
         <div className={styles.sectionHeading}>
-          <div><span>POR IMPORTANCIA</span><h2 id="active-alerts-title">Alertas activas</h2></div>
+          <div><span>POR IMPORTANCIA</span><h2 id="active-alerts-title">Alertas activas</h2><p className={styles.sectionHint}>El total cuenta avisos, no documentos ni movimientos distintos.</p></div>
           <strong>{snapshot ? summary.total : "—"}</strong>
         </div>
 
@@ -530,7 +530,7 @@ export default function AlertsClient() {
                 <h3>{alert.title}</h3>
                 <p>{alert.detail}</p>
                 <details className={styles.priorityDetail}>
-                  <summary>Orden técnico</summary>
+                  <summary>Cómo se ha ordenado</summary>
                   <span>Índice de prioridad {alert.priority}; determina el orden de presentación, no es una puntuación de riesgo financiero.</span>
                 </details>
               </div>
@@ -544,7 +544,7 @@ export default function AlertsClient() {
         <strong>Alertas de solo lectura</strong>
         <p>{isDocumentsDeferred()
           ? "Financial App agrupa señales ya calculadas o persistidas. Las decisiones se guardan desde el módulo correspondiente."
-          : "Financial App agrupa señales ya calculadas o persistidas. Esta pantalla no corrige movimientos, no confirma documentos y no ejecuta OCR en segundo plano."}</p>
+          : "Financial App agrupa señales ya calculadas o persistidas. Esta pantalla no corrige movimientos, no confirma documentos y no ejecuta OCR en segundo plano. Un documento puede necesitar asociación y revisión por separado; los avisos no representan documentos únicos."}</p>
       </aside>
     </main>
   );
