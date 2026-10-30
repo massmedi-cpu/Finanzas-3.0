@@ -234,7 +234,7 @@ test("REC-VIS-493 · Configuración muestra todas las pestañas sin recorte en e
     const selected = links.getByRole("link", { name: "Fuente bancaria" });
     const final = links.getByRole("link", { name: "Datos y privacidad" });
     await expect(selected).toHaveAttribute("aria-current", "page");
-    await expect.poll(async () => nav.evaluate((element) => {
+    await expect.poll(async () => links.evaluate((element) => {
       const active = element.querySelector('[aria-current="page"]');
       if (!active) return false;
       const parent = element.getBoundingClientRect();

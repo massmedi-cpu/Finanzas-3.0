@@ -412,3 +412,19 @@
   .filterActions button { min-width: 0; width: 100%; }
   .moreFiltersHeader > span { font-size: .8rem; }
 }
+
+/* FA-UI-011: safety/traceability explanation remains present but does not
+   consume vertical space before filters on a narrow viewport. */
+.sourceExplanation { margin-top: .4rem; color: var(--color-text-secondary); font-size: var(--font-helper); }
+.sourceExplanation > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: .3rem .45rem;
+  border-radius: .35rem;
+  cursor: pointer;
+  color: var(--color-text);
+  font-weight: 700;
+}
+.sourceExplanation > summary:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 2px; }
+.sourceExplanation[open] > p { margin: .15rem 0 .5rem; line-height: 1.45; }

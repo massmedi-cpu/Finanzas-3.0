@@ -31,7 +31,16 @@ test("scope monousuario · Datos y privacidad comunica operación interna sin pr
   await page.goto("/configuration/data");
 
   await expect(page.getByRole("heading", { name: "Datos y privacidad" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Datos y privacidad" })).toHaveAttribute("aria-current", "page");
+  const settingsNav = page.getByRole("navigation", { name: "Áreas de configuración" });
+  const menu = settingsNav.locator("details");
+  if (await menu.isVisible()) {
+    await expect(menu.locator("summary")).toContainText("Datos y privacidad");
+    await menu.locator("summary").click();
+    await expect(menu).toHaveAttribute("open", "");
+    await expect(menu.getByRole("link", { name: "Datos y privacidad" })).toHaveAttribute("aria-current", "page");
+  } else {
+    await expect(settingsNav.getByRole("link", { name: "Datos y privacidad" })).toHaveAttribute("aria-current", "page");
+  }
   await expect(page.getByText("Verificado", { exact: true })).toHaveCount(5);
   await expect(page.getByText("Operación técnica", { exact: true })).toHaveCount(2);
   await expect(page.getByText("No disponible todavía", { exact: true })).toHaveCount(0);

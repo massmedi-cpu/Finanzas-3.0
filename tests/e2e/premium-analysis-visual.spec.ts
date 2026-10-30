@@ -821,6 +821,7 @@ test.describe("FA-UI-029 · detalle diario del mapa de calor", () => {
         await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
         await page.getByRole("button", { name: "Aplicar", exact: true }).click();
         await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+        await page.getByRole("button", { name: "Mapa de calor", exact: true }).click();
 
         const label = page.getByText("Consultar importes diarios del mapa de calor", { exact: true });
         await expect(label).toBeVisible();

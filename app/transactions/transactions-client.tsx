@@ -1114,6 +1114,10 @@ async function saveEdit(row: TransactionRow) {
           <p>
             Consulta y edita tus movimientos sin modificar el extracto bancario original.
           </p>
+          <details className={styles.sourceExplanation}>
+            <summary>Cómo se guardan los cambios</summary>
+            <p>Cada cambio manual se guarda como cambio manual separado, sin alterar el origen bancario.</p>
+          </details>
         </div>
         <div className={styles.summary} role="group" aria-label="Resumen del listado">
           <div><strong>{loading || listUnverified ? "—" : formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
