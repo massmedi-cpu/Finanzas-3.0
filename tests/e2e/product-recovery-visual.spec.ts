@@ -201,7 +201,7 @@ for (const theme of ["light", "dark"] as const) {
       const essential = page.locator("main form").filter({ has: page.locator('[data-testid="account-filter"]') });
       const layout = await essential.locator('[class*="coreFilters"]').evaluate(node => {
         const style = getComputedStyle(node);
-        return { tracks: style.gridTemplateColumns.split(/\\s+/).filter(Boolean).length, gap: style.columnGap };
+        return { tracks: style.gridTemplateColumns.split(/\s+/).filter(Boolean).length, gap: style.columnGap };
       });
       expect(layout.tracks).toBe(2);
       const dates = form.getByText("Desde", { exact: true });
