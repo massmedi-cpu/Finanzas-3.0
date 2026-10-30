@@ -287,6 +287,12 @@
 }
 
 @media (max-width: 48rem) {
+  /* The desktop navigation offset must never reduce the 360px content viewport.
+     Use the existing governed mobile breakpoint, after the wide sidebar rule. */
+  .content {
+    margin-left: 0;
+  }
+
   .root {
     padding-bottom: calc(5.2rem + env(safe-area-inset-bottom));
   }
