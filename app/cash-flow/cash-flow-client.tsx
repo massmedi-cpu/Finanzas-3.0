@@ -195,7 +195,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
                   <strong>{Number(day.date.slice(-2))}</strong>
                   <span className={styles.dayCounts}>{realCount || plannedCount
                     ? [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null].filter(Boolean).join(" · ")
-                    : realCount === null ? "Sin cobertura" : plannedCount === null ? "Previsión no disponible" : "—"}</span>
+                    : realCount === null ? "s/d" : plannedCount === null ? "Previsión no disponible" : "—"}</span>
                   <span className={styles.signals} aria-hidden="true">
                     {cashFlowObservedDaySignal(day, dayActualCovered, "income") ? <i className={styles.realIncome} /> : null}
                     {cashFlowObservedDaySignal(day, dayActualCovered, "expense") ? <i className={styles.realExpense} /> : null}
@@ -210,6 +210,9 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
           </div>
         </div>
         <div className={styles.legend} role="group" aria-label="Leyenda del Cash Flow">
+          {view.days.some((day) => !actualCoveredOn(day.date)) ? (
+            <span className={styles.coverageKey}>s/d = sin cobertura bancaria confirmada; no equivale a 0 €.</span>
+          ) : null}
           <span><i className={styles.realIncome} /> Entrada real</span><span><i className={styles.realExpense} /> Salida real</span>
           <span><i className={styles.suggested} /> Sugerido</span><span><i className={styles.confirmed} /> Confirmado</span>
           <span><i className={styles.realized} /> Realizado</span><span><i className={styles.discarded} /> Descartado</span>
