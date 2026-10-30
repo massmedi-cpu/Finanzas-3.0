@@ -359,6 +359,9 @@ export default function OnboardingClient() {
   }, [accountsReady, loading, state, summaryReady, summaryPartial]);
 
   const completedCount = steps.filter((step) => step.status === "Completado").length;
+  // FA-UI-018: a failed/partial read cannot establish the denominator's status.
+  // Keep verified step badges, but never turn unavailable evidence into 0/5.
+  const progressUnverified = !loading && (readDeadlineReached || steps.some((step) => step.status === "No disponible"));
   const activationComplete = !loading && summaryReady;
   const nextStep = steps.find((step) => step.status === "Parcial")
     ?? steps.find((step) => step.status === "Siguiente")
@@ -376,8 +379,8 @@ export default function OnboardingClient() {
           </p>
         </div>
         <div className={styles.progress} role="group" aria-label="Progreso de puesta en marcha">
-          <strong>{loading ? "…" : `${completedCount}/5`}</strong>
-          <span>{loading ? "Comprobando tu estado" : activationComplete ? "Ya puedes usar tu resumen" : "Objetivos completados"}</span>
+          <strong>{loading ? "…" : progressUnverified ? "—/5" : `${completedCount}/5`}</strong>
+          <span>{loading ? "Comprobando tu estado" : progressUnverified ? "Avance sin verificar" : activationComplete ? "Ya puedes usar tu resumen" : "Objetivos completados"}</span>
         </div>
       </header>
 
