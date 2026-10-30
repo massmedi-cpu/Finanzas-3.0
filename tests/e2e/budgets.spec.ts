@@ -1165,10 +1165,10 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
   });
 
   await page.goto("/budgets?month=2026-07");
-  // REC-UX-412: the responsive shell may render a second month input outside
-  // the main region. Assert ONE product control and its correct value instead
-  // of an ambiguous whole-page locator (both existing inputs had 2026-07).
-  const budgetMonth = page.locator('main input[type="month"]');
+  // REC-UX-412: the global contextual month selector can also sit inside
+  // the main landmark. Scope to the budget module's named control group,
+  // keeping the single-control assertion without depending on shell layout.
+  const budgetMonth = page.getByRole("group", { name: "Controles de presupuesto" }).locator('input[type="month"]');
   await expect(budgetMonth).toHaveCount(1);
   await expect(budgetMonth).toHaveValue("2026-07");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
