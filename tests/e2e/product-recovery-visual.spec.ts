@@ -76,6 +76,29 @@ test("REC-UI-ONBOARD-188 · Primeros pasos usa superficies y contraste accesible
   }
 });
 
+// FA-UI-018: 503 responses in both themes must never be counted as 0/5.
+test("FA-UI-018 · progreso no verificado tras fallos de lectura", async ({ page }) => {
+  await mockRecoveryHome(page, "none");
+  await page.route("**/api/source/google/status", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"unavailable"}' }));
+  await page.route("**/api/source/google/sync", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"unavailable"}' }));
+  await page.route("**/api/configuration", (route) =>
+    route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"unavailable"}' }));
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 960 });
+      await page.goto("/onboarding");
+      const progress = page.getByRole("group", { name: "Progreso de puesta en marcha" });
+      await expect(progress.locator("strong")).toHaveText("—/5");
+      await expect(progress).toContainText("Avance sin verificar");
+      await expect(page.getByText("0/5", { exact: true })).toHaveCount(0);
+      await noOverflow(page, width);
+    }
+  }
+});
+
 // REC-VIS-251: a visually blue button in the light theme used the regular dark
 // text token and scored only ~2.74:1. Axe found no issue on an unloaded screen,
 // so explicitly measure the rendered call-to-action on both real browser themes.
