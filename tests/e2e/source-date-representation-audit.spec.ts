@@ -378,3 +378,108 @@ test("REC-SYNC-406 · complete original reread detects tampering beyond eight-fi
   expect(check).toBeGreaterThan(reparse);
   expect(success).toBeGreaterThan(check);
 });
+
+
+test("REC-SYNC-450 · explicitly opted-in Hora and Notas edits preserve prior immutable originals", () => {
+  const original = source();
+  const persisted = stored(original);
+  const current = replaceCell(replaceCell(original, 2, "12:34"), 20, "Nota auxiliar sintetica");
+  const pristine = JSON.stringify({ original, persisted, current });
+
+  expect(() => prepareVerifiedAppendOnlySourcePlan(current, persisted))
+    .toThrow("source_date_representation_audit_invalid_snapshot");
+  expect(auditOfficialSourceDateRepresentations(current, persisted)).toMatchObject({
+    baselineClassification: "blocked", changedRows: 1,
+  });
+
+  const approved = prepareVerifiedAppendOnlySourcePlan(
+    current, persisted, { allowAuxiliaryMetadataChanges: true },
+  );
+  expect(approved.audit).toMatchObject({
+    baselineClassification: "auxiliary_metadata_only", sourceRows: 4,
+    persistedRows: 4, exactRows: 3, dateRepresentationRows: 0,
+    auxiliaryMetadataRows: 1, changedRows: 0, pendingRows: 0, orphanRows: 0,
+  });
+  expect(approved.preservedAuxiliaryRows).toBe(1);
+  expect(approved.preservedRepresentationRows).toBe(0);
+  const originalFirst = persisted.rows.find(row => row.source_row_key === "SYN-CC-1")!;
+  const batchFirst = approved.batch.observations.find(row => row.sourceRowKey === "SYN-CC-1")!;
+  expect(batchFirst.sourcePayload).toEqual(originalFirst.source_payload);
+  expect(batchFirst.sourceFingerprint).toBe(originalFirst.source_fingerprint);
+  expect(batchFirst.sourcePayload.Hora).toBeNull();
+  expect(batchFirst.sourcePayload.Notas).toBeNull();
+  expect(JSON.stringify({ original, persisted, current })).toBe(pristine);
+});
+
+test("REC-SYNC-451 · approved auxiliary changes permit ONLY new inserts without revising prior rows", () => {
+  const original = source();
+  const persisted = stored(original);
+  const google = replaceCell(replaceCell(original, 2, "18:26"), 20, "Observacion nueva");
+  const incoming = { ...google, sheets: google.sheets.map((sheet, index) => index ? sheet : {
+    ...sheet, rows: [row("SYN-CC-NEW"), ...sheet.rows],
+  }) };
+  const approved = prepareVerifiedAppendOnlySourcePlan(
+    incoming, persisted, { allowAuxiliaryMetadataChanges: true },
+  );
+  expect(approved.audit).toMatchObject({
+    sourceRows: 5, persistedRows: 4, pendingRows: 1,
+    auxiliaryMetadataRows: 1, changedRows: 0, orphanRows: 0,
+  });
+  const oldByKey = new Map(persisted.rows.map(row => [row.source_row_key, row]));
+  for (const item of approved.batch.observations) {
+    const prior = oldByKey.get(item.sourceRowKey);
+    if (!prior) continue;
+    expect(item.sourcePayload).toEqual(prior.source_payload);
+    expect(item.sourceFingerprint).toBe(prior.source_fingerprint);
+  }
+  const expected = { rows: approved.batch.observations.map(item => ({
+    source_file_id: approved.batch.sourceFileId,
+    source_sheet_id: item.sourceSheetId, source_row_key: item.sourceRowKey,
+    source_fingerprint: item.sourceFingerprint, account_external_key: item.accountExternalKey,
+    bank_date: item.bankDate, amount_cents: String(item.amountCents),
+    balance_after_cents: item.balanceAfterCents === null ? null : String(item.balanceAfterCents),
+  })) };
+  expect(verifyPlannedAppendOnlyPostflight(approved, expected)).toMatchObject({
+    status: "verified", sourceRows: 5, persistedRows: 5, matchingRows: 5,
+  });
+});
+
+test("REC-SYNC-452 · opt-in still rejects financial, review, category and unsafe auxiliary edits", () => {
+  const original = source();
+  const persisted = stored(original);
+  const examples: Array<[number, unknown]> = [
+    [13, 123.45], [14, 500], [10, "CONCEPTO CAMBIADO"],
+    [11, "CATEGORIA CAMBIADA"], [7, "Gasto"], [19, "Si"],
+    [8, "Categoria cambiada"], [12, "Comercio cambiado"],
+    [2, 0.5], [20, true],
+  ];
+  for (const [column, value] of examples) {
+    const modified = replaceCell(original, column, value);
+    expect(() => prepareVerifiedAppendOnlySourcePlan(
+      modified, persisted, { allowAuxiliaryMetadataChanges: true },
+    )).toThrow("source_date_representation_audit_invalid_snapshot");
+  }
+});
+
+test("REC-SYNC-453 · date representation and auxiliary edits may coexist without altering stored bytes", () => {
+  const original = source();
+  const persisted = stored(original);
+  const incoming = replaceCell(replaceCell(replaceCell(original, 1, SERIAL), 2, "17:20"), 20, "Nota");
+  const plan = prepareVerifiedAppendOnlySourcePlan(
+    incoming, persisted, { allowAuxiliaryMetadataChanges: true },
+  );
+  expect(plan.audit).toMatchObject({
+    baselineClassification: "auxiliary_metadata_only",
+    auxiliaryMetadataRows: 1, dateRepresentationRows: 0, changedRows: 0,
+  });
+  expect(plan.preservedAuxiliaryRows).toBe(1);
+  expect(plan.batch.observations[0].sourcePayload.Fecha).toBe("21/10/2026");
+  expect(plan.batch.observations[0].sourcePayload.Hora).toBeNull();
+  expect(plan.batch.observations[0].sourcePayload.Notas).toBeNull();
+
+  const forged = structuredClone(persisted);
+  forged.rows[0].source_payload.Notas = "Ocultacion maliciosa";
+  expect(() => prepareVerifiedAppendOnlySourcePlan(
+    incoming, forged, { allowAuxiliaryMetadataChanges: true },
+  )).toThrow("source_date_representation_audit_invalid_snapshot");
+});
