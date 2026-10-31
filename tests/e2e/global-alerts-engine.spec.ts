@@ -4,6 +4,7 @@ import { deriveGlobalAlerts, summarizeGlobalAlerts } from "../../src/application
 const base = {
   today: "2026-09-30",
   syncState: "ok" as const,
+  bankCoverageVerified: true,
   failedSourceCount: 0,
   quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
   month: { operatingNetCents: 100_00 },
@@ -100,4 +101,60 @@ test("Axioma · sin señales no genera ruido y el resumen queda a cero", () => {
   const alerts = deriveGlobalAlerts(base);
   expect(alerts).toEqual([]);
   expect(summarizeGlobalAlerts(alerts)).toEqual({ total: 0, danger: 0, warning: 0, info: 0 });
+});
+
+test("Alertas · agrupa miles desde cuatro cifras y presenta la fecha del pago en español", () => {
+  const alerts = deriveGlobalAlerts({
+    ...base,
+    unassociatedDocumentCount: 1234,
+    pendingDocumentReviewCount: 50000,
+    forecast: {
+      ...base.forecast,
+      plannedItems: 1,
+      items: [{ date: "2026-10-02", concept: "Recibo", amountCents: -4000, status: "planned", affectsProjection: true }],
+    },
+  });
+  expect(alerts.find((alert) => alert.id === "unassociated-documents")?.title).toBe("1.234 documentos sin asociar");
+  expect(alerts.find((alert) => alert.id === "pending-document-review")?.title).toBe("50.000 documentos pendientes de revisar");
+  expect(alerts.find((alert) => alert.id === "upcoming-payments")?.detail).toContain("02/10/2026");
+});
+
+test("REC-ALT-009 · sin cobertura bancaria no se certifican gasto, margen ni resultado mensual", () => {
+  const alerts = deriveGlobalAlerts({
+    ...base,
+    bankCoverageVerified: false,
+    month: { operatingNetCents: -25_00 },
+    budgets: [
+      { categoryName: "Compras", progressBps: 9200, status: "on_track" },
+      { categoryName: "Ocio", progressBps: 12000, status: "over" },
+    ],
+    forecast: { ...base.forecast, plannedItems: 1, projectedClosingBalanceCents: -400_00 },
+    uncategorizedCount: 2,
+  });
+  const ids = alerts.map((alert) => alert.id);
+  expect(ids).not.toContain("negative-month-result");
+  expect(ids).not.toContain("forecast-negative-balance");
+  expect(ids).not.toContain("budget-near-limit");
+  expect(ids).not.toContain("budget-over");
+  expect(ids).toContain("uncategorized-transactions");
+});
+
+test("REC-ALT-010 · falta de certificado también bloquea dinero derivado en llamadas nuevas", () => {
+  const input = {
+    ...base,
+    month: { operatingNetCents: -1_00 },
+    budgets: [{ categoryName: "Casa", progressBps: 10500, status: "over" as const }],
+  };
+  const { bankCoverageVerified: _unused, ...noCertificate } = input;
+  const ids = deriveGlobalAlerts(noCertificate).map((alert) => alert.id);
+  expect(ids).not.toContain("negative-month-result");
+  expect(ids).not.toContain("budget-over");
+});
+
+test("REC-ALT-016 · saldo futuro negativo se anuncia solo con origen bancario verificado", () => {
+  const forecast = { ...base.forecast, plannedItems: 1, projectedClosingBalanceCents: -500_00 };
+  expect(deriveGlobalAlerts({ ...base, forecast, bankCoverageVerified: true })
+    .some((item) => item.id === "forecast-negative-balance")).toBe(true);
+  expect(deriveGlobalAlerts({ ...base, forecast, bankCoverageVerified: false })
+    .some((item) => item.id === "forecast-negative-balance")).toBe(false);
 });

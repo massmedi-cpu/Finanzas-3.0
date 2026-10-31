@@ -30,7 +30,8 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
 
   await expect(page.getByRole("heading", { name: "Para revisar" })).toBeVisible();
   await expect(page.getByText("8", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("acciones pendientes", { exact: true })).toBeVisible();
+  await expect(page.getByText("acciones pendientes confirmadas", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 comprobación sin verificar", { exact: true })).toBeVisible();
 
   const actions = page.getByRole("region", { name: "Requiere atención" });
   await expect(actions.getByRole("heading", { name: "Movimientos por revisar" })).toBeVisible();
@@ -42,7 +43,7 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
   const reviewLink = actions.getByRole("link", { name: "Revisar" }).first();
   await expect(reviewLink).toHaveAttribute("href", "/transactions?reviewState=needs_review");
 
-  const clear = page.getByRole("region", { name: "Todo en orden" });
+  const clear = page.getByRole("region", { name: "Sin incidencias en áreas verificadas" });
   await expect(clear.getByText("Posibles duplicados", { exact: true })).toBeVisible();
   await expect(clear.getByText("Documentos pendientes", { exact: true })).toBeVisible();
   await expect(clear.getByText("Sincronización bancaria", { exact: true })).toBeVisible();
@@ -50,6 +51,7 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
   const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
   await expect(unavailable.getByText("Previsiones con baja confianza", { exact: true })).toBeVisible();
   await expect(unavailable.getByRole("link", { name: "Abrir sección" })).toHaveAttribute("href", "/forecast");
+  await expect(page.getByText("Todo en orden", { exact: true })).toHaveCount(0);
 });
 
 test("Para revisar no confunde una fuente caída con cero incidencias", async ({ page }) => {
@@ -58,7 +60,7 @@ test("Para revisar no confunde una fuente caída con cero incidencias", async ({
   await expect(page.getByRole("heading", { name: "No se pudo comprobar" })).toBeVisible();
   const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
   await expect(unavailable.getByText("Previsiones con baja confianza", { exact: true })).toBeVisible();
-  const clear = page.getByRole("region", { name: "Todo en orden" });
+  const clear = page.getByRole("region", { name: "Sin incidencias en áreas verificadas" });
   await expect(clear.getByText("Previsiones con baja confianza", { exact: true })).toHaveCount(0);
 });
 
@@ -72,7 +74,7 @@ test("Para revisar no confunde un control de signo caído con cero incoherencias
   await expect(signMismatchItem.getByRole("link", { name: "Abrir sección" }))
     .toHaveAttribute("href", "/transactions?signMismatch=true");
 
-  const clear = page.getByRole("region", { name: "Todo en orden" });
+  const clear = page.getByRole("region", { name: "Sin incidencias en áreas verificadas" });
   await expect(clear.getByText("Signos incoherentes", { exact: true })).toHaveCount(0);
 });
 

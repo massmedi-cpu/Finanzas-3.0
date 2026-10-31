@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../src/application/release-document-scope";
 import styles from "./review.module.css";
 
 type SignalItem = {
@@ -99,7 +100,7 @@ export default function ReviewClient() {
         readJson<TransactionCount>("/api/transactions?signMismatch=true&limit=1", controller.signal),
         readJson<TransactionCount>("/api/transactions?duplicateState=suspected&limit=1", controller.signal),
         readJson<RecurrenceSnapshot>("/api/recurrences?minOccurrences=3", controller.signal),
-        readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
+        isDocumentsDeferred() ? Promise.resolve(null) : readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
         readJson<BudgetSnapshot>(`/api/budgets?month=${month}`, controller.signal),
         readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${dateTo}`, controller.signal),
         readJson<GoogleStatus>("/api/source/google/status", controller.signal),
@@ -201,7 +202,7 @@ export default function ReviewClient() {
       count: counts.source,
       description: "Conexión, avisos o incidencias de la fuente bancaria.",
     },
-  ], [counts]);
+  ].filter((item) => isReleaseHrefAvailable(item.href)), [counts]);
 
   const actionItems = useMemo(() => items.filter((item) => typeof item.count === "number" && item.count > 0), [items]);
   const clearItems = useMemo(() => items.filter((item) => item.count === 0), [items]);
@@ -217,7 +218,10 @@ export default function ReviewClient() {
         </div>
         <div className={styles.heroStatus} aria-live="polite">
           <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
-          <span>{loading ? "Comprobando" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          <span>{loading ? "Comprobando" : unavailableItems.length > 0 ? actionableCount === 1 ? "acción pendiente confirmada" : "acciones pendientes confirmadas" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          {!loading && unavailableItems.length > 0 && (
+            <span role="status">{formatInteger(unavailableItems.length)} {unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"}</span>
+          )}
         </div>
       </header>
 
@@ -249,18 +253,18 @@ export default function ReviewClient() {
               </div>
             ) : (
               <div className={styles.allClear} role="status">
-                <strong>No hay acciones confirmadas pendientes</strong>
-                <span>Las fuentes disponibles no han detectado nada que requiera intervención.</span>
+                <strong>{unavailableItems.length > 0 ? "Revisión incompleta" : "No hay acciones pendientes"}</strong>
+                <span>{unavailableItems.length > 0 ? "Hay comprobaciones sin verificar. No es posible confirmar que todo esté en orden." : "Todas las fuentes revisadas han confirmado que no hay acciones pendientes."}</span>
               </div>
             )}
           </section>
 
           {clearItems.length > 0 && (
-            <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
+            <section className={`${styles.compactPanel} ${unavailableItems.length > 0 ? styles.partialClear : ""}`} aria-labelledby="review-clear-heading">
               <div className={styles.compactHeading}>
                 <div>
                   <p className={styles.kicker}>SIN INCIDENCIAS</p>
-                  <h2 id="review-clear-heading">Todo en orden</h2>
+                  <h2 id="review-clear-heading">{unavailableItems.length > 0 ? "Sin incidencias en áreas verificadas" : "Todo en orden"}</h2>
                 </div>
                 <strong>{formatInteger(clearItems.length)}</strong>
               </div>

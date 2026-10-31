@@ -18,6 +18,8 @@ on:
       - "tests/e2e/documents.spec.ts"
       - "tests/e2e/document-test-designation.spec.ts"
       - "tests/e2e/document-drive-sync-preflight.spec.ts"
+      - "tests/e2e/document-drive-folder-scope.spec.ts"
+      - "tests/e2e/document-drive-folder-recursive.spec.ts"
       - "tests/e2e/document-pagination.spec.ts"
       - "tests/e2e/aud-e2e-documents-context.spec.ts"
       - "tests/e2e/aud-e2e-documents-stale-loads.spec.ts"
@@ -69,6 +71,8 @@ jobs:
           tests/e2e/documents.spec.ts
           tests/e2e/document-test-designation.spec.ts
           tests/e2e/document-drive-sync-preflight.spec.ts
+          tests/e2e/document-drive-folder-scope.spec.ts
+          tests/e2e/document-drive-folder-recursive.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
           tests/e2e/aud-e2e-documents-context.spec.ts

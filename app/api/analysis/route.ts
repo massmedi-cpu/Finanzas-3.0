@@ -1,3 +1,4 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   loadAnalysisSnapshot,
   type AnalysisSelectionInput,
@@ -6,6 +7,7 @@ import { prepareAnalysisPresentationSnapshot } from "../../../src/application/an
 import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { logPersistenceGatewayFailure } from "../../../src/infrastructure/persistence/gateway-observability";
 
 export const dynamic = "force-dynamic";
 
@@ -28,32 +30,30 @@ const ALLOWED_QUERY_KEYS = new Set([
   "compareDateTo",
 ]);
 
-function logGatewayError(scope: string, error: PersistenceGatewayError) {
-  console.error(scope, {
-    status: error.status,
-    code: error.code ?? null,
-  });
-}
-
-function apiError(error: unknown) {
+export function apiError(error: unknown, started: number) {
+  const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+  const responseHeaders = { ...HEADERS, "server-timing": "analysis;dur=" + durationMs };
   if (error instanceof PersistenceGatewayError) {
-    logGatewayError("analysis-api-gateway", error);
+    logPersistenceGatewayFailure("analysis-api-gateway", error);
     return Response.json(
       { error: "analysis_unavailable", code: error.code ?? null },
       {
         status: error.status >= 400 && error.status < 600 ? error.status : 503,
-        headers: HEADERS,
+        headers: responseHeaders,
       },
     );
   }
 
-  const code = error instanceof Error ? error.message : "analysis_invalid_request";
-  const invalid = code.startsWith("invalid_analysis_") || code.startsWith("invalid_financial_analysis_");
-  const status = code === "analysis_reconciliation_failed" ? 503 : invalid ? 400 : 500;
-  console.error("analysis-api", code);
+  const code = publicGatewayErrorCode(error);
+  const invalid = /^invalid_(?:analysis|financial_analysis)_[a-z0-9_]+$/.test(code);
+  const unavailable = code === "analysis_reconciliation_failed";
+  const status = invalid ? 400 : unavailable ? 503 : 500;
+  // Never serialize or log arbitrary exception messages: they can carry
+  // private financial filter values or infrastructure details.
+  console.error("analysis-api", status === 500 ? error instanceof Error ? error.name : typeof error : code);
   return Response.json(
-    { error: status === 400 ? "invalid_request" : "analysis_unavailable", code },
-    { status, headers: HEADERS },
+    { error: status === 400 ? "invalid_request" : "analysis_unavailable", code: status === 500 ? null : code },
+    { status, headers: responseHeaders },
   );
 }
 
@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     for (const key of searchParams.keys()) {
-      if (!ALLOWED_QUERY_KEYS.has(key)) throw new Error("invalid_analysis_parameter");
+      if (!ALLOWED_QUERY_KEYS.has(key) || searchParams.getAll(key).length !== 1) throw new Error("invalid_analysis_parameter");
     }
 
     const input: AnalysisSelectionInput = {
@@ -88,6 +88,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, started);
   }
 }

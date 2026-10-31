@@ -25,6 +25,8 @@ requireText(chart, "const zeroInDomain = minimum <= 0 && maximum >= 0", "Previsi
 requireText(chart, 'data-zero-line="true"', "Previsión · eje cero");
 requireText(e2e, "10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero", "regresión 10.0.101");
 requireText(e2e, 'toHaveAttribute("y1", "120")', "regresión · eje centrado");
-requireText(e2e, 'expect(pointTops).toEqual(["50%", "50%"])', "regresión · puntos centrados");
+requireText(e2e, 'expect(pointTops).toEqual(["50%", "50%", "50%"])', "regresión · puntos centrados en apertura, hito y cierre");
+requireText(chart, "data-forecast-marker={point.kind}", "Previsión · marcadores auditables");
+requireText(e2e, "Consultar un hito de la curva", "regresión · selección accesible en curva densa");
 
 console.log("Financial App 10.0.101 · previsión plana en cero: OK");

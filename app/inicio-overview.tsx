@@ -1,16 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { synchronizeOfficialSource } from "../src/application/source-sync-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
+import { isHomeExpenseAverageVerified } from "../src/application/dashboard/home-expense-average-evidence";
+import { isDashboardEnvelopeForScope } from "../src/application/dashboard/dashboard-envelope-integrity";
+import { isHomeDashboardSourceSafe } from "../src/application/dashboard/dashboard-source-safety";
 import {
   periodComparisonIsReliable,
   periodHasObservedData,
-  resolvePeriodCoverage,
 } from "../src/application/data-coverage";
 import {
+  parseHomeBankFreshness,
+  resolveHomeBankCoverage,
+  type HomeBankFreshness,
+} from "../src/application/dashboard/home-bank-coverage";
+import {
   hasSourceSyncIncidents,
+  hasCompletedSourceSyncEvidence,
+  hasRecentSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
@@ -339,7 +349,7 @@ async function readJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!response.ok) throw new Error(`request_failed_${response.status}`);
-    return response.json() as Promise<T>;
+    return await response.json() as T;
   } finally {
     window.clearTimeout(timer);
   }
@@ -366,8 +376,10 @@ export default function InicioOverview() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [dataThroughDate, setDataThroughDate] = useState<string | null>(null);
+  const [sourceFreshness, setSourceFreshness] = useState<HomeBankFreshness | null>(null);
   const [independentSources, setIndependentSources] = useState<DashboardSource[]>([]);
   const [primaryLoading, setPrimaryLoading] = useState(true);
+  const [workspaceSessionMissing, setWorkspaceSessionMissing] = useState(false);
   const [activityLoading, setActivityLoading] = useState(true);
   const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [failed, setFailed] = useState<DashboardSource[]>([]);
@@ -378,6 +390,9 @@ export default function InicioOverview() {
   const [evolutionRevision, setEvolutionRevision] = useState(0);
   const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const generationRef = useRef(0);
+  const syncInFlight = useRef(false);
+  const isFresh = useCallback((generation: number) => generationRef.current === generation, []);
 
   useEffect(() => {
     try {
@@ -389,106 +404,150 @@ export default function InicioOverview() {
     }
   }, []);
 
-  const commit = useCallback((source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
-    setData((current) => ({ ...current, [source]: value } as DashboardData));
+  const commit = useCallback((generation: number, source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
+    if (!isFresh(generation)) return;
+    setData((current) => isFresh(generation) ? ({ ...current, [source]: value } as DashboardData) : current);
     setFailed((current) => {
+      if (!isFresh(generation)) return current;
       const next = new Set(current);
       if (isFailed) next.add(source);
       else next.delete(source);
       return [...next];
     });
-  }, []);
+  }, [isFresh]);
 
-  const loadSource = useCallback(async (source: DashboardSource) => {
+  const loadSource = useCallback(async (source: DashboardSource, generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const value = await legacySource(source, madridToday());
-      setIndependentSources((current) => current.includes(source) ? current : [...current, source]);
-      commit(source, value as DashboardData[DashboardSource], false);
+      if (!isFresh(generation)) return;
+      if (!isHomeDashboardSourceSafe(source, value)) {
+        throw new Error("dashboard_independent_source_invalid");
+      }
+      setIndependentSources((current) =>
+        !isFresh(generation) || current.includes(source) ? current : [...current, source]);
+      commit(generation, source, value as DashboardData[DashboardSource], false);
     } catch {
-      commit(source, null, true);
+      commit(generation, source, null, true);
     }
-  }, [commit]);
+  }, [commit, isFresh]);
 
-  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
+  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[], generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
-      if (scope === "activity" || scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
+      if (!isFresh(generation)) return;
+      // A wrong scope or malformed source map is not trusted bank evidence.
+      // Continue through the established independent-source recovery path.
+      if (!isDashboardEnvelopeForScope(envelope, scope)) throw new Error("dashboard_scope_contract_mismatch");
+      if (scope === "activity" || scope === "primary") {
+        setDataThroughDate((current) => isFresh(generation) ? envelope.dataThroughDate ?? null : current);
+      }
       await Promise.all(sources.map(async (source) => {
-        if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
-          commit(source, envelope.data[source], false);
+        if (!isFresh(generation)) return;
+        if (envelope.data[source] !== null && !envelope.failedSources.includes(source)
+          && isHomeDashboardSourceSafe(source, envelope.data[source])) {
+          commit(generation, source, envelope.data[source], false);
         } else {
-          await loadSource(source);
+          await loadSource(source, generation);
         }
       }));
-    } catch {
-      await Promise.all(sources.map(loadSource));
+    } catch (error) {
+      if (!isFresh(generation)) return;
+      // A missing/expired workspace session is terminal for every source in
+      // this scope. Retrying them individually would multiply failing auth
+      // requests, slow Inicio and misrepresent an authentication issue as
+      // five unrelated source outages. Real network/partial errors still use
+      // the existing per-source fallback.
+      const sessionRequired = error instanceof Error
+        && /^(?:request_failed_401|request_failed_403)$/.test(error.message);
+      if (sessionRequired) {
+        setWorkspaceSessionMissing(true);
+        sources.forEach((source) => commit(generation, source, null, true));
+        return;
+      }
+      await Promise.all(sources.map((source) => loadSource(source, generation)));
     }
-  }, [commit, loadSource]);
+  }, [commit, loadSource, isFresh]);
 
-  const loadSyncStatus = useCallback(async () => {
+  const loadBankFreshness = useCallback(async (generation: number) => {
     try {
-      setSyncStatus(await readJson<SyncStatus>("/api/source/google/sync", 5_000));
+      const payload = await readJson<unknown>("/api/analysis/source-freshness", 7_000);
+      const next = parseHomeBankFreshness(payload);
+      if (isFresh(generation)) setSourceFreshness(next);
     } catch {
-      setSyncStatus(null);
+      if (isFresh(generation)) setSourceFreshness(null);
     }
-  }, []);
+  }, [isFresh]);
 
-  const loadHomeAnalysis = useCallback(async () => {
+  const loadSyncStatus = useCallback(async (generation: number) => {
+    try {
+      const status = await readJson<SyncStatus>("/api/source/google/sync", 5_000);
+      setSyncStatus((current) => isFresh(generation) ? status : current);
+    } catch {
+      if (isFresh(generation)) setSyncStatus(null);
+    }
+  }, [isFresh]);
+
+  const loadHomeAnalysis = useCallback(async (generation: number) => {
+    if (!isFresh(generation)) return;
     setAnalysisLoading(true);
     try {
-      setHomeAnalysis(await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000));
+      const analysis = await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000);
+      setHomeAnalysis((current) => isFresh(generation) ? analysis : current);
     } catch {
-      setHomeAnalysis(null);
+      if (isFresh(generation)) setHomeAnalysis(null);
     } finally {
-      setAnalysisLoading(false);
+      if (isFresh(generation)) setAnalysisLoading(false);
     }
-  }, []);
+  }, [isFresh]);
 
   const refreshDashboard = useCallback(async () => {
+    const generation = ++generationRef.current;
     setPrimaryLoading(true);
+    setWorkspaceSessionMissing(false);
     setActivityLoading(true);
     setSecondaryLoading(true);
     setDataThroughDate(null);
+    setSourceFreshness(null);
     setIndependentSources([]);
 
-    const statusPromise = loadSyncStatus();
-    const analysisPromise = loadHomeAnalysis();
-    const activityPromise = loadScope("activity", ["transactions"])
-      .finally(() => setActivityLoading(false));
-    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"])
-      .finally(() => setSecondaryLoading(false));
+    const bankFreshnessPromise = loadBankFreshness(generation);
+    const statusPromise = loadSyncStatus(generation);
+    const analysisPromise = loadHomeAnalysis(generation);
+    const activityPromise = loadScope("activity", ["transactions"], generation)
+      .finally(() => { if (isFresh(generation)) setActivityLoading(false); });
+    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"], generation)
+      .finally(() => { if (isFresh(generation)) setSecondaryLoading(false); });
 
-    await loadScope("critical", ["financial"]);
-    setPrimaryLoading(false);
-    await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise]);
-  }, [loadHomeAnalysis, loadScope, loadSyncStatus]);
+    await loadScope("critical", ["financial"], generation);
+    if (isFresh(generation)) setPrimaryLoading(false);
+    await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise, bankFreshnessPromise]);
+  }, [loadBankFreshness, loadHomeAnalysis, loadScope, loadSyncStatus, isFresh]);
 
   useEffect(() => {
     void refreshDashboard();
+    return () => { generationRef.current += 1; };
   }, [refreshDashboard]);
 
   const runSync = useCallback(async () => {
-    if (syncing) return;
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
     setSyncing(true);
     setSyncFeedback(null);
     try {
-      const response = await fetch("/api/source/google/sync", {
-        method: "POST",
-        cache: "no-store",
-        headers: { accept: "application/json" },
-      });
-      const payload = await response.json().catch(() => null) as SyncResult | null;
-      if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
+      const payload = await synchronizeOfficialSource();
       setSyncFeedback(syncFeedbackFromResult(payload));
       await refreshDashboard();
       setEvolutionRevision((current) => current + 1);
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
-      await loadSyncStatus();
+      await loadSyncStatus(generationRef.current);
     } finally {
+      syncInFlight.current = false;
       setSyncing(false);
     }
-  }, [loadSyncStatus, refreshDashboard, syncing]);
+  }, [loadSyncStatus, refreshDashboard]);
 
   const today = madridToday();
   const currentMonthStart = `${today.slice(0, 7)}-01`;
@@ -503,11 +562,17 @@ export default function InicioOverview() {
   });
   const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;
   const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;
-  const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
-  const currentPeriodCoverage = resolvePeriodCoverage({
+  const bankProvenanceConflict = Boolean(dataThroughDate
+    && sourceFreshness?.available === true
+    && sourceFreshness.latestMovementDate
+    && dataThroughDate !== sourceFreshness.latestMovementDate);
+  const latestDataDate = !bankProvenanceConflict && sourceFreshness?.available
+    ? sourceFreshness.latestMovementDate : null;
+  const currentPeriodCoverage = resolveHomeBankCoverage({
     dateFrom: currentMonthStart,
     dateTo: today,
-    latestMovementDate: latestDataDate,
+    freshness: sourceFreshness,
+    activityLatestDate: dataThroughDate,
   });
   const currentPeriodObserved = periodHasObservedData(currentPeriodCoverage);
   const currentCoverageLabel = currentPeriodCoverage.state === "covered"
@@ -516,11 +581,22 @@ export default function InicioOverview() {
       ? `Importes parciales · cobertura observada hasta ${formatDate(currentPeriodCoverage.throughDate)}`
       : currentPeriodCoverage.state === "none"
         ? `Sin cobertura bancaria confirmada este mes · último movimiento ${formatDate(currentPeriodCoverage.latestMovementDate)}`
-        : "Cobertura bancaria pendiente de confirmar";
+        : bankProvenanceConflict
+          ? "Fechas bancarias discordantes · importes sin verificar"
+          : sourceFreshness?.available === false
+            ? "Fuente bancaria no disponible · importes sin verificar"
+            : "Cobertura bancaria pendiente de confirmar";
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
   const syncHasWarnings = syncSucceeded && hasSourceSyncIncidents(syncRun);
+  const syncIsOld = syncSucceeded && hasCompletedSourceSyncEvidence(syncRun) && !hasRecentSourceSyncEvidence(syncRun);
+  const bankUnavailable = sourceFreshness?.available === false;
+  const certifiedSync = syncSucceeded && sourceFreshness?.available === true
+    && !bankProvenanceConflict
+    && hasCompletedSourceSyncEvidence(sourceFreshness.sync)
+    && hasRecentSourceSyncEvidence(sourceFreshness.sync)
+    && !hasSourceSyncIncidents(sourceFreshness.sync);
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
   const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";
@@ -547,23 +623,31 @@ export default function InicioOverview() {
     () => data.monthly?.rows.filter((row) => consistency.currentMonthMatches || row.monthStart !== currentMonthStart).slice(-12) ?? [],
     [data.monthly, consistency.currentMonthMatches, currentMonthStart],
   );
-  const monthlyScale = useMemo(
-    () => Math.max(1, ...homeMonthlyRows.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)])),
-    [homeMonthlyRows],
-  );
   const completedComparison = useMemo(() => homeAnalysis ? {
     current: {
       monthStart: homeAnalysis.period.dateFrom,
       operatingNetCents: homeAnalysis.netComparison.currentNetCents,
     },
     delta: homeAnalysis.netComparison.deltaCents,
-    coverage: resolvePeriodCoverage({
+    coverage: resolveHomeBankCoverage({
       dateFrom: homeAnalysis.period.dateFrom,
       dateTo: homeAnalysis.period.dateTo,
-      latestMovementDate: latestDataDate,
+      freshness: sourceFreshness,
+      activityLatestDate: dataThroughDate,
     }),
-  } : null, [homeAnalysis, latestDataDate]);
-  const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
+  } : null, [homeAnalysis, sourceFreshness, dataThroughDate]);
+  const unverifiedExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
+  // The Analysis engine calculates this number, but Inicio only presents it
+  // as a monthly average when the whole historical interval is bank-verified.
+  // Incomplete/discordant sources must not masquerade as a trusted average.
+  const averageVerified = unverifiedExpenseAverage !== null
+    && isHomeExpenseAverageVerified({
+      periodEnd: homeAnalysis!.period.dateTo,
+      months: unverifiedExpenseAverage.months,
+      freshness: sourceFreshness,
+      activityLatestDate: dataThroughDate,
+    });
+  const recentExpenseAverage = averageVerified ? unverifiedExpenseAverage : null;
 
   const topBudgetCategories = useMemo(() => {
     const categories = budget?.categories.filter((item) => item.categoryName) ?? [];
@@ -580,11 +664,22 @@ export default function InicioOverview() {
       .slice(0, 4) ?? [],
     [forecast],
   );
-  const overBudgetCount = budget?.categories.filter((item) => item.status === "over").length ?? 0;
+  const overBudgetCount = currentPeriodObserved
+    ? budget?.categories.filter((item) => item.status === "over").length ?? 0
+    : 0;
   const hasSavingsBase = (financial?.period.incomeCents ?? 0) >= 10_000;
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
+    if (bankProvenanceConflict) {
+      items.push({
+        title: "La fecha bancaria no coincide con los movimientos",
+        detail: "Los resúmenes afectados permanecen sin verificar. Comprueba el último movimiento y el estado del origen.",
+        href: "/configuration/source",
+        action: "Revisar origen",
+        tone: "warning",
+      });
+    }
     if (syncFailed) {
       items.push({
         title: "La última actualización falló",
@@ -612,7 +707,7 @@ export default function InicioOverview() {
         tone: "warning",
       });
     }
-    if (revealAmounts && (financial?.period.operatingNetCents ?? 0) < 0) {
+    if (revealAmounts && currentPeriodObserved && (financial?.period.operatingNetCents ?? 0) < 0) {
       items.push({
         title: "El balance del mes está en negativo",
         detail: `Ingresos ${displayMoney(financial?.period.incomeCents ?? 0)} · gastos ${displayMoney(financial?.period.expenseCents ?? 0)}.`,
@@ -651,7 +746,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [forecast, displayMoney, failed.length, financial, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
+  }, [forecast, displayMoney, failed.length, financial, currentPeriodObserved, bankProvenanceConflict, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}>
@@ -676,40 +771,60 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings ? styles.sourceWarning : syncSucceeded ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : workspaceSessionMissing || syncHasWarnings || syncIsOld || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
           <span className={styles.healthDot} aria-hidden="true" />
           <div>
             <strong>
-              {syncing
+              {workspaceSessionMissing
+                ? "Sesión necesaria para consultar tus finanzas"
+                : syncing
                 ? "Actualizando datos…"
                 : syncFailed
                   ? "La última actualización falló"
                   : syncHasWarnings
                     ? "Sincronización completada con avisos"
-                    : syncSucceeded
-                      ? "Última sincronización completada"
-                      : "Estado de la fuente pendiente"}
+                    : bankProvenanceConflict
+                      ? "Fechas bancarias discordantes"
+                      : bankUnavailable
+                      ? "Fuente bancaria no disponible"
+                      : syncIsOld
+                        ? "Actualización bancaria pendiente"
+                      : certifiedSync
+                        ? "Datos bancarios actualizados"
+                        : "Cobertura bancaria sin verificar"}
             </strong>
             <p>
-              {syncSucceeded && syncRun
-                ? `Sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)} · ${latestDataDate ? `movimientos hasta ${formatDate(latestDataDate)}` : "fecha del último movimiento sin confirmar"}.`
-                : syncFailed
-                  ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
-                  : latestDataDate
-                    ? `Movimientos disponibles hasta ${formatDate(latestDataDate)}.`
-                    : "La fecha del último movimiento no está confirmada."}
+              {workspaceSessionMissing
+                ? "La sesión de acceso no está disponible o ha caducado. Vuelve a iniciar sesión para consultar tus datos. No se han alterado tus movimientos."
+                : bankProvenanceConflict
+                ? "La fuente y el resumen de movimientos indican distintas fechas de actualización. No se certifican las cifras afectadas."
+                : bankUnavailable
+                  ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
+                : syncIsOld && syncRun
+                  ? `Última sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}. ${latestDataDate ? `Movimientos registrados hasta ${formatDate(latestDataDate)}.` : "La fecha de los movimientos aún no está verificada."} Pulsa «Actualizar datos» para comprobar la fuente bancaria.`
+                  : certifiedSync && syncRun
+                  ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
+                  : syncFailed
+                    ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
+                    : latestDataDate
+                      ? `Movimientos hasta ${formatDate(latestDataDate)}; sincronización sin verificar.`
+                      : "La fecha del último movimiento y la cobertura no están confirmadas."}
               {syncPersistentNotice ? ` ${syncPersistentNotice}` : ""}
               {syncFeedback ? ` ${syncFeedback}` : ""}
             </p>
           </div>
         </div>
         <div className={styles.sourceActions}>
-          <button type="button" className={styles.primaryAction} onClick={() => void runSync()} disabled={syncing}>
-            {syncing ? "Actualizando…" : syncFailed ? "Reintentar actualización" : "Actualizar datos"}
-          </button>
+          {workspaceSessionMissing ? (
+            <Link prefetch={false} className={styles.primaryAction} href="/login">Iniciar sesión</Link>
+          ) : (
+            <button type="button" className={styles.primaryAction} onClick={() => void runSync()} disabled={syncing}>
+              {syncing ? "Actualizando…" : syncFailed ? "Reintentar actualización" : "Actualizar datos"}
+            </button>
+          )}
           <Link prefetch={false} className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
         </div>
       </section>
@@ -726,27 +841,6 @@ export default function InicioOverview() {
         </p>
       )}
 
-      <HomeSmartBrief
-        month={today.slice(0, 7)}
-        loading={primaryLoading || activityLoading || secondaryLoading}
-        transactionTotalCount={transactions?.totalCount ?? null}
-        latestTransactionId={transactions?.rows?.[0]?.id ?? null}
-        latestTransactionDate={latestDataDate}
-        incomeCents={financial?.period.incomeCents ?? null}
-        expenseCents={financial?.period.expenseCents ?? null}
-        operatingNetCents={financial?.period.operatingNetCents ?? null}
-        activeBalanceCents={consistency.balancesMatch ? financial?.balances.activeBalanceCents ?? null : null}
-        budgetProgressBps={budget?.total.progressBps ?? null}
-        budgetStatus={budget?.total.status ?? null}
-        overBudgetCount={budget ? overBudgetCount : null}
-        projectedNetCents={forecast?.summary.projectedNetCents ?? null}
-        projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
-        plannedItems={forecast?.summary.plannedItems ?? null}
-        syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
-        displayMoney={displayMoney}
-        valuesVisible={revealAmounts}
-        privacyActive={privacyReady && !amountsVisible}
-      />
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
         <article className={styles.decisionCard}>
@@ -800,7 +894,10 @@ export default function InicioOverview() {
           <small>
             {recentExpenseAverage
               ? `Media histórica · ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes" : "meses"}`
-              : analysisLoading ? "Calculando desde Análisis…" : "Análisis no disponible"}
+              : analysisLoading ? "Calculando desde Análisis…"
+              : unverifiedExpenseAverage
+                ? "Media no verificable con la cobertura bancaria disponible"
+                : "Análisis no disponible"}
           </small>
           <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver análisis</Link>
         </article>
@@ -825,7 +922,7 @@ export default function InicioOverview() {
       <section className={styles.contentGrid}>
         <article className={`${styles.panel} ${styles.evolutionPanel}`}>
           <div className={styles.sectionHeading}>
-            <div><span>CASH FLOW</span><h2>Últimos 12 meses</h2></div>
+            <div><span>EVOLUCIÓN FINANCIERA</span><h2>Últimos 12 meses</h2></div>
             <Link prefetch={false} className={styles.panelAction} href="/analysis">Abrir análisis</Link>
           </div>
           {completedComparison && (
@@ -861,11 +958,13 @@ export default function InicioOverview() {
               rows={homeMonthlyRows}
               dateFrom={homeMonthlyRows[0]?.monthStart ?? trailingMonthStart(today, 12)}
               dateTo={today}
-              maxValue={monthlyScale}
               valuesVisible={revealAmounts}
               formatMoney={displayMoney}
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
+              latestMovementDate={latestDataDate}
+              sourceFreshness={sourceFreshness}
+              activityLatestDate={dataThroughDate}
               refreshKey={evolutionRevision}
             />
           ) : secondaryLoading ? (
@@ -873,7 +972,7 @@ export default function InicioOverview() {
           ) : (
             <p className={styles.empty}>{data.monthly ? "No hay evolución disponible." : "La evolución no está disponible ahora."}</p>
           )}
-          {latestDataDate && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
+          {latestDataDate && currentPeriodCoverage.state === "partial" && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
             <p className={styles.helper}>El mes actual es parcial: incluye movimientos importados hasta el {formatDate(latestDataDate)}.</p>
           )}
         </article>
@@ -939,11 +1038,19 @@ export default function InicioOverview() {
           </div>
           {budget ? (
             <>
+              {!currentPeriodObserved ? (
+                <div className={styles.budgetSummary} data-budget-coverage={currentPeriodCoverage.state}>
+                  <strong>Gasto sin confirmar</strong>
+                  <span>Límite del mes: {displayMoney(budget.total.effectiveAmountCents)}</span>
+                  <p className={styles.helper}>{currentCoverageLabel}. El importe gastado y el porcentaje se mostrarán cuando haya cobertura.</p>
+                </div>
+              ) : <>
               <div className={styles.budgetSummary}>
                 <strong>{displayMoney(budget.total.actualExpenseCents)}</strong>
                 <span>gastados de {displayMoney(budget.total.effectiveAmountCents)}</span>
                 <div
                   className={styles.progressTrack}
+                  role="img"
                   aria-label={revealAmounts
                     ? `Presupuesto usado ${Math.max(0, budget.total.progressBps ?? 0) / 100} por ciento`
                     : "Porcentaje de presupuesto oculto por privacidad"}
@@ -967,6 +1074,8 @@ export default function InicioOverview() {
                   ))}
                 </ul>
               ) : null}
+              {currentPeriodCoverage.state === "partial" && <p className={styles.helper}>{currentCoverageLabel}. El porcentaje refleja el gasto importado; puede aumentar.</p>}
+              </>}
             </>
           ) : !consistency.budgetMonthMatches ? (
             <p className={styles.empty}>El presupuesto recibido corresponde a otro mes. Abre Presupuestos para revisarlo.</p>
@@ -1002,12 +1111,38 @@ export default function InicioOverview() {
               })}
             </ul>
           ) : activityLoading ? (
-            <div className={styles.skeleton} aria-label="Cargando actividad reciente" />
+            <div className={styles.skeleton} role="status" aria-label="Cargando actividad reciente" />
           ) : (
             <p className={styles.empty}>{transactions ? "No hay actividad reciente." : "La actividad reciente no está disponible ahora. El resto del resumen sigue operativo."}</p>
           )}
         </article>
       </section>
+
+      <HomeSmartBrief
+        month={today.slice(0, 7)}
+        periodCoverage={currentPeriodCoverage.state}
+        loading={primaryLoading || activityLoading || secondaryLoading}
+        transactionTotalCount={transactions?.totalCount ?? null}
+        latestTransactionId={transactions?.rows?.[0]?.id ?? null}
+        latestTransactionDate={latestDataDate}
+        incomeCents={financial?.period.incomeCents ?? null}
+        expenseCents={financial?.period.expenseCents ?? null}
+        operatingNetCents={financial?.period.operatingNetCents ?? null}
+        activeBalanceCents={consistency.balancesMatch ? financial?.balances.activeBalanceCents ?? null : null}
+        budgetProgressBps={budget?.total.progressBps ?? null}
+        budgetStatus={budget?.total.status ?? null}
+        overBudgetCount={budget ? overBudgetCount : null}
+        projectedNetCents={forecast?.summary.projectedNetCents ?? null}
+        projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
+        plannedItems={forecast?.summary.plannedItems ?? null}
+        syncState={syncFailed ? "failed" : certifiedSync ? "success" : "pending"}
+        displayMoney={displayMoney}
+        valuesVisible={revealAmounts}
+        privacyActive={privacyReady && !amountsVisible}
+      />
+
+
+
     </main>
   );
 }

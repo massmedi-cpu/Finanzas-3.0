@@ -228,6 +228,9 @@
 
 .content {
   min-width: 0;
+  margin-left: 0;
+  container-type: inline-size;
+  container-name: app-content;
 }
 
 .mobileNavigation {
@@ -238,7 +241,7 @@
   display: none;
 }
 
-@media (max-width: 90rem) and (min-width: 48.01rem) {
+@media (width < 68.75rem) and (min-width: 48.01rem) {
   .navigationShell {
     flex-wrap: wrap;
     align-items: center;
@@ -250,7 +253,46 @@
   }
 }
 
+@media (min-width: 68.75rem) {
+  .navigationFrame {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 14rem;
+    padding: var(--space-5) var(--space-3);
+    border-right: 1px solid var(--color-border);
+    background: var(--surface-navigation-strong);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .navigationShell { height: 100%; flex-direction: column; align-items: stretch; gap: var(--space-3); }
+  .navigationCluster { display: block; flex: 1; min-height: 0; }
+  .navigationScrollButton { display: none; }
+  .navigation {
+    height: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: var(--space-1) 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .link { justify-content: flex-start; padding: var(--space-3); }
+  .content { margin-left: 14rem; }
+  .navigationProgress { position: absolute; inset: 0; margin: 0; }
+}
+
 @media (max-width: 48rem) {
+  /* The desktop navigation offset must never reduce the 360px content viewport.
+     Use the existing governed mobile breakpoint, after the wide sidebar rule. */
+  .content {
+    margin-left: 0;
+  }
+
   .root {
     padding-bottom: calc(5.2rem + env(safe-area-inset-bottom));
   }
@@ -435,7 +477,7 @@
     min-width: 0;
     min-height: 2.75rem;
     padding: 0.4rem 0.55rem;
-    border: 1px solid var(--border-navigation-soft);
+    border: 1px solid var(--border-control);
     border-radius: var(--radius-control-compact);
     background: var(--surface-control-strong);
     color: var(--text-on-strong);

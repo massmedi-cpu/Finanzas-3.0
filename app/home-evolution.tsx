@@ -1,69 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FinancialBarChart, type FinancialBarPoint } from "../src/design/financial-bar-chart";
+import Link from "next/link";
+import { periodHasObservedData } from "../src/application/data-coverage";
+import { homeBalancePlotRows, isHomeBalanceSeries as isBalanceSeries, type HomeBalanceRow as BalanceRow, type HomeBalanceSeries as BalanceSeries, type HomeBalancePlotRow as BalancePlotRow } from "../src/application/dashboard/home-balance-series";
+import { resolveHomeBankCoverage, type HomeBankFreshness } from "../src/application/dashboard/home-bank-coverage";
+import { FinancialBarChart, monthlyTransactionsHref, type FinancialBarPoint } from "../src/design/financial-bar-chart";
 import styles from "./inicio-overview.module.css";
 
 type EvolutionMode = "balance" | "income_expense" | "net";
-
-type BalanceRow = {
-  monthStart: string;
-  asOfDate: string;
-  balanceCents: number;
-  accounts: number;
-  explicitBalanceAccounts: number;
-  reconstructedBalanceAccounts: number;
-};
-
-type BalanceSeries = {
-  dateFrom: string;
-  dateTo: string;
-  accountId: string | null;
-  rows: BalanceRow[];
-  principles: {
-    bankSource: "read_only";
-    balanceSource: "financial_account_balances";
-    cashFlowReconstruction: false;
-    getHasSideEffects: false;
-  };
-};
-
-function isCalendarDate(value: unknown): value is string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const parsed = new Date(`${value}T12:00:00Z`);
-  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
-}
-
-function isBalanceSeries(value: unknown, dateFrom: string, dateTo: string): value is BalanceSeries {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const candidate = value as Partial<BalanceSeries>;
-  const principles = candidate.principles;
-  const months = new Set<string>();
-  return candidate.dateFrom === dateFrom && candidate.dateTo === dateTo
-    && candidate.accountId === null
-    && Array.isArray(candidate.rows)
-    && principles?.bankSource === "read_only"
-    && principles?.balanceSource === "financial_account_balances"
-    && principles?.cashFlowReconstruction === false
-    && principles?.getHasSideEffects === false
-    && candidate.rows.every((row, index, rows) => {
-      if (!row || typeof row !== "object"
-        || !isCalendarDate(row.monthStart) || !row.monthStart.endsWith("-01")
-        || !isCalendarDate(row.asOfDate)
-        || row.monthStart < `${dateFrom.slice(0, 7)}-01` || row.monthStart > dateTo
-        || row.asOfDate < row.monthStart || row.asOfDate > dateTo
-        || row.asOfDate.slice(0, 7) !== row.monthStart.slice(0, 7)
-        || months.has(row.monthStart)
-        || (index > 0 && rows[index - 1].monthStart >= row.monthStart)
-        || !Number.isSafeInteger(row.balanceCents)
-        || !Number.isSafeInteger(row.accounts) || row.accounts < 0
-        || !Number.isSafeInteger(row.explicitBalanceAccounts) || row.explicitBalanceAccounts < 0
-        || !Number.isSafeInteger(row.reconstructedBalanceAccounts) || row.reconstructedBalanceAccounts < 0
-        || row.explicitBalanceAccounts + row.reconstructedBalanceAccounts !== row.accounts) return false;
-      months.add(row.monthStart);
-      return true;
-    });
-}
 
 function SingleSeriesBars({
   rows,
@@ -74,15 +19,17 @@ function SingleSeriesBars({
   formatMonth,
   signed = false,
   availableFor,
+  drilldown = false,
 }: {
-  rows: Array<FinancialBarPoint | BalanceRow>;
-  valueFor: (row: FinancialBarPoint | BalanceRow) => number;
+  rows: Array<FinancialBarPoint | BalancePlotRow>;
+  valueFor: (row: FinancialBarPoint | BalancePlotRow) => number;
   label: string;
   valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   signed?: boolean;
-  availableFor?: (row: FinancialBarPoint | BalanceRow) => boolean;
+  availableFor?: (row: FinancialBarPoint | BalancePlotRow) => boolean;
+  drilldown?: boolean;
 }) {
   const availableRows = availableFor ? rows.filter(availableFor) : rows;
   const max = Math.max(1, ...availableRows.map((row) => Math.abs(valueFor(row))));
@@ -118,8 +65,8 @@ function SingleSeriesBars({
                 <span className={styles.evolutionMissingMarker} data-series-missing="true" />
               )}
             </div>
-            <strong>{available ? formatMoney(value) : "Sin dato"}</strong>
-            <span>{formatMonth(row.monthStart)}</span>
+            <strong>{available ? valuesVisible ? formatMoney(value) : "••••" : "Sin dato"}</strong>
+            {drilldown && available ? <Link prefetch={false} href={monthlyTransactionsHref(row.monthStart)} aria-label={`Ver movimientos de ${formatMonth(row.monthStart)}`}>{formatMonth(row.monthStart)}</Link> : <span>{formatMonth(row.monthStart)}</span>}
           </div>
         );
       })}
@@ -131,31 +78,79 @@ export default function HomeEvolution({
   rows,
   dateFrom,
   dateTo,
-  maxValue,
   valuesVisible,
   formatMoney,
   formatMonth,
   partialMonthStart,
   refreshKey,
+  latestMovementDate,
+  sourceFreshness,
+  activityLatestDate,
 }: {
   rows: FinancialBarPoint[];
   dateFrom: string;
   dateTo: string;
-  maxValue: number;
   valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
   refreshKey: number;
+  latestMovementDate: string | null;
+  sourceFreshness: HomeBankFreshness | null;
+  activityLatestDate: string | null;
 }) {
+  const coveredRows = useMemo(() => rows.map((row) => {
+    const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+    const coverage = resolveHomeBankCoverage({
+      dateFrom: row.monthStart,
+      dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo,
+      freshness: sourceFreshness,
+      activityLatestDate,
+    });
+    // A non-zero monthly financial aggregate proves that amounts were imported
+    // for this month even when the legacy freshness endpoint only exposes an
+    // upper date bound. It DOES NOT prove that the month is complete.
+    // Conversely, an all-zero row is never evidence of an observed zero.
+    const hasRecordedAmount = row.incomeCents !== 0 || row.expenseCents !== 0 || row.operatingNetCents !== 0;
+    // A real non-zero monthly aggregate may justify PARTIAL observation only
+    // when the bank itself is available. A retained figure from an unavailable
+    // bank must not become a trustworthy bar merely because it is non-zero.
+    const sourceMatchesActivity = !activityLatestDate
+      || activityLatestDate === sourceFreshness?.latestMovementDate;
+    // A nonzero total is never grounds for displaying a partial month when
+    // independent banking sources disagree on the latest observed date.
+    // That is a provenance conflict, not a recoverable historic gap.
+    return { ...row, coverage: coverage.state === "unknown"
+      && sourceFreshness?.available === true && sourceMatchesActivity && hasRecordedAmount
+      ? "partial" as const : coverage.state };
+  }), [dateTo, activityLatestDate, rows, sourceFreshness]);
+  // Scale only from observable bars. Values from an unobserved month must not
+  // compress every real month into an unreadable strip.
+  const hasObservedScale = coveredRows.some((row) => periodHasObservedData({
+    state: row.coverage, latestMovementDate, throughDate: latestMovementDate,
+  }));
+  const observedScale = useMemo(() => {
+    const observed = coveredRows.filter((row) => row.coverage === "covered" || row.coverage === "partial");
+    // No raw unverified monthly amount may influence chart range or labels.
+    return observed.length > 0
+      ? Math.max(1, ...observed.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)]))
+      : 1;
+  }, [coveredRows]);
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceSlowLoading, setBalanceSlowLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState<"not_installed" | "unavailable" | "timeout" | null>(null);
+  const [balanceErrorState, setBalanceError] = useState<{ key: string; reason: "not_installed" | "unavailable" | "timeout" } | null>(null);
   const [balanceRetry, setBalanceRetry] = useState(0);
-  const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
+  // Scope both cache and errors to the exact period and retry generation.
+  const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}|${balanceRetry}`;
+  const balanceError = balanceErrorState?.key === balanceKey ? balanceErrorState.reason : null;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
+  // The initial frame of a newly selected or refreshed Balance tab is
+  // pending, not a verified empty account history. The fetch starts in an
+  // effect after paint; do not flash a false "no balances" verdict.
+  const balanceAwaitingFirstRead = mode === "balance" && balances === null && balanceError === null;
 
   useEffect(() => {
     if (mode !== "balance" || balanceCache?.key === balanceKey) return;
@@ -171,7 +166,7 @@ export default function HomeEvolution({
       controller.abort();
       setBalanceLoading(false);
       setBalanceSlowLoading(false);
-      setBalanceError("timeout");
+      setBalanceError({ key: balanceKey, reason: "timeout" });
     }, 30_000);
     const params = new URLSearchParams({ mode: "balance_series", dateFrom, dateTo });
     void fetch(`/api/financial?${params.toString()}`, { cache: "no-store", signal: controller.signal })
@@ -193,9 +188,9 @@ export default function HomeEvolution({
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
-          setBalanceError(error instanceof Error && error.message === "financial_balance_series_not_installed"
-            ? "not_installed"
-            : "unavailable");
+          setBalanceError({ key: balanceKey, reason: error instanceof Error
+            && error.message === "financial_balance_series_not_installed"
+            ? "not_installed" : "unavailable" });
         }
       })
       .finally(() => {
@@ -213,7 +208,7 @@ export default function HomeEvolution({
     };
   }, [balanceCache?.key, balanceKey, balanceRetry, dateFrom, dateTo, mode]);
 
-  const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
+  const balanceRows = useMemo(() => balances ? homeBalancePlotRows(balances) : [], [balances]);
   const reconstructedBalancePoints = useMemo(
     () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
     [balanceRows],
@@ -225,7 +220,7 @@ export default function HomeEvolution({
   const balanceMissingPoints = balanceRows.length - balanceAvailablePoints;
   const balanceHasAccounts = balanceAvailablePoints > 0;
   const balanceHasNegative = useMemo(
-    () => balanceRows.some((row) => row.accounts > 0 && row.balanceCents < 0),
+    () => balanceRows.some((row) => row.balanceCents !== null && row.accounts > 0 && row.balanceCents < 0),
     [balanceRows],
   );
   const balanceCoverageMessage = useMemo(() => {
@@ -250,11 +245,15 @@ export default function HomeEvolution({
         <button type="button" aria-pressed={mode === "net"} onClick={() => setMode("net")}>Flujo neto</button>
       </div>
 
+      {sourceFreshness?.available === false && mode !== "balance" ? (
+        <p className={styles.helper} role="status">La fuente bancaria no está disponible. No se pueden verificar los importes de la evolución; revisa la fuente antes de interpretarlos.</p>
+      ) : null}
       {mode === "income_expense" ? (
         <>
           <FinancialBarChart
-            rows={rows}
-            maxValue={maxValue}
+            rows={coveredRows}
+            maxValue={observedScale}
+            hasObservedScale={hasObservedScale}
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
@@ -267,21 +266,23 @@ export default function HomeEvolution({
       {mode === "net" ? (
         <>
           <SingleSeriesBars
-            rows={rows}
+            rows={coveredRows}
+            availableFor={(row) => periodHasObservedData({ state: (row as FinancialBarPoint).coverage ?? "unknown", latestMovementDate, throughDate: latestMovementDate })}
             valueFor={(row) => (row as FinancialBarPoint).operatingNetCents}
             label="Flujo neto por mes"
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
             signed
+            drilldown
           />
           <p className={styles.helper}>Flujo neto = ingresos menos gastos elegibles del mismo motor financiero; las transferencias internas no se cuentan como gasto o ingreso operativo.</p>
         </>
       ) : null}
 
-      {mode === "balance" && balanceLoading ? (
+      {mode === "balance" && (balanceLoading || balanceAwaitingFirstRead) ? (
         <>
-          <div className={styles.skeleton} aria-label="Cargando evolución del saldo" />
+          <div className={styles.skeleton} role="status" aria-label="Cargando evolución del saldo" />
           {balanceSlowLoading ? <p className={styles.helper} role="status">La lectura del saldo está tardando más de lo habitual. Las otras vistas siguen disponibles.</p> : null}
         </>
       ) : null}
@@ -297,14 +298,14 @@ export default function HomeEvolution({
           </button>
         </div>
       ) : null}
-      {mode === "balance" && !balanceLoading && !balanceError && !balanceHasAccounts ? (
+      {mode === "balance" && balances !== null && !balanceLoading && !balanceError && !balanceHasAccounts ? (
         <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
       ) : null}
       {mode === "balance" && !balanceLoading && !balanceError && balanceHasAccounts ? (
         <>
           <SingleSeriesBars
             rows={balanceRows}
-            valueFor={(row) => (row as BalanceRow).balanceCents}
+            valueFor={(row) => (row as BalancePlotRow).balanceCents ?? 0}
             availableFor={(row) => (row as BalanceRow).accounts > 0}
             label="Saldo bancario agregado por mes"
             valuesVisible={valuesVisible}

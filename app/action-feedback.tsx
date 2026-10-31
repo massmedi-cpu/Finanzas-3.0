@@ -106,7 +106,7 @@ export function ActionFeedbackProvider({ children }: { children: ReactNode }) {
   return (
     <ActionFeedbackContext.Provider value={value}>
       {children}
-      <div className="action-feedback-stack" aria-label="Estado de las acciones" data-testid="action-feedback-region">
+      <div className="action-feedback-stack" role="region" aria-label="Estado de las acciones" data-testid="action-feedback-region">
         {items.map((item) => (
           <div
             key={item.id}

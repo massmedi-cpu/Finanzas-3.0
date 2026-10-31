@@ -16,6 +16,7 @@ export const GOOGLE_DOCUMENT_READONLY_SCOPES = [
 const JWT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const ASSERTION_LIFETIME_SECONDS = 3600;
 const TOKEN_CACHE_SKEW_SECONDS = 60;
+const TOKEN_FETCH_TIMEOUT_MS = 15_000;
 const ALLOWED_READONLY_SCOPES = new Set<string>([
   ...GOOGLE_SOURCE_READONLY_SCOPES,
   ...GOOGLE_DOCUMENT_READONLY_SCOPES,
@@ -205,6 +206,12 @@ export class GoogleServiceAccountAccessTokenProvider implements GoogleAccessToke
       headers: { accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
       body,
       cache: "no-store",
+      signal: AbortSignal.timeout(TOKEN_FETCH_TIMEOUT_MS),
+    }).catch(() => {
+      throw new GoogleServiceAccountError(
+        "service_account_token_request_failed",
+        "No se ha podido obtener a tiempo el token de lectura de Google.",
+      );
     });
 
     if (!response.ok) {

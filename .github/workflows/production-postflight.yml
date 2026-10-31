@@ -63,10 +63,11 @@ jobs:
       EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
     steps:
       - name: Checkout exact main tooling commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Require deployed commit to match requested version and current history
         shell: bash
@@ -78,7 +79,7 @@ jobs:
           test "$deployed_version" = "$EXPECTED_APP_VERSION"
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
@@ -94,7 +95,7 @@ jobs:
 
       - name: Upload browser evidence on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: production-postflight-browser-${{ github.sha }}
           path: |
@@ -112,10 +113,11 @@ jobs:
       FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
     steps:
       - name: Checkout exact main tooling commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.sha }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Require database password secret
         shell: bash
@@ -125,7 +127,7 @@ jobs:
           echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
 

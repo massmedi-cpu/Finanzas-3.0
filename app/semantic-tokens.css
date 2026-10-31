@@ -1,6 +1,8 @@
 :root {
+  --color-violet: #c6adff;
+  --border-control: #7588a9;
   /* ART-001 · semantic surfaces */
-  --surface-card: rgba(255, 255, 255, 0.025);
+  --surface-card: #121e32;
   --surface-card-muted: rgba(7, 14, 29, 0.56);
   --surface-card-hover: rgba(10, 19, 39, 0.78);
   --surface-empty: rgba(7, 14, 29, 0.36);

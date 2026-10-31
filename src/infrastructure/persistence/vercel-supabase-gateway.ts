@@ -1,9 +1,14 @@
 import { gzipSync } from "node:zlib";
+import { resolveGatewayTarget } from "./release-gateway-target";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { resolveWorkspaceSession } from "../auth/workspace-session";
+import { publicRemoteGatewayCode } from "../http/gateway-public-error";
 
-const SUPABASE_GATEWAY_URL =
-  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
+const SUPABASE_GATEWAY_URL = resolveGatewayTarget(
+  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway",
+  "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway-candidate-619",
+  { VERCEL_ENV: process.env.VERCEL_ENV, VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF },
+);
 const SUPABASE_GATEWAY_REGION = "eu-west-3";
 export const PERSISTENCE_GATEWAY_GZIP_THRESHOLD_BYTES = 64 * 1024;
 
@@ -114,11 +119,15 @@ async function callPersistenceGatewayWithContext<Result>(
     | (Result & { error?: string })
     | null;
 
+  // A previous or misconfigured gateway may return SQL details or identifiers
+  // in its JSON error field. Do not relay those bytes to any API response.
+  const safeRemoteCode = publicRemoteGatewayCode(body?.error);
+
   if (!response.ok || !body) {
     throw new PersistenceGatewayError(
       "El gateway de persistencia ha rechazado la operación.",
       response.status,
-      body?.error,
+      safeRemoteCode ?? undefined,
     );
   }
 
@@ -126,7 +135,7 @@ async function callPersistenceGatewayWithContext<Result>(
     throw new PersistenceGatewayError(
       "La operación de persistencia no se ha completado.",
       response.status,
-      body.error,
+      safeRemoteCode ?? undefined,
     );
   }
 

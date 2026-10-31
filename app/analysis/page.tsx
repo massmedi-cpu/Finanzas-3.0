@@ -11,6 +11,7 @@ import {
   type AnalysisSearchParams,
 } from "../../src/application/analysis/analysis-query-state";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { logPersistenceGatewayFailure } from "../../src/infrastructure/persistence/gateway-observability";
 import shellStyles from "./analysis-axioma53-shell.module.css";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
@@ -29,10 +30,7 @@ function safeSelection(requested: AnalysisSelectionInput): AnalysisSelectionInpu
 
 function logInitialSnapshotError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
-    console.error("analysis-initial-snapshot", {
-      status: error.status,
-      code: error.code ?? null,
-    });
+    logPersistenceGatewayFailure("analysis-initial-snapshot", error);
     return;
   }
 

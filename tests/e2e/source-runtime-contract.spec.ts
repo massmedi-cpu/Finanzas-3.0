@@ -11,14 +11,22 @@ import {
   encodePersistenceGatewayRequest,
 } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 
-test("acepta únicamente el runtime de sincronización v2 con lifecycle y selección canónica", () => {
+test("acepta únicamente el runtime de sincronización v3 con postflight completo", () => {
   const capabilities = {
     contractVersion: SOURCE_SYNC_RUNTIME_CONTRACT_VERSION,
     sourceAccountLifecycle: true,
     canonicalProductSelection: true,
+    sourcePostflightRows: true,
   };
 
+  expect(SOURCE_SYNC_RUNTIME_CONTRACT_VERSION).toBe(3);
   expect(() => assertSourceSyncRuntimeCapabilities(capabilities)).not.toThrow();
+  expect(() => assertSourceSyncRuntimeCapabilities({ ...capabilities, contractVersion: 2 })).toThrow(
+    SourceSyncRuntimeCompatibilityError,
+  );
+  expect(() => assertSourceSyncRuntimeCapabilities({ ...capabilities, sourcePostflightRows: false })).toThrow(
+    SourceSyncRuntimeCompatibilityError,
+  );
 });
 
 test("rechaza de forma fail-closed un runtime antiguo o incompleto", () => {

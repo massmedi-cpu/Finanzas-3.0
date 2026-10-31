@@ -19,14 +19,29 @@ const presets: Preset[] = [
   { label: "Posibles duplicados", href: "/transactions?duplicateState=suspected", matches: (params) => params.get("duplicateState") === "suspected" },
 ];
 
+// A quick preset replaces its own selection scope while retaining searches,
+// banking accounts, merchants and dates selected by the owner.
+const PRESET_FILTER_KEYS = ["kind", "categoryId", "uncategorized", "duplicateState"] as const;
+
+function isPresetActive(preset: Preset, current: URLSearchParams) {
+  if (!preset.matches(current)) return false;
+  if (preset.label === "Todos") return true;
+  const expected = new URLSearchParams(preset.href.split("?")[1] ?? "");
+  return PRESET_FILTER_KEYS.every((key) => {
+    const value = current.get(key);
+    if (value === null) return true;
+    // An old deep-link alias for no category is legitimate for this preset.
+    if (preset.label === "Sin categoría" && key === "uncategorized") return value === "true";
+    return expected.get(key) === value;
+  });
+}
+
 function contextualHref(preset: Preset, current: URLSearchParams) {
   if (preset.label === "Todos") return "/transactions";
   const target = new URLSearchParams(current);
+  for (const key of PRESET_FILTER_KEYS) target.delete(key);
   const override = new URLSearchParams(preset.href.split("?")[1] ?? "");
-  for (const [key, value] of override) {
-    if (key === "categoryId") target.delete("uncategorized");
-    target.set(key, value);
-  }
+  for (const [key, value] of override) target.set(key, value);
   return "/transactions?" + target.toString();
 }
 
@@ -39,7 +54,7 @@ export default function TransactionsQuickNav() {
       <nav className={styles.rail} aria-label="Filtros rápidos de movimientos">
         <span className={styles.label}>Ver rápido</span>
         {presets.map((preset) => {
-          const active = preset.matches(current);
+          const active = isPresetActive(preset, current);
           const destination = contextualHref(preset, current);
           return (
             <Link

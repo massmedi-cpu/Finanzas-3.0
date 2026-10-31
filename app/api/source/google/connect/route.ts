@@ -1,4 +1,5 @@
 import { buildGoogleAuthorizationUrl } from "../../../../../src/infrastructure/google/google-oauth";
+import { requireVerifiedSourceWorkspace } from "../../../../../src/infrastructure/auth/source-metadata-access";
 import {
   GOOGLE_OAUTH_STATE_COOKIE,
   GoogleSourceRuntimeConfigurationError,
@@ -11,6 +12,11 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  // OAuth state must only be issued to a verified Financial App workspace.
+  // Never inspect server-side Google credentials before authorization.
+  const denied = await requireVerifiedSourceWorkspace();
+  if (denied) return denied;
+
   try {
     const configuration = getGoogleSourceServerConfiguration();
     await getGoogleAllowedAccountEmail();

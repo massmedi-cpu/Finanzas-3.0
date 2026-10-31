@@ -5,9 +5,11 @@ import {
   assembleCashFlow,
   cashFlowEventState,
   cashFlowMonth,
+  isTransactionPage,
   type CashFlowTransaction,
 } from "../../src/application/cash-flow/cash-flow-model";
 import type { ForecastItem, ForecastSnapshot } from "../../src/application/forecast/forecast-contract";
+import type { HomeBankFreshness } from "../../src/application/dashboard/home-bank-coverage";
 
 function transaction(id: string, bankDate: string, amountCents: number,
   kind: CashFlowTransaction["kind"]["effective"], options: Partial<CashFlowTransaction> = {}): CashFlowTransaction {
@@ -65,16 +67,83 @@ const forecastSnapshot: ForecastSnapshot = {
   principles: { bankSource: "read_only", openingBalanceSource: "financial_account_balances", recurrenceSource: "recurring", budgetsCreateDatedItems: false, excludedItemsAffectCashFlow: false, confirmedItemsAffectCashFlow: false, getHasSideEffects: false },
 };
 
+const completedFreshness: HomeBankFreshness = {
+  available: true,
+  earliestMovementDate: "2026-09-10",
+  latestMovementDate: "2026-09-12",
+  sync: {
+    status: "success", finishedAt: "2026-09-12T20:00:00.000Z",
+    rowsSeen: 8, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+  },
+};
+
 function view(options: { net?: number; rows?: CashFlowTransaction[] | null;
-  state?: "complete" | "incomplete" | "unavailable"; forecast?: unknown } = {}) {
+  state?: "complete" | "incomplete" | "unavailable"; forecast?: unknown;
+  freshness?: HomeBankFreshness | null } = {}) {
   return assembleCashFlow({
     month: "2026-09", dateFrom: "2026-09-01", dateTo: "2026-09-30",
     period: { dateFrom: "2026-09-01", dateTo: "2026-09-30", accountId: null, operatingNetCents: options.net ?? 4_400, quality: { scopedRows: 8, includedRows: 6 } },
     transactions: options.rows === undefined ? actualRows : options.rows,
     transactionState: options.state ?? "complete",
     forecast: options.forecast === undefined ? forecastSnapshot : options.forecast,
+    latestMovementDate: "2026-09-12",
+    bankFreshness: options.freshness === undefined ? completedFreshness : options.freshness,
   });
 }
+
+test("REC-CFLOW-025 · malformed or overlapping bank pages cannot certify real spending", () => {
+  const row = transaction("bank-id-a", "2026-09-10", -1500, "expense");
+  const valid = { rows: [row], totalCount: 1, hasMore: false, nextCursor: null };
+  expect(isTransactionPage(valid)).toBe(true);
+  expect(isTransactionPage({ rows: [row], totalCount: 2, hasMore: true,
+    nextCursor: { bankDate: row.bankDate, id: row.id } })).toBe(true);
+
+  const invalidRows = [
+    { ...row, id: "" },
+    { ...row, bankDate: "2026-02-30" },
+    { ...row, bankDate: "2026-09-10T00:00Z" },
+    { ...row, account: { id: "", name: "Cuenta" } },
+    { ...row, amountCents: 123.45 },
+  ];
+  for (const invalid of invalidRows) {
+    expect(isTransactionPage({ ...valid, rows: [invalid] })).toBe(false);
+  }
+  expect(isTransactionPage({ ...valid, rows: [row, row], totalCount: 2 })).toBe(false);
+  expect(isTransactionPage({ ...valid, totalCount: 0 })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 1,
+    nextCursor: { bankDate: row.bankDate, id: row.id } })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 2,
+    nextCursor: { bankDate: "not-a-date", id: row.id } })).toBe(false);
+  expect(isTransactionPage({ ...valid, hasMore: true, totalCount: 2,
+    nextCursor: { bankDate: row.bankDate, id: "" } })).toBe(false);
+});
+
+test("REC-CFLOW-026 · sums beyond exact integer cents and impossible gateway counts remain unverified", () => {
+  const max = Number.MAX_SAFE_INTEGER;
+  // Income and expenses nearly cancel to the same observed net (4400 cents),
+  // but a gross total exceeds the safe-integer boundary. Net-only checks
+  // would wrongly accept the envelope.
+  const income = max - 100;
+  const spending = income - 7000;
+  const adversarial = actualRows.map((row) => row.id === "salary"
+    ? { ...row, amountCents: income }
+    : row.id === "rent" ? { ...row, amountCents: -spending } : row);
+  const invalid = view({ rows: adversarial });
+  expect(invalid.actualNetCents).toBeNull();
+  expect(invalid.actualState).toBe("mismatch");
+  expect(invalid.days.every((day) => day.realIncomeCents === 0 && day.realExpenseCents === 0)).toBe(true);
+  // A period cannot contain more included movements than movements in scope.
+  const impossible = assembleCashFlow({
+    month: "2026-09", dateFrom: "2026-09-01", dateTo: "2026-09-30",
+    period: { dateFrom: "2026-09-01", dateTo: "2026-09-30", accountId: null,
+      operatingNetCents: 4400, quality: { scopedRows: 7, includedRows: 8 } },
+    transactions: actualRows, transactionState: "complete", forecast: forecastSnapshot,
+    latestMovementDate: "2026-09-12", bankFreshness: completedFreshness,
+  });
+  expect(impossible.actualState).toBe("unavailable");
+  expect(impossible.actualNetCents).toBeNull();
+});
 
 test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya realizado", () => {
   const result = view();
@@ -99,10 +168,16 @@ test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya 
     plannedCumulativeCents: 800,
     combinedCumulativeCents: 8_200,
   });
-  expect(result.evolution.at(-1)).toMatchObject({
+  expect(result.evolution.find((point) => point.date === "2026-09-12")).toMatchObject({
     realCumulativeCents: 4_400,
     plannedCumulativeCents: 800,
     combinedCumulativeCents: 5_200,
+  });
+  // Bank evidence ends on the 12th; a zero through September 30 is not a fact.
+  expect(result.evolution.at(-1)).toMatchObject({
+    realCumulativeCents: null,
+    plannedCumulativeCents: 800,
+    combinedCumulativeCents: null,
   });
   expect(forecastItems.map(cashFlowEventState)).toEqual(["confirmed", "suggested", "realized", "discarded"]);
 });
@@ -121,7 +196,10 @@ test("Cash Flow no publica importes reales si la paginación está incompleta o 
 
 test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del motor", () => {
   const mismatch = view({ forecast: {
-    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedNetCents: 801 },
+    // The shared envelope reconciles; its 1.199 expenses still disagree
+    // with the independent 1.200 item total checked by Cash Flow.
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary,
+      projectedExpenseCents: 1199, projectedNetCents: 801, projectedClosingBalanceCents: 801 },
   } });
   expect(mismatch.forecastState).toBe("mismatch");
   expect(mismatch.forecastCounts).toBeNull();
@@ -130,10 +208,23 @@ test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del mot
   expect(mismatch.plannedNetCents).toBeNull();
   expect(mismatch.actualNetCents).toBe(4_400);
   const incomeMismatch = view({ forecast: {
-    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedIncomeCents: 2_001 },
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary,
+      projectedIncomeCents: 2_001, projectedNetCents: 801, projectedClosingBalanceCents: 801 },
   } });
   expect(incomeMismatch.forecastState).toBe("mismatch");
   expect(incomeMismatch.plannedNetCents).toBeNull();
+});
+
+test("REC-CFLOW-024 · a self-contradictory forecast envelope is unavailable and cannot show planned money", () => {
+  const invalid = view({ forecast: {
+    ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedNetCents: 801 },
+  } });
+  expect(invalid.forecastState).toBe("unavailable");
+  expect(invalid.plannedIncomeCents).toBeNull();
+  expect(invalid.plannedExpenseCents).toBeNull();
+  expect(invalid.plannedNetCents).toBeNull();
+  expect(invalid.forecastCounts).toBeNull();
+  expect(invalid.actualNetCents).toBe(4400);
 });
 
 test("Cash Flow valida meses y febrero bisiesto sin adelantar la fecha bancaria", () => {
@@ -147,4 +238,32 @@ test("QA-04 · Cash Flow plano usa una única referencia 0 € y no fabrica cén
   expect(source).toContain("const flatZero = maximum === 0 && minimum === 0");
   expect(source).toContain("flatZero\n      ? [0]");
   expect(source).toContain("la escala se mantiene en 0 € sin fabricar céntimos");
+});
+
+test("REC-CFLOW-022 · days with confirmed bank evidence form real curve through the last imported movement", () => {
+  const result = view();
+  expect(result.bankDailyVerified).toBe(true);
+  expect(result.actualCoverage.state).toBe("partial");
+  expect(result.evolution.find((p) => p.date === "2026-09-09")?.realCumulativeCents).toBeNull();
+  expect(result.evolution.find((p) => p.date === "2026-09-10")?.realCumulativeCents).toBe(7_400);
+  expect(result.evolution.find((p) => p.date === "2026-09-12")?.realCumulativeCents).toBe(4_400);
+  expect(result.evolution.find((p) => p.date === "2026-09-13")?.realCumulativeCents).toBeNull();
+});
+
+test("REC-CFLOW-023 · no completed sync or damaged source may color an unverified real day", () => {
+  for (const freshness of [
+    { ...completedFreshness, sync: null },
+    { ...completedFreshness, sync: { ...completedFreshness.sync, status: "partial" } },
+    { ...completedFreshness, sync: { ...completedFreshness.sync, rowsMissing: 1 } },
+    { ...completedFreshness, earliestMovementDate: null },
+    { ...completedFreshness, latestMovementDate: "2026-09-11" },
+  ]) {
+    const result = view({ freshness });
+    if (freshness.sync === null || freshness.sync?.status !== "success"
+      || (freshness.sync && freshness.sync.rowsMissing === 1)) {
+      expect(result.bankDailyVerified).toBe(false);
+    }
+    expect(result.evolution.every((point) => point.realCumulativeCents === null)).toBe(true);
+    expect(result.evolution.every((point) => point.combinedCumulativeCents === null)).toBe(true);
+  }
 });

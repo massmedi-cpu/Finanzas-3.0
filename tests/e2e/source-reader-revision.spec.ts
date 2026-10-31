@@ -61,7 +61,7 @@ const values = {
   ],
 };
 
-function mockGoogleFetch(versions: readonly number[]) {
+function mockGoogleFetch(versions: readonly number[], returnedValues: unknown = values) {
   let driveReads = 0;
 
   return (async (input: string | URL | Request) => {
@@ -72,7 +72,7 @@ function mockGoogleFetch(versions: readonly number[]) {
       return Response.json(driveFile(version));
     }
     if (url.includes("sheets.googleapis.com/v4/spreadsheets/") && url.includes("/values:batchGet")) {
-      return Response.json(values);
+      return Response.json(returnedValues);
     }
     if (url.includes("sheets.googleapis.com/v4/spreadsheets/")) {
       return Response.json(spreadsheet);
@@ -81,11 +81,11 @@ function mockGoogleFetch(versions: readonly number[]) {
   }) as typeof fetch;
 }
 
-function reader(versions: readonly number[]) {
+function reader(versions: readonly number[], returnedValues: unknown = values) {
   return new GoogleOfficialBankSourceReader(
     spreadsheetId,
     { getAccessToken: async () => "read-only-token" },
-    mockGoogleFetch(versions),
+    mockGoogleFetch(versions, returnedValues),
   );
 }
 
@@ -109,4 +109,52 @@ test("Google reader rejects a mixed snapshot when the source changes during read
 
   expect(captured).toBeInstanceOf(GoogleOfficialSourceReadError);
   expect((captured as GoogleOfficialSourceReadError).code).toBe("source_changed_during_read");
+});
+
+test("REC-SOURCE-READ-181 · rechaza rangos intercambiados aunque sus cabeceras sean idénticas", async () => {
+  const swapped = structuredClone(values);
+  swapped.valueRanges.reverse();
+  await expect(reader([27, 27], swapped).read()).rejects.toMatchObject({
+    code: "source_values_mismatch",
+  });
+});
+
+test("REC-SOURCE-READ-182 · un rango truncado o sin identidad impide atribuir filas bancarias", async () => {
+  for (const range of ["'Cuenta corriente · 3967'!A1:V1", "A1:V2", undefined]) {
+    const payload = structuredClone(values) as {
+      valueRanges: Array<{ range?: string; majorDimension: string; values: unknown[][] }>;
+    };
+    payload.valueRanges[0].range = range;
+    await expect(reader([27, 27], payload).read()).rejects.toMatchObject({
+      code: "source_values_mismatch",
+    });
+  }
+});
+
+test("REC-SOURCE-READ-183 · rechaza columnas, filas malformadas y datos fuera de la cuadrícula", async () => {
+  const columnOriented = structuredClone(values);
+  columnOriented.valueRanges[0].majorDimension = "COLUMNS";
+  await expect(reader([27, 27], columnOriented).read()).rejects.toMatchObject({
+    code: "source_values_mismatch",
+  });
+
+  const malformed = {
+    valueRanges: [
+      { ...values.valueRanges[0], values: [OFFICIAL_BANK_SOURCE_HEADERS, { data: "fila-inválida" }] },
+      values.valueRanges[1],
+    ],
+  };
+  await expect(reader([27, 27], malformed).read()).rejects.toMatchObject({
+    code: "source_values_mismatch",
+  });
+
+  const tooManyRows = {
+    valueRanges: [
+      { ...values.valueRanges[0], values: [OFFICIAL_BANK_SOURCE_HEADERS, ["CC-1"], ["CC-2"]] },
+      values.valueRanges[1],
+    ],
+  };
+  await expect(reader([27, 27], tooManyRows).read()).rejects.toMatchObject({
+    code: "source_values_mismatch",
+  });
 });

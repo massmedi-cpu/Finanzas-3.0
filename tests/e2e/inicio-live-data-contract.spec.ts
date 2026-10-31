@@ -30,8 +30,10 @@ test("Inicio usa el resultado real de sincronización y nunca ofrece reconectar 
   expect(dashboardApiSource).toContain("limit: 10");
   expect(dashboardApiSource).toContain("dataThroughDate: latestBankDate(data)");
   expect(inicioSource).toContain('readJson<SyncStatus>("/api/source/google/sync"');
-  expect(inicioSource).toContain('fetch("/api/source/google/sync"');
-  expect(inicioSource).toContain('method: "POST"');
+  expect(inicioSource).toContain("await synchronizeOfficialSource()");
+  const syncClient = readFileSync(resolve(process.cwd(), "src/application/source-sync-client.ts"), "utf8");
+  expect(syncClient).toContain("isConfirmedSourceSyncResponse(payload, preflight)");
+  expect(syncClient).toContain('method: "POST"');
   expect(inicioSource).toContain("Última sincronización completada");
   expect(inicioSource).toContain("dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null");
   expect(inicioSource).toContain("Actualizar datos");

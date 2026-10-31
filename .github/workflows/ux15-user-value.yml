@@ -18,7 +18,9 @@ permissions:
 jobs:
   user-value-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    # The complete desktop/mobile value suite was cancelled at the 18-minute ceiling.
+    # Retain all tests and raise the bound rather than hiding coverage.
+    timeout-minutes: 35
     env:
       VALIDATION_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
@@ -62,6 +64,8 @@ jobs:
           tests/e2e/global-search.spec.ts
           tests/e2e/transactions-ux-comfort.spec.ts
           tests/e2e/transactions-deeplink.spec.ts
+          tests/e2e/transactions-quick-presets-regression.spec.ts
+          tests/e2e/configuration-area-nav-mobile.spec.ts
           tests/e2e/transactions.spec.ts
           tests/e2e/transactions-race.spec.ts
           tests/e2e/transactions-accessibility.spec.ts

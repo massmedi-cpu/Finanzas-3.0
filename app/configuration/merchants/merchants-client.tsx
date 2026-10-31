@@ -77,6 +77,8 @@ export default function MerchantsClient() {
   const [data, setData] = useState<MerchantPayload>({ merchants: [], aliases: [] });
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [verified, setVerified] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,23 +92,29 @@ export default function MerchantsClient() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     setError(null);
     try {
       const [merchantResponse, configResponse] = await Promise.all([
         fetch("/api/merchants", { cache: "no-store" }),
         fetch("/api/configuration", { cache: "no-store" }),
       ]);
-      if (!merchantResponse.ok || !configResponse.ok) throw new Error("No se pudo leer la configuración persistente.");
+      if (!merchantResponse.ok || !configResponse.ok) throw new Error("No se pudieron cargar los comercios y las categorías.");
       const merchantPayload = (await merchantResponse.json()) as MerchantPayload;
       const configPayload = (await configResponse.json()) as { categories?: Category[] };
+      if (!Array.isArray(merchantPayload.merchants) || !Array.isArray(merchantPayload.aliases) || !Array.isArray(configPayload.categories)) throw new Error("Respuesta de comercios incompleta.");
       setData(merchantPayload);
-      setCategories(Array.isArray(configPayload.categories) ? configPayload.categories : []);
+      setCategories(configPayload.categories);
       setSelectedMerchantId((current) => {
         if (current && merchantPayload.merchants.some((merchant) => merchant.id === current)) return current;
         return merchantPayload.merchants.find((merchant) => merchant.lifecycle === "active")?.id ?? merchantPayload.merchants[0]?.id ?? null;
       });
+      setVerified(true);
+      return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo cargar Comercios y alias.");
+      setLoadFailed(true);
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los comercios.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -136,6 +144,7 @@ export default function MerchantsClient() {
   }, [data.merchants, data.aliases, search]);
 
   const activeMerchantCount = data.merchants.filter((merchant) => merchant.lifecycle === "active").length;
+  const dataCurrent = verified && !loadFailed && !loading;
 
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
@@ -143,7 +152,7 @@ export default function MerchantsClient() {
     setNotice(null);
     try {
       await action();
-      await load();
+      if (!(await load())) throw new Error("Cambio enviado, pero sin comprobación posterior. Actualiza antes de continuar.");
       setNotice(success);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se pudo completar la operación.");
@@ -243,9 +252,9 @@ export default function MerchantsClient() {
           <h1>Comercios y alias</h1>
           <p className={styles.copy}>Define un nombre canónico por comercio, agrupa variantes bancarias mediante alias y asigna una categoría predeterminada sin alterar la fuente bancaria.</p>
         </div>
-        <div className={styles.summary} aria-label="Resumen de comercios">
-          <div><strong>{activeMerchantCount}</strong><span>Activos</span></div>
-          <div><strong>{data.aliases.length}</strong><span>Alias</span></div>
+        <div className={styles.summary} role="group" aria-label="Resumen de comercios">
+          <div><strong>{dataCurrent ? activeMerchantCount : "—"}</strong><span>Activos</span></div>
+          <div><strong>{dataCurrent ? data.aliases.length : "—"}</strong><span>Alias</span></div>
           <button type="button" onClick={() => void load()} disabled={loading || busy} aria-label="Actualizar comercios">Actualizar</button>
         </div>
       </header>
@@ -253,15 +262,17 @@ export default function MerchantsClient() {
       {error && <div className={`${styles.message} ${styles.error}`} role="alert">{error}</div>}
       {notice && <div className={`${styles.message} ${styles.success}`} role="status">{notice}</div>}
 
-      <section className={styles.toolbar} aria-label="Herramientas de comercios">
+      {dataCurrent && <section className={styles.toolbar} aria-label="Herramientas de comercios">
         <label>
           <span>Buscar comercio o alias</span>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Ej. Carrefour, TPV, Amazon…" />
         </label>
         <button type="button" onClick={beginNewMerchant} disabled={busy}>+ Nuevo comercio</button>
-      </section>
+      </section>}
 
-      {loading ? <section className={styles.panel}>Leyendo comercios persistentes…</section> : (
+      {loading ? <section className={styles.panel}>Leyendo comercios…</section> : !dataCurrent ? (
+        <section className={styles.panel} role="status"><h2>Comercios sin verificar</h2><p>No se ha podido comprobar si hay comercios guardados. Se ocultan las altas para evitar duplicados.</p><button type="button" onClick={() => void load()}>Reintentar lectura</button></section>
+      ) : (
         <div className={styles.layout}>
           <section className={styles.panel} aria-labelledby="merchant-list-heading">
             <div className={styles.panelHeading}>

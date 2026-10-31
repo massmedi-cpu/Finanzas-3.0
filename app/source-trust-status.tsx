@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { normalizeSourceSyncIncidents } from "../src/application/source-sync-incidents";
+import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../src/application/source-sync-incidents";
 import {
   getCachedSourceTrust,
   getLastSafeSourceTrust,
@@ -156,6 +156,15 @@ function summarize(payload: SourceFreshness): Summary {
     return {
       label: hasDataIncident ? "Fuente con incidencias" : "Fuente con avisos",
       detail: details,
+      tone: "warning",
+      showReviewLink: true,
+    };
+  }
+
+  if (!hasRecentSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización pendiente de comprobar",
+      detail: [details, "Comprobación anterior a 48 horas o con fecha futura"].filter(Boolean).join(" · "),
       tone: "warning",
       showReviewLink: true,
     };

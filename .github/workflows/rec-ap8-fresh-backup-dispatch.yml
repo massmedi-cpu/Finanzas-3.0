@@ -1,0 +1,70 @@
+name: REC AP8 Fresh Encrypted Backup Dispatch 619
+on:
+  pull_request:
+    branches: [main, chat/twenty-one-routes-responsive-shell-20261010]
+    types: [opened, synchronize, reopened]
+    paths: ['.github/workflows/rec-ap8-fresh-backup-dispatch.yml']
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write
+concurrency:
+  group: rec-ap8-fresh-backup-dispatch-619
+  cancel-in-progress: false
+jobs:
+  dispatch-trusted-production-backup:
+    if: >-
+      github.event.pull_request.number == 619 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'chat/integrated-b-e-c-visual-20261010' &&
+      (github.event.pull_request.base.ref == 'main' ||
+       github.event.pull_request.base.ref == 'chat/twenty-one-routes-responsive-shell-20261010')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live production identity and dispatch canonical main workflow
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            // This job receives no database, Supabase or backup-passphrase secrets.
+            const expected = {
+              owner: 'massmedi-cpu', repo: 'Finanzas-3.0',
+              productionCommit: '6dad59c6c2db3575618a7c91c49c3060a93bbba1',
+              version: '10.0.103', deployment: 'dpl_34WhAcvVpP6YrdbxAckDgm3TWwz5',
+              workflow: 'production-backup-v2.yml',
+            };
+            const { owner, repo } = context.repo;
+            if (owner !== expected.owner || repo !== expected.repo) {
+              throw new Error('REC_AP8_DISPATCH_WRONG_REPOSITORY');
+            }
+            // REC-AP8-487: after #619 was retargeted to main, the old
+            // base-only workflow filter silently prevented future fresh backups.
+            // Require both a permitted base and equality with the LIVE PR;
+            // a stale retarget event must never dispatch.
+            const event = context.payload.pull_request;
+            const livePr = (await github.rest.pulls.get({owner,repo,pull_number:619})).data;
+            if (!event || event.number !== 619 || livePr.state !== 'open'
+              || livePr.head.sha !== event.head.sha
+              || livePr.head.repo.full_name !== owner + '/' + repo
+              || livePr.head.ref !== 'chat/integrated-b-e-c-visual-20261010'
+              || !['main', 'chat/twenty-one-routes-responsive-shell-20261010'].includes(livePr.base.ref)
+              || livePr.base.ref !== event.base.ref) {
+              throw new Error('REC_AP8_DISPATCH_STALE_OR_UNTRUSTED_PR');
+            }
+            const response = await fetch('https://financialapp-home.vercel.app/api/build', {
+              headers: {accept:'application/json','cache-control':'no-store'},
+              signal: AbortSignal.timeout(15000), redirect:'error',
+            });
+            if (response.status !== 200) throw new Error('REC_AP8_DISPATCH_PRODUCTION_UNAVAILABLE');
+            const build = await response.json();
+            if (build?.environment !== 'production'
+              || build?.commit !== expected.productionCommit
+              || build?.version !== expected.version
+              || build?.deploymentId !== expected.deployment) {
+              throw new Error('REC_AP8_DISPATCH_PRODUCTION_IDENTITY_DRIFT');
+            }
+            await github.rest.actions.createWorkflowDispatch({
+              owner,repo,workflow_id:expected.workflow,ref:'main',
+              inputs:{source_commit:expected.productionCommit,expected_app_version:expected.version},
+            });
+            core.info('REC_AP8_DISPATCH|queued=true|trusted_main_workflow=true|production_writes=false');

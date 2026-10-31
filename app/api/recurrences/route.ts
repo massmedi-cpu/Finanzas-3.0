@@ -1,15 +1,20 @@
+import { publicGatewayErrorCode } from "../../../src/infrastructure/http/gateway-public-error";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../src/infrastructure/http/limited-json-request";
 export const dynamic = "force-dynamic";
+
+const MAX_MUTATION_JSON_BYTES = 64 * 1024;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const CANDIDATE_KEY = /^[0-9a-f]{32}$/i;
 const STATUSES = new Set(["active", "ignored", "archived"]);
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+const QUERY_KEYS = new Set(["dateFrom", "dateTo", "minOccurrences"]);
 
 function objectBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -40,6 +45,20 @@ function nullableDate(value: unknown, code: string): string | null {
   return value;
 }
 
+function queryOccurrences(value: string | null) {
+  if (value === null) return 3;
+  // Numeric coercion accepts "3e0", "0x3" and leading whitespace.
+  // Reject ambiguous URL text before fetching a banking pattern.
+  if (!/^\d+$/.test(value)) throw new Error("invalid_recurrence_min_occurrences");
+  return integerValue(Number(value), "invalid_recurrence_min_occurrences", 3, 24);
+}
+
+function validateRange(dateFrom: string | null, dateTo: string | null) {
+  if (dateFrom && dateTo && dateFrom > dateTo) {
+    throw new Error("invalid_recurrence_date_range");
+  }
+}
+
 function integerValue(value: unknown, code: string, min: number, max: number) {
   if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
     throw new Error(code);
@@ -60,6 +79,13 @@ function candidateKeyValue(value: unknown) {
 }
 
 function apiError(error: unknown) {
+  if (error instanceof LimitedJsonRequestError) {
+    const tooLarge = error.reason === "too_large";
+    return Response.json(
+      { error: "invalid_request", code: tooLarge ? "recurrence_body_too_large" : "invalid_json" },
+      { status: tooLarge ? 413 : 400, headers: HEADERS },
+    );
+  }
   if (error instanceof PersistenceGatewayError) {
     if (
       error.status === 404 &&
@@ -85,9 +111,10 @@ function apiError(error: unknown) {
     );
   }
 
-  if (error instanceof Error && error.message.startsWith("invalid_recurrence_")) {
+  const publicCode = publicGatewayErrorCode(error);
+  if (publicCode.startsWith("invalid_recurrence_")) {
     return Response.json(
-      { error: "invalid_request", code: error.message },
+      { error: "invalid_request", code: publicCode },
       { status: 400, headers: HEADERS },
     );
   }
@@ -102,12 +129,15 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    for (const key of searchParams.keys()) {
+      if (!QUERY_KEYS.has(key) || searchParams.getAll(key).length !== 1) {
+        throw new Error("invalid_recurrence_query_parameters");
+      }
+    }
     const dateFrom = nullableDate(searchParams.get("dateFrom"), "invalid_recurrence_date_from");
     const dateTo = nullableDate(searchParams.get("dateTo"), "invalid_recurrence_date_to");
-    const minRaw = searchParams.get("minOccurrences");
-    const minOccurrences = minRaw === null
-      ? 3
-      : integerValue(Number(minRaw), "invalid_recurrence_min_occurrences", 3, 24);
+    validateRange(dateFrom, dateTo);
+    const minOccurrences = queryOccurrences(searchParams.get("minOccurrences"));
 
     const result = await callPersistenceGateway("recurrence.snapshot", {
       dateFrom,
@@ -122,7 +152,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const payload = {
       candidateKey: candidateKeyValue(row.candidateKey),
       status: enumValue(row.status, "invalid_recurrence_status", STATUSES),
@@ -133,6 +163,7 @@ export async function POST(request: Request) {
         : integerValue(row.minOccurrences, "invalid_recurrence_min_occurrences", 3, 24),
     };
 
+    validateRange(payload.dateFrom, payload.dateTo);
     const result = await callPersistenceGateway("recurrence.save", payload);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
@@ -142,7 +173,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const row = objectBody(await request.json().catch(() => null));
+    const row = objectBody(await readLimitedJsonRequest(request, MAX_MUTATION_JSON_BYTES));
     const id = requiredUuid(row.id, "invalid_recurrence_id");
     const status = enumValue(row.status, "invalid_recurrence_status", STATUSES);
     const result = await callPersistenceGateway("recurrence.status", { id, status });

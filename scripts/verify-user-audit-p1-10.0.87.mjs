@@ -69,14 +69,24 @@ for (const token of [
 for (const token of [
   "No interpretamos 0 € como mejora",
   "El periodo principal no tiene cobertura bancaria confirmada",
-  "Cobertura bancaria del periodo principal desconocida",
-  "La comparación queda incompleta",
+  "comparisonCoverageReason(coverage, referenceCoverage)",
+  "periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage)",
+  'describe(primary, "Periodo principal")',
+  'describe(reference, "Periodo de referencia")',
+  "No podemos interpretar la variación como una mejora o empeoramiento",
+  "missingStart",
+  "missingEnd",
   "periodComparisonIsReliable(coverage)",
   "Comparación incompleta",
 ]) requireText(compare, token, "QA-02 Comparador");
 
+// The account selected in Análisis owns its own coverage state. This guard
+// deliberately checks the stronger scoped contract rather than the old
+// unscoped state-setter implementation.
 for (const token of [
-  "onChange={setFreshness}",
+  "onChange={onFreshnessChange}",
+  "scopedFreshness?.accountId === selectedAccountId",
+  "setScopedFreshness({ accountId: selectedAccountId, value })",
   "latestMovementDate={freshness?.latestMovementDate ?? null}",
 ]) requireText(analysisPage, token, "QA-02 Análisis wiring");
 
@@ -103,6 +113,9 @@ for (const token of [
 ]) requireText(homeTests, token, "regresión Inicio");
 for (const token of [
   "QA-02 · no interpreta como mejora un periodo posterior al último movimiento importado",
+  "REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras aunque el periodo principal esté cubierto",
+  "REC-CMP-005 · histórico que empieza a mitad del periodo no se confunde con datos que faltan al final",
+  "REC-CMP-006 · incidencia de sincronización no se diagnostica falsamente como un periodo truncado",
 ]) requireText(compareTests, token, "regresión Comparador");
 for (const token of [
   "QA-02 · Análisis no convierte un periodo sin cobertura completa en tendencia favorable",

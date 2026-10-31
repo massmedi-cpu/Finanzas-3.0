@@ -246,6 +246,71 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   expect(controlsTooSmall).toBe(0);
 });
 
+test("FA-UI-002 · Editar activo contrasta y es distinguible de disabled en móvil/escritorio", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 950 });
+      await page.goto("/transactions");
+      const edit = page.getByTestId(`edit-${firstId}`);
+      await expect(edit).toBeVisible();
+      await expect(edit).toBeEnabled();
+      const colors = await edit.evaluate((node) => {
+        const css = getComputedStyle(node);
+        const rgb = (text: string) => (text.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+        const luminance = (color: string) => {
+          const channels = rgb(color).map(value => {
+            const normalized = value / 255;
+            return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const fg = luminance(css.color);
+        const bg = luminance(css.backgroundColor);
+        const clone = node.cloneNode(true) as HTMLButtonElement;
+        clone.disabled = true;
+        node.parentElement!.appendChild(clone);
+        const disabledOpacity = Number(getComputedStyle(clone).opacity);
+        clone.remove();
+        return { contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
+          enabledOpacity: Number(css.opacity), disabledOpacity, background: css.backgroundColor };
+      });
+      expect(colors.background, `fondo de control ${theme}/${width}`).toMatch(/^rgba?\(/);
+      expect(colors.contrast, `contraste botón activo ${theme}/${width}`).toBeGreaterThanOrEqual(4.5);
+      expect(colors.enabledOpacity).toBe(1);
+      expect(colors.disabledOpacity).toBeLessThanOrEqual(0.55);
+      await edit.focus();
+      const outline = await edit.evaluate((node) => getComputedStyle(node).outlineStyle);
+      expect(outline).not.toBe("none");
+      await edit.click();
+      await expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+      expect(patches).toHaveLength(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test.describe("Fechas de Movimientos con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-004 · los filtros muestran día/mes/año y aplican fechas ISO", async ({ page }) => {
+    await mockTransactionApi(page);
+    await page.goto("/transactions?dateFrom=2026-09-01&dateTo=2026-09-09");
+    const form = page.getByRole("form", { name: "Filtros de movimientos" });
+    const from = form.getByLabel("Desde", { exact: true });
+    const to = form.getByLabel("Hasta", { exact: true });
+    await expect(from.locator("..")).toContainText("01/09/2026");
+    await expect(to.locator("..")).toContainText("09/09/2026");
+    await from.fill("2026-09-02");
+    await expect(from.locator("..")).toContainText("02/09/2026");
+    await form.getByRole("button", { name: "Aplicar filtros" }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
 test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas", async ({ page }) => {
   await mockTransactionApi(page);
   await page.goto("/transactions");
@@ -457,18 +522,32 @@ test("Preview protegido real expone el histórico persistido y revisiones en lec
   }
 });
 
-test("10.0.21 · paginación solapada no duplica filas ni selección", async ({ page }) => {
+test("10.0.21 · solapamiento se rechaza y la relectura conserva la selección", async ({ page }) => {
   await mockTransactionApi(page);
-  await page.route('**/api/transactions?*cursorBankDate*', route => route.fulfill({
-    json: { rows: [firstRow, secondRow], totalCount: 2, hasMore: false, nextCursor: null },
-  }));
+  let cursorReads = 0;
+  await page.route('**/api/transactions?*cursorBankDate*', async route => {
+    cursorReads += 1;
+    await route.fulfill({
+      json: {
+        rows: cursorReads === 1 ? [firstRow, secondRow] : [secondRow],
+        totalCount: 2, hasMore: false, nextCursor: null,
+      },
+    });
+  });
   await page.goto('/transactions');
   await page.getByTestId(`select-${firstId}`).check();
   await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toContainText('movimientos repetidos');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
+  await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
   await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByText('2 movimientos', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
   await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toContainText('2 seleccionados');
+  expect(cursorReads).toBe(2);
 });
 
 test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sola operación", async ({ page }) => {
@@ -506,4 +585,181 @@ test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sol
   await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
   await page.getByRole('button', { name: 'Quitar selección' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
+});
+
+test("REC-TXN-004 · PATCH con 503 bloquea escrituras hasta nueva lectura comprobable", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  let reads = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PATCH") {
+      writes.push(req.postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "backend_timeout" }) });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") !== "facets") reads += 1;
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Posiblemente guardado");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toContainText("podría haberse aplicado");
+  await expect(page.getByTestId("save-edit")).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  const readCount = reads;
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(reads).toBe(readCount + 1);
+  expect(writes).toHaveLength(1);
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+});
+
+test("REC-TXN-005 · rechazo de validación 400 no bloquea el editor ni induce un segundo PATCH", async ({ page }) => {
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes += 1;
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "invalid_payload", code: "invalid_patch" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Texto corregible");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  await expect(page.getByTestId("save-edit")).toBeEnabled();
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-006 · revisión POST con respuesta incierta no se duplica", async ({ page }) => {
+  let postCount = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "POST") {
+      postCount += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "gateway_timeout" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.getByTestId("duplicate-confirm")).toBeEnabled();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("duplicate-confirm")).toBeDisabled();
+  expect(postCount).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(postCount).toBe(1);
+});
+
+test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo envío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PUT") {
+      writes += 1;
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "gateway_timeout" }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") === "split") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && !url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await page.getByTestId("split-amount-0").fill("7,34");
+  await page.getByTestId("split-amount-1").fill("5,00");
+  await expect(page.getByTestId("save-split")).toBeEnabled();
+  await page.getByTestId("save-split").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  expect(writes).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin inventar un reparto vacío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
+  const mutations: string[] = [];
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() !== "GET") {
+      mutations.push(req.method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+      return;
+    }
+    if (url.searchParams.get("mode") === "split") {
+      reads += 1;
+      if (recoveryRequested) recoveryReads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(!recoveryRequested ? {} :
+          { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (!url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("La información del reparto está incompleta");
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  recoveryRequested = true;
+  await page.getByRole("button", { name: "Reintentar lectura del reparto" }).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await expect(page.getByRole("button", { name: "Reintentar lectura del reparto" })).toHaveCount(0);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
+  expect(mutations).toEqual([]);
 });

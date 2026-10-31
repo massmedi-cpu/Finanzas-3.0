@@ -107,6 +107,15 @@ async function mockInicio(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
 
+    // This legacy fixture has a latest bank movement but no certified start
+    // or completed-import evidence. The month is observed, never complete.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-11", sync: null,
+      });
+      return;
+    }
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
@@ -213,8 +222,11 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.getByText("Balance del mes protegido", { exact: true })).toBeVisible();
   await expect(page.getByText("Balance registrado en positivo", { exact: true })).toHaveCount(0);
   await expect(page.getByText("La previsión termina en negativo", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toBeVisible();
-  await expect(page.getByText("Privacidad activa · referencia monetaria local eliminada", { exact: true })).toBeVisible();
+  // With a legacy upper-only source, the month is partial. Do not claim
+  // confirmed savings or reveal a percentage when monetary privacy is on.
+  await expect(page.locator('section[aria-label="Resumen financiero principal"]').getByText(/Importes parciales|histórico sin verificar/)).toBeVisible();
+  await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Importes ocultos", { exact: true })).toBeVisible();
   await expect(page.getByText(/La comparación entre visitas está pausada mientras ocultas importes/i)).toBeVisible();
   await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).toBeNull();
 
@@ -283,6 +295,11 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   expect(await hiddenNet.locator('[data-series-bar="true"]').evaluateAll((bars) => (
     bars.map((bar) => (bar as HTMLElement).style.height)
   ))).toEqual(Array(monthly.rows.length).fill("36%"));
+  // Privacy must remove literal money from the DOM as well as hide signs and heights.
+  // The prior UI masked bars yet left each <strong> amount readable in both views.
+  const netLabels = await hiddenNet.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(netLabels.some((label) => label.includes("€"))).toBe(false);
+  expect(netLabels.some((label) => label.includes("••••"))).toBe(true);
 
   await page.getByRole("button", { name: "Saldo" }).click();
   const hiddenBalance = page.getByRole("group", { name: /Saldo bancario agregado por mes.*signos y proporciones ocultos/i });
@@ -292,6 +309,9 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   expect(await hiddenBalance.locator('[data-series-bar="true"]').evaluateAll((bars) => (
     bars.map((bar) => (bar as HTMLElement).style.height)
   ))).toEqual(Array(balanceSeries.rows.length).fill("36%"));
+  const balanceLabels = await hiddenBalance.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(balanceLabels.some((label) => label.includes("€"))).toBe(false);
+  expect(balanceLabels.some((label) => label.includes("••••"))).toBe(true);
 
   await page.getByRole("button", { name: "Mostrar importes" }).click();
   const visibleBalance = page.getByRole("group", { name: /^Saldo bancario agregado por mes$/i });
@@ -299,5 +319,7 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   await expect(visibleBalance.locator('[data-sign="negative"]')).toHaveCount(1);
   await expect(visibleBalance.locator('[data-sign="positive"]')).toHaveCount(2);
   await expect(visibleBalance.locator('[data-sign="zero"]')).toHaveCount(1);
+  const restoredLabels = await visibleBalance.locator('[class*="evolutionSingleColumn"] > strong').allTextContents();
+  expect(restoredLabels.some((label) => label.includes("€"))).toBe(true);
 });
 

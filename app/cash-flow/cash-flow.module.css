@@ -8,7 +8,7 @@
 .eyebrow {
   margin: 0 0 var(--space-2);
   color: var(--color-gold-bright);
-  font-size: 0.75rem;
+  font-size: var(--font-helper);
   font-weight: 850;
   letter-spacing: 0.12em;
 }
@@ -18,7 +18,7 @@
   justify-content: space-between;
   align-items: end;
   gap: var(--space-6);
-  padding: clamp(1.3rem, 3vw, var(--space-10));
+  padding: var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
   background:
@@ -29,7 +29,7 @@
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 1.4rem + 2.4vw, 3.65rem);
+  font-size: var(--font-page-title);
   line-height: 1.1;
   letter-spacing: -0.04em;
 }
@@ -166,13 +166,13 @@
 
 .warning {
   border: 1px solid color-mix(in srgb, var(--color-warning) 40%, transparent);
-  color: color-mix(in srgb, var(--color-warning) 78%, white);
+  color: var(--text-warning-soft);
   background: color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .notice {
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 35%, transparent);
-  color: color-mix(in srgb, var(--color-primary-bright) 48%, white);
+  color: var(--color-primary-bright);
   background: color-mix(in srgb, var(--color-primary-bright) 8%, transparent);
 }
 
@@ -245,6 +245,7 @@
 .legend { margin: var(--space-4) 0; }
 .evolutionLegend span,
 .legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .coverageKey { flex-basis: 100%; color: var(--color-text-secondary); font-size: var(--font-helper); line-height: 1.45; overflow-wrap: anywhere; }
 .evolutionLegend i,
 .signals i,
 .legend i { width: 0.58rem; height: 0.58rem; flex: 0 0 auto; display: inline-block; border-radius: 50%; }
@@ -361,7 +362,9 @@
 }
 
 .detailTitle { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
-.detail h3 { margin: 0; font-size: 1.15rem; text-transform: capitalize; }
+/* Capitalize only the opening letter, not Spanish prepositions such as «de». */
+.detail h3 { margin: 0; font-size: 1.15rem; text-transform: none; }
+.detail h3::first-letter { text-transform: uppercase; }
 .dayTotals { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: var(--space-4) 0; }
 .dayTotals p { margin: 0; color: var(--color-text-secondary); }
 .dayTotals strong { display: block; color: var(--color-text); font-variant-numeric: tabular-nums; }

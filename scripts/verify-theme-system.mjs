@@ -61,18 +61,26 @@ for (const token of [
 ]) {
   if (!themeCss.includes(token)) fail(`el tema claro no gobierna ${token}`);
 }
-if (!themeCss.includes('html[data-theme="light"] .premium-primary-nav')) {
-  fail("la navegación premium debe tener composición clara gobernada");
+const sharedSurfaces = read("app/premium-theme.css");
+for (const selector of [".premium-primary-nav", ".configuration-hero", ".config-panel"]) {
+  if (!sharedSurfaces.includes(selector)) fail(`falta superficie compartida ${selector}`);
 }
-if (!themeCss.includes('html[data-theme="light"] .configuration-hero')) {
-  fail("Configuración debe entrar en el contrato de tema claro");
+for (const file of ["app/transactions/transactions.module.css", "app/accounts/accounts.module.css", "app/budgets/budgets.module.css", "app/documents/documents.module.css"]) {
+  const css = read(file);
+  if (/(?<![\w-])color:\s*#[0-9a-f]/i.test(css)) fail(`${file} mantiene texto de tema fijo`);
+  if (!css.includes("var(--surface-card)")) fail(`${file} debe consumir la superficie compartida`);
 }
-if (!themeCss.includes('form[aria-label="Filtros de movimientos"]')) {
-  fail("Movimientos debe tener una superficie clara gobernada y verificable");
+const themedModules = [
+  ["app/transactions/transactions.module.css", ["rgba(24, 50, 99, .72)", "accent-color: #4d8dff"], ["accent-color: var(--color-primary-bright)", "var(--surface-card)"]],
+  ["app/documents/documents.module.css", ["#8fb5ff", "#1f6bff", "#1857d8", "#f1f5fc", "background: #fff;"], ["outline:2px solid var(--color-primary-bright)", "var(--color-surface-strong)"]],
+  ["app/analysis/analysis.module.css", ["rgba(26, 43, 75, 0.7)"], ["color-mix(in srgb, var(--color-primary) 9%, var(--surface-card))"]],
+];
+for (const [file, forbidden, required] of themedModules) {
+  const css = read(file);
+  for (const color of forbidden) if (css.includes(color)) fail(`${file} retiene ${color} que no responde al tema`);
+  for (const token of required) if (!css.includes(token)) fail(`${file} no consume ${token}`);
 }
-if (!themeCss.includes('section[aria-labelledby="transaction-list-heading"]')) {
-  fail("el listado de Movimientos debe entrar en ART-010");
-}
+if (/!important/.test(themeCss)) fail("el tema no debe depender de parches por ruta con !important");
 
 if (!appearance.includes('data-testid={`theme-${option.value}`}')) fail("faltan test ids de selección de tema");
 if (!appearance.includes('data-testid="theme-resolved"')) fail("falta estado del tema efectivo");

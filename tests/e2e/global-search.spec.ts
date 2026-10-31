@@ -111,7 +111,7 @@ test("AUD-E2E-BUS-001 · buscador rápido y listado completo distinguen alcance"
       ],
     }) });
   });
-  await page.goto("/");
+  await page.goto("/onboarding");
   await page.getByRole("button", { name: "Buscar en Financial App" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "Buscar en Financial App" }).fill("mercadona");
@@ -244,4 +244,35 @@ test("AUD-E2E-BUS-001 · el resumen opcional no tapa la lista ni el pie en móvi
   expect(bounds[0]!.y + bounds[0]!.height).toBeLessThanOrEqual(bounds[1]!.y + 1);
   expect(bounds[1]!.y + bounds[1]!.height).toBeLessThanOrEqual(bounds[2]!.y + 1);
   expect(bounds[2]!.y + bounds[2]!.height).toBeLessThanOrEqual(641);
+});
+
+test("REC-SEARCH-010 · pérdida de sesión explica el motivo sin fingir que no hay datos ni perder el término", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/search?**", async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "workspace_session_required", code: "workspace_session_required", items: [] }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RESPONSE) });
+  });
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+  const input = dialog.getByRole("combobox", { name: "Buscar en Financial App" });
+  await input.fill("Mercadona");
+  await expect(dialog.getByText("Necesitas iniciar sesión", { exact: true })).toBeVisible();
+  await expect(dialog).toContainText("Inicia sesión y reintenta");
+  await expect(dialog.getByText("Sin coincidencias")).toHaveCount(0);
+  await expect(dialog.getByRole("option")).toHaveCount(0);
+  await expect(input).toHaveValue("Mercadona");
+  await dialog.getByRole("button", { name: "Reintentar búsqueda" }).click();
+  await expect(dialog.getByRole("option")).toHaveCount(2);
+  await expect(dialog.getByText("Necesitas iniciar sesión", { exact: true })).toHaveCount(0);
+  await expect(input).toHaveValue("Mercadona");
+  expect(calls).toBe(2);
 });
