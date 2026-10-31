@@ -88,6 +88,14 @@
     white-space: normal;
   }
 }
+/* FA-UI-032: mobile audit screenshots at 360px split "Preferencias" mid-word.
+   Navigation already announces "Áreas de configuración"; avoid redundant
+   label taking the space needed by the current section on narrow phones. */
+@container app-content (max-width: 25rem) {
+  .mobileDisclosure summary > span:first-child { display: none; }
+  .mobileDisclosure summary strong { overflow-wrap: normal; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .chevron { transition: none; }
 }
