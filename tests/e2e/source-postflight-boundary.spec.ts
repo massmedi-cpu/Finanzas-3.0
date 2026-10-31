@@ -267,11 +267,12 @@ test("REC-SYNC-352 · existing source divergence blocks the POST before any writ
   const preRead = source.indexOf('callPersistenceGateway<unknown>("source.postflight_rows"');
   const baseline = source.indexOf("isSafeAppendOnlySourceBaseline(beforeReport)");
   const mutation = source.indexOf("await runtime.synchronization.synchronize(snapshot)");
-  const safePlan = source.indexOf("prepareVerifiedAppendOnlySourcePlan(snapshot, persistedOriginals)");
+  const safePlan = source.indexOf("prepareVerifiedAppendOnlySourcePlan(snapshot, persistedOriginals,");
   const checked = source.indexOf("verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedBefore)");
   const planMutation = source.indexOf("await runtime.synchronization.synchronizePreparedBatch(verifiedPlan.batch)");
   expect(safePlan).toBeGreaterThan(baseline);
   expect(checked).toBeGreaterThan(safePlan);
+  expect(source.slice(safePlan, checked)).toContain("allowAuxiliaryMetadataChanges: true");
   expect(planMutation).toBeGreaterThan(checked);
   expect(auth).toBeGreaterThan(-1);
   expect(confirmation).toBeGreaterThan(auth);
