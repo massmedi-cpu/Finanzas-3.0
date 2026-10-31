@@ -7,7 +7,7 @@ test("FA-UI-032: Preferencias stays on one line in compact mobile navigation", a
   });
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
-    for (const width of [360, 390]) {
+    for (const width of [320, 360, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await page.goto("/configuration/preferences");
       const nav = page.getByRole("navigation", { name: "Áreas de configuración" });
@@ -22,6 +22,8 @@ test("FA-UI-032: Preferencias stays on one line in compact mobile navigation", a
       });
       expect(lineCount, `No mid-word wrap at ${width}px / ${theme}`).toBe(1);
       await summary.click();
+      await expect(nav.locator("details a")).toHaveCount(7);
+      await expect(nav.getByRole("link", { name: "Preferencias", exact: true })).toHaveAttribute("aria-current", "page");
       await expect(nav.getByRole("link", { name: "Fuente bancaria", exact: true })).toBeVisible();
     }
   }
