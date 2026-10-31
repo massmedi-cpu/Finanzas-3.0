@@ -17,11 +17,12 @@ import {
 /** Release diagnostic only. It does not relax postflight or prepare a write batch. */
 export type SourceDateRepresentationAudit = {
   scope: "supplied_snapshots_only";
-  baselineClassification: "exact" | "date_representation_only" | "blocked";
+  baselineClassification: "exact" | "date_representation_only" | "auxiliary_metadata_only" | "blocked";
   sourceRows: number;
   persistedRows: number;
   exactRows: number;
   dateRepresentationRows: number;
+  auxiliaryMetadataRows?: number;
   changedRows: number;
   pendingRows: number;
   orphanRows: number;
@@ -113,6 +114,53 @@ function decodeStoredRows(input: unknown, snapshot: OfficialSourceWorkbookSnapsh
   return result;
 }
 
+type ApprovedAuxiliarySourceOptions = {
+  /** Explicitly restricted to the owner-confirmed append-only import path. */
+  allowAuxiliaryMetadataChanges?: boolean;
+};
+
+type AuditedDifference = "exact" | "date" | "auxiliary" | "blocked";
+
+/**
+ * Never update the historical source payload: eligible non-financial changes
+ * only cause the persisted original bytes and SHA to be reused in the batch.
+ * This opt-in covers Hora and Notas as strings/null, never financial,
+ * category, merchant, review, product or free-form new columns.
+ */
+function classifyOriginalDifference(
+  current: AuditedRow,
+  previous: AuditedRow,
+  options: ApprovedAuxiliarySourceOptions = {},
+): AuditedDifference {
+  if (!sameFinancialFields(current, previous)) return "blocked";
+  const identicalCells = OFFICIAL_BANK_SOURCE_HEADERS.every(
+    field => Object.is(current.sourcePayload[field], previous.sourcePayload[field]),
+  );
+  if (identicalCells) {
+    return current.sourceFingerprint === previous.sourceFingerprint ? "exact" : "blocked";
+  }
+  const originalDate = previous.sourcePayload.Fecha;
+  const googleDate = current.sourcePayload.Fecha;
+  const dateChanged = !Object.is(originalDate, googleDate);
+  if (dateChanged && !(typeof originalDate === "string"
+    && /^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(originalDate)
+    && typeof googleDate === "number" && Number.isInteger(googleDate)
+    && googleDate >= 1 && googleDate <= 100_000)) return "blocked";
+
+  let auxiliaryChanged = false;
+  for (const field of OFFICIAL_BANK_SOURCE_HEADERS) {
+    if (field === "Fecha") continue;
+    const before = previous.sourcePayload[field];
+    const after = current.sourcePayload[field];
+    if (Object.is(before, after)) continue;
+    if (!options.allowAuxiliaryMetadataChanges || (field !== "Hora" && field !== "Notas")
+      || !(before === null || typeof before === "string")
+      || !(after === null || typeof after === "string")) return "blocked";
+    auxiliaryChanged = true;
+  }
+  return auxiliaryChanged ? "auxiliary" : dateChanged ? "date" : "blocked";
+}
+
 /**
  * Compare the complete authoritative source snapshot to a separately read set of
  * stored originals. Only the observed direction DD/MM/YYYY -> integer Sheets
@@ -123,6 +171,7 @@ function decodeStoredRows(input: unknown, snapshot: OfficialSourceWorkbookSnapsh
 export function auditOfficialSourceDateRepresentations(
   snapshot: OfficialSourceWorkbookSnapshot,
   persisted: unknown,
+  options: ApprovedAuxiliarySourceOptions = {},
 ): SourceDateRepresentationAudit {
   try {
     const prepared = prepareOfficialSourceSyncBatch(snapshot);
@@ -131,6 +180,7 @@ export function auditOfficialSourceDateRepresentations(
     const byIdentity = new Map(stored.map(row => [identity(row), row]));
     let exactRows = 0;
     let dateRepresentationRows = 0;
+    let auxiliaryMetadataRows = 0;
     let changedRows = 0;
     let pendingRows = 0;
     for (const observation of prepared.observations) {
@@ -145,33 +195,22 @@ export function auditOfficialSourceDateRepresentations(
         continue;
       }
       byIdentity.delete(key);
-      const sameFinance = sameFinancialFields(current, previous);
-      const sameCells = OFFICIAL_BANK_SOURCE_HEADERS.every(
-        field => Object.is(current.sourcePayload[field], previous.sourcePayload[field]),
-      );
-      if (sameFinance && sameCells && current.sourceFingerprint === previous.sourceFingerprint) {
-        exactRows++;
-        continue;
-      }
-      const originalDate = previous.sourcePayload.Fecha;
-      const currentDate = current.sourcePayload.Fecha;
-      const dateOnly = typeof originalDate === "string" && /^\d{2}\/\d{2}\/\d{4}$/.test(originalDate)
-        && typeof currentDate === "number" && Number.isInteger(currentDate)
-        && currentDate >= 1 && currentDate <= 100_000
-        && sameFinance
-        && OFFICIAL_BANK_SOURCE_HEADERS.every(field => field === "Fecha"
-          || Object.is(current.sourcePayload[field], previous.sourcePayload[field]));
-      if (dateOnly) dateRepresentationRows++;
+      const disposition = classifyOriginalDifference(current, previous, options);
+      if (disposition === "exact") exactRows++;
+      else if (disposition === "date") dateRepresentationRows++;
+      else if (disposition === "auxiliary") auxiliaryMetadataRows++;
       else changedRows++;
     }
     const orphanRows = byIdentity.size;
     return {
       scope: "supplied_snapshots_only",
       baselineClassification: stored.length === 0 || changedRows > 0 || orphanRows > 0
-        ? "blocked" : dateRepresentationRows > 0 ? "date_representation_only" : "exact",
+        ? "blocked" : auxiliaryMetadataRows > 0 ? "auxiliary_metadata_only"
+          : dateRepresentationRows > 0 ? "date_representation_only" : "exact",
       sourceRows: prepared.observations.length,
       persistedRows: stored.length,
       exactRows, dateRepresentationRows, changedRows, pendingRows, orphanRows,
+      ...(options.allowAuxiliaryMetadataChanges ? { auxiliaryMetadataRows } : {}),
     };
   } catch {
     throw new SourceDateRepresentationAuditError();
@@ -193,17 +232,19 @@ export type VerifiedAppendOnlySourcePlan = {
   batch: PreparedSourceSyncBatch;
   audit: SourceDateRepresentationAudit;
   preservedRepresentationRows: number;
+  preservedAuxiliaryRows?: number;
 };
 
 export function prepareVerifiedAppendOnlySourcePlan(
   snapshot: OfficialSourceWorkbookSnapshot,
   persistedOriginals: unknown,
+  options: ApprovedAuxiliarySourceOptions = {},
 ): VerifiedAppendOnlySourcePlan {
   try {
-    const audit = auditOfficialSourceDateRepresentations(snapshot, persistedOriginals);
+    const audit = auditOfficialSourceDateRepresentations(snapshot, persistedOriginals, options);
     if (audit.baselineClassification === "blocked"
       || audit.persistedRows === 0 || audit.orphanRows !== 0 || audit.changedRows !== 0
-      || audit.exactRows + audit.dateRepresentationRows !== audit.persistedRows
+      || audit.exactRows + audit.dateRepresentationRows + (audit.auxiliaryMetadataRows ?? 0) !== audit.persistedRows
       || audit.persistedRows + audit.pendingRows !== audit.sourceRows) {
       throw new SourceDateRepresentationAuditError();
     }
@@ -212,6 +253,7 @@ export function prepareVerifiedAppendOnlySourcePlan(
     const byIdentity = new Map(stored.map(row => [identity(row), row]));
     const fresh = prepareOfficialSourceSyncBatch(snapshot);
     let preservedRepresentationRows = 0;
+    let preservedAuxiliaryRows = 0;
     const observations = fresh.observations.map(observation => {
       const key = identity({ ...observation, sourceFileId: fresh.sourceFileId });
       const previous = byIdentity.get(key);
@@ -219,25 +261,16 @@ export function prepareVerifiedAppendOnlySourcePlan(
       if (!sameFinancialFields(previous, observation)) {
         throw new SourceDateRepresentationAuditError();
       }
-      const exactCells = OFFICIAL_BANK_SOURCE_HEADERS.every(
-        name => Object.is(previous.sourcePayload[name], observation.sourcePayload[name]),
-      );
-      if (exactCells && previous.sourceFingerprint === observation.sourceFingerprint) {
-        return observation;
-      }
-      // The only approved divergence was already authenticated cell by cell
-      // by auditOfficialSourceDateRepresentations. Recheck it at row granularity
-      // before constructing the SQL batch; do not normalize other columns.
-      const originalDate = previous.sourcePayload.Fecha;
-      const renderedDate = observation.sourcePayload.Fecha;
-      if (typeof originalDate !== "string" || !/^\d{2}\/\d{2}\/\d{4}$/.test(originalDate)
-        || typeof renderedDate !== "number" || !Number.isInteger(renderedDate)
-        || renderedDate < 1 || renderedDate > 100_000
-        || OFFICIAL_BANK_SOURCE_HEADERS.some(name => name !== "Fecha"
-          && !Object.is(previous.sourcePayload[name], observation.sourcePayload[name]))) {
+      const disposition = classifyOriginalDifference({
+        ...observation,
+        sourceFileId: fresh.sourceFileId,
+      }, previous, options);
+      if (disposition === "exact") return observation;
+      if (disposition !== "date" && disposition !== "auxiliary") {
         throw new SourceDateRepresentationAuditError();
       }
-      preservedRepresentationRows++;
+      if (disposition === "date") preservedRepresentationRows++;
+      else preservedAuxiliaryRows++;
       // Keep the EXACT immutable original, never replace it with the Google
       // serial or weaken the ingestion function's fingerprint guard.
       return {
@@ -246,13 +279,15 @@ export function prepareVerifiedAppendOnlySourcePlan(
         sourcePayload: previous.sourcePayload,
       };
     });
-    if (preservedRepresentationRows !== audit.dateRepresentationRows) {
+    if (preservedRepresentationRows !== audit.dateRepresentationRows
+      || preservedAuxiliaryRows !== (audit.auxiliaryMetadataRows ?? 0)) {
       throw new SourceDateRepresentationAuditError();
     }
     return {
       batch: { ...fresh, observations },
       audit,
       preservedRepresentationRows,
+      ...(options.allowAuxiliaryMetadataChanges ? { preservedAuxiliaryRows } : {}),
     };
   } catch {
     throw new SourceDateRepresentationAuditError();
