@@ -162,11 +162,12 @@ function classifyOriginalDifference(
 }
 
 /**
- * Compare the complete authoritative source snapshot to a separately read set of
- * stored originals. Only the observed direction DD/MM/YYYY -> integer Sheets
- * serial is eligible. Both dates must independently parse to the same day, and
- * the other 21 typed cells must be exactly equal. The returned aggregate contains
- * no bank data and is NOT evidence of a completed sync or permission to mutate.
+ * Compare the complete authoritative source snapshot to separately read
+ * immutable originals. Default remains strict: only DD/MM/YYYY -> equivalent
+ * integer Sheets serial may differ. In the explicitly enabled owner-confirmed
+ * path, Hora and Notas string/null changes may also be recognized, but stored
+ * originals, all other typed cells and all financial fields stay unchanged.
+ * This pure audit emits only counts; it does not authorize or perform a write.
  */
 export function auditOfficialSourceDateRepresentations(
   snapshot: OfficialSourceWorkbookSnapshot,
@@ -220,10 +221,12 @@ export function auditOfficialSourceDateRepresentations(
 
 /**
  * REC-SYNC-400: prepare an APPEND-ONLY candidate from independent, complete
- * Google and persisted-original snapshots. This is a pure function: it never
- * writes either source. Existing source fingerprints and their 22 original
- * typed cells are preserved, even if Google now renders an equivalent date
- * as an integer serial. Any other difference blocks the entire operation.
+ * Google and persisted-original snapshots. This pure function NEVER writes
+ * either source. All 22 stored cells and fingerprints are preserved; by default
+ * only equivalent date rendering is allowed. An owner-confirmed, opt-in
+ * auxiliary exception accepts Hora/Notas string/null edits while keeping the
+ * exact previously persisted bytes. Financial, category, review, product and
+ * all other changes still block the entire operation.
  *
  * This does not grant permission to import: caller must still verify fresh
  * source preflight, auth, gateway compatibility, backup and SQL rollback.
@@ -299,8 +302,9 @@ export function prepareVerifiedAppendOnlySourcePlan(
  * REC-SYNC-401: after the candidate SQL transaction, validate the complete
  * independently read, eight-column gateway postflight against the CANONICAL
  * append-only plan. This never accepts a missing row or silent revision.
- * The raw Google snapshot may still have a representational date difference;
- * that is explicitly counted by plan.audit rather than silently ignored.
+ * The raw Google snapshot may still contain a date representation or approved
+ * auxiliary metadata difference; both are counted, not silently ignored.
+ * This postflight expects preserved SHA/contents for every historical row.
  */
 export function verifyPlannedAppendOnlyPostflight(
   plan: VerifiedAppendOnlySourcePlan,
