@@ -114,7 +114,7 @@ function decodeStoredRows(input: unknown, snapshot: OfficialSourceWorkbookSnapsh
   return result;
 }
 
-type ApprovedAuxiliarySourceOptions = {
+export type ApprovedAuxiliarySourceOptions = {
   /** Explicitly restricted to the owner-confirmed append-only import path. */
   allowAuxiliaryMetadataChanges?: boolean;
 };
@@ -264,6 +264,7 @@ export function prepareVerifiedAppendOnlySourcePlan(
       const disposition = classifyOriginalDifference({
         ...observation,
         sourceFileId: fresh.sourceFileId,
+        sourcePayload: observation.sourcePayload as AuditedRow["sourcePayload"],
       }, previous, options);
       if (disposition === "exact") return observation;
       if (disposition !== "date" && disposition !== "auxiliary") {
