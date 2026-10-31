@@ -143,7 +143,7 @@ function classifyOriginalDifference(
   const googleDate = current.sourcePayload.Fecha;
   const dateChanged = !Object.is(originalDate, googleDate);
   if (dateChanged && !(typeof originalDate === "string"
-    && /^\\d{2}\\/\\d{2}\\/\\d{4}$/.test(originalDate)
+    && /^\d{2}\/\d{2}\/\d{4}$/.test(originalDate)
     && typeof googleDate === "number" && Number.isInteger(googleDate)
     && googleDate >= 1 && googleDate <= 100_000)) return "blocked";
 
