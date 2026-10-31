@@ -65,6 +65,7 @@ jobs:
           tests/e2e/transactions-ux-comfort.spec.ts
           tests/e2e/transactions-deeplink.spec.ts
           tests/e2e/transactions-quick-presets-regression.spec.ts
+          tests/e2e/configuration-area-nav-mobile.spec.ts
           tests/e2e/transactions.spec.ts
           tests/e2e/transactions-race.spec.ts
           tests/e2e/transactions-accessibility.spec.ts
