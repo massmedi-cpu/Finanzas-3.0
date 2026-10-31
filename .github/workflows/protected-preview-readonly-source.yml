@@ -54,7 +54,9 @@ jobs:
             const trustedOwnerPR = context.payload.pull_request?.number === 619
               && context.payload.pull_request?.head?.repo?.full_name === process.env.GITHUB_REPOSITORY
               && context.payload.pull_request?.head?.ref === 'chat/integrated-b-e-c-visual-20261010'
-              && context.payload.pull_request?.base?.ref === 'chat/twenty-one-routes-responsive-shell-20261010';
+              // PR #619 now targets the verified main branch; all other owner/PR/HEAD
+            // checks and the downstream deployed-SHA GET proof remain mandatory.
+            && context.payload.pull_request?.base?.ref === 'main';
             for (let attempt = 0; attempt < (trustedOwnerPR ? 3 : 36); attempt++) {
               const list = await github.rest.repos.listDeployments({
                 owner, repo, sha: wanted, per_page: 50,
