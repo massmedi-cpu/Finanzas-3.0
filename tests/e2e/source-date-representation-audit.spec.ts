@@ -369,7 +369,7 @@ test("REC-SYNC-406 · complete original reread detects tampering beyond eight-fi
   const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
   const mutation = route.indexOf("synchronizePreparedBatch(verifiedPlan.batch)");
   const reread = route.indexOf("originalPayloadsAfter = await callPersistenceGateway<unknown>", mutation);
-  const reparse = route.indexOf("prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter)", reread);
+  const reparse = route.indexOf("prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter,", reread);
   const check = route.indexOf("isCompleteSourceSyncPostflight(originalAfterReport)", reparse);
   const success = route.indexOf("return Response.json(\n      {\n        ...result", check);
   expect(mutation).toBeGreaterThan(-1);
@@ -377,6 +377,8 @@ test("REC-SYNC-406 · complete original reread detects tampering beyond eight-fi
   expect(reparse).toBeGreaterThan(reread);
   expect(check).toBeGreaterThan(reparse);
   expect(success).toBeGreaterThan(check);
+  expect(route).toContain("allowAuxiliaryMetadataChanges: true");
+  expect(route).toContain("verifiedAfter.audit.auxiliaryMetadataRows !== verifiedPlan.audit.auxiliaryMetadataRows");
 });
 
 
