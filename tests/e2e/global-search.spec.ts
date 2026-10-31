@@ -111,7 +111,7 @@ test("AUD-E2E-BUS-001 · buscador rápido y listado completo distinguen alcance"
       ],
     }) });
   });
-  await page.goto("/");
+  await page.goto("/onboarding");
   await page.getByRole("button", { name: "Buscar en Financial App" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("combobox", { name: "Buscar en Financial App" }).fill("mercadona");
