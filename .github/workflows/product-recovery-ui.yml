@@ -89,6 +89,7 @@ jobs:
         run: >-
           npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
           tests/e2e/release-document-scope-ui.spec.ts
+          tests/e2e/release-deferred-route-matrix.spec.ts
           --project=chromium-desktop
       - name: Retain synthetic release profile screenshots
         if: ${{ always() }}
