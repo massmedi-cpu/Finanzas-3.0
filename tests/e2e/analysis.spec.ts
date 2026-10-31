@@ -390,6 +390,22 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     for (const width of [360, 1366]) {
       await page.setViewportSize({ width, height: 920 });
+      // After resizing from desktop, wait for the *computed* responsive
+      // AppShell geometry, not just matchMedia: Chromium can report the new
+      // media query while retaining the previous frame's 14rem offset.
+      // Do not relax the strict document-overflow assertion below.
+      await expect.poll(async () => page.evaluate(() => {
+        const content = document.getElementById("main-content");
+        const frame = document.querySelector('[class*="navigationFrame"]');
+        if (!content || !frame) return null;
+        return {
+          offset: Math.round(content.getBoundingClientRect().left),
+          frameWidth: Math.round(frame.getBoundingClientRect().width),
+        };
+      }), { timeout: 8000, message: "FA-UI-030: AppShell debe ajustar su geometría real al viewport" })
+        .toEqual(width === 360
+          ? { offset: 0, frameWidth: 360 }
+          : { offset: 224, frameWidth: 224 });
       const layout = await page.evaluate(() => {
         const nav = document.querySelector('nav[aria-label="Continuar desde Análisis"]');
         const main = document.querySelector("main");
