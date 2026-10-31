@@ -217,14 +217,20 @@ export async function POST(request: Request) {
       const persistedOriginals = await callPersistenceGateway<unknown>("source.original_rows", {
         sourceFileId: summary.sourceFileId,
       });
-      verifiedPlan = prepareVerifiedAppendOnlySourcePlan(snapshot, persistedOriginals);
+      // REC-SYNC-450: authenticated, confirmed import may preserve existing
+      // originals when ONLY Hora/Notas auxiliary metadata changed. Every
+      // economic, review, category or merchant difference still fails closed.
+      verifiedPlan = prepareVerifiedAppendOnlySourcePlan(snapshot, persistedOriginals, {
+        allowAuxiliaryMetadataChanges: true,
+      });
       // The separate eight-column persisted read must agree with the private
       // full-payload read. A race between reads rejects before SQL mutation.
       const canonicalBefore = verifyPlannedAppendOnlyPostflight(verifiedPlan, persistedBefore);
       if (!isSafeAppendOnlySourceBaseline(canonicalBefore)
         || canonicalBefore.matchingRows !== verifiedPlan.audit.persistedRows
         || canonicalBefore.pendingRows !== verifiedPlan.audit.pendingRows
-        || verifiedPlan.preservedRepresentationRows !== verifiedPlan.audit.dateRepresentationRows) {
+        || verifiedPlan.preservedRepresentationRows !== verifiedPlan.audit.dateRepresentationRows
+        || verifiedPlan.preservedAuxiliaryRows !== (verifiedPlan.audit.auxiliaryMetadataRows ?? 0)) {
         return Response.json({ error: "google_source_existing_rows_changed" }, { status: 409, headers: HEADERS });
       }
     }
@@ -264,12 +270,15 @@ export async function POST(request: Request) {
         const originalPayloadsAfter = await callPersistenceGateway<unknown>("source.original_rows", {
           sourceFileId: summary.sourceFileId,
         });
-        const verifiedAfter = prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter);
+        const verifiedAfter = prepareVerifiedAppendOnlySourcePlan(snapshot, originalPayloadsAfter, {
+          allowAuxiliaryMetadataChanges: true,
+        });
         const originalAfterReport = verifyPlannedAppendOnlyPostflight(verifiedAfter, persistedAfter);
         if (verifiedAfter.audit.pendingRows !== 0
           || verifiedAfter.audit.persistedRows !== verifiedPlan.audit.sourceRows
           || verifiedAfter.audit.changedRows !== 0 || verifiedAfter.audit.orphanRows !== 0
           || verifiedAfter.audit.dateRepresentationRows !== verifiedPlan.audit.dateRepresentationRows
+          || verifiedAfter.audit.auxiliaryMetadataRows !== verifiedPlan.audit.auxiliaryMetadataRows
           || !isCompleteSourceSyncPostflight(originalAfterReport)) {
           return Response.json({ error: "google_source_sync_unconfirmed" }, { status: 502, headers: HEADERS });
         }
