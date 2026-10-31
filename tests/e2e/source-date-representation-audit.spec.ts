@@ -485,3 +485,59 @@ test("REC-SYNC-453 · date representation and auxiliary edits may coexist withou
     incoming, forged, { allowAuxiliaryMetadataChanges: true },
   )).toThrow("source_date_representation_audit_invalid_snapshot");
 });
+
+
+test("REC-SYNC-454 · 3218/3188 synthetic source tolerates 29 auxiliary/date drifts and keeps 30 inserts only", () => {
+  const base = source();
+  const original: OfficialSourceWorkbookSnapshot = {
+    ...base,
+    sheets: base.sheets.map((sheet, index) => ({
+      ...sheet,
+      rows: Array.from({ length: index ? 18 : 3200 },
+        (_, n) => row(`SYN-${index}-${n}`, !!index)),
+    })),
+  };
+  const persisted = stored(original);
+  persisted.rows = persisted.rows.filter(item => {
+    const n = Number(item.source_row_key.split("-").at(-1));
+    return item.source_sheet_id === "725351515" ? n < 3173 : n < 15;
+  });
+  const current: OfficialSourceWorkbookSnapshot = {
+    ...original,
+    sheets: original.sheets.map((sheet, index) => index ? sheet : {
+      ...sheet,
+      rows: sheet.rows.map((values, n) => {
+        if (n >= 29) return values;
+        const next = [...values];
+        if (n <= 17) next[2] = `12:${String(n).padStart(2, "0")}`;
+        if (n >= 16 && n <= 27) next[20] = "Nota sintetica";
+        if (n === 28) next[1] = SERIAL;
+        return next;
+      }),
+    }),
+  };
+  expect(() => prepareVerifiedAppendOnlySourcePlan(current, persisted))
+    .toThrow("source_date_representation_audit_invalid_snapshot");
+  const plan = prepareVerifiedAppendOnlySourcePlan(
+    current, persisted, { allowAuxiliaryMetadataChanges: true },
+  );
+  expect(plan.audit).toMatchObject({
+    baselineClassification: "auxiliary_metadata_only",
+    sourceRows: 3218, persistedRows: 3188, exactRows: 3159,
+    dateRepresentationRows: 1, auxiliaryMetadataRows: 28,
+    changedRows: 0, pendingRows: 30, orphanRows: 0,
+  });
+  expect(plan.preservedRepresentationRows).toBe(1);
+  expect(plan.preservedAuxiliaryRows).toBe(28);
+  const originalByIdentity = new Map(persisted.rows.map(item => [item.source_row_identity, item]));
+  let preserved = 0, newRows = 0;
+  for (const observation of plan.batch.observations) {
+    const prior = originalByIdentity.get(observation.sourceRowIdentity);
+    if (!prior) { newRows++; continue; }
+    preserved++;
+    expect(observation.sourcePayload).toEqual(prior.source_payload);
+    expect(observation.sourceFingerprint).toBe(prior.source_fingerprint);
+  }
+  expect(preserved).toBe(3188);
+  expect(newRows).toBe(30);
+});
