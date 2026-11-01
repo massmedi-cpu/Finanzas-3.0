@@ -16,6 +16,8 @@ type MockOptions = {
   malformedSyncSuccess?: boolean;
   malformedPreflightSuccess?: boolean;
   syncGetRequests?: string[];
+  runStatus?: "success" | "failed" | "partial";
+  runWarnings?: number;
 };
 
 async function mockSourceOverview(page: Page, options: MockOptions = {}) {
@@ -135,19 +137,19 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
           id: "run-1",
           sourceFileId: "source-file",
           sourceRevision: "rev-1",
-          status: "success",
+          status: options.runStatus ?? "success",
           startedAt: options.finishedAt
             ? new Date(Date.parse(options.finishedAt) - 60_000).toISOString()
             : "2026-10-02T07:55:00.000Z",
           finishedAt: options.finishedAt ?? "2026-10-02T08:00:00.000Z",
           rowsSeen: 120,
-          rowsInserted: 0,
+          rowsInserted: options.runStatus === "failed" ? 2 : 0,
           rowsRevised: 0,
-          rowsSkipped: 120,
-          rowsFailed: 0,
+          rowsSkipped: options.runStatus === "failed" ? 118 : 120,
+          rowsFailed: options.runStatus === "failed" ? 1 : 0,
           rowsMissing: 0,
           duplicatesDetected: 0,
-          warningsCount: 0,
+          warningsCount: options.runWarnings ?? 0,
           errorCode: null,
           errorMessage: null,
         },
@@ -353,4 +355,22 @@ test("REC-SYNC-239 · preflight inválido bloquea sync con histórico existente"
   await expect(page.locator(".config-message.error")).toContainText("No se ha iniciado la importación");
   expect(preflightPosts).toHaveLength(1);
   expect(syncPosts).toHaveLength(0);
+});
+
+test("REC-UX-500 · una ejecución fallida nunca se presenta como cambios incorporados", async ({ page }) => {
+  await mockSourceOverview(page, { runStatus: "failed" });
+  await page.goto("/configuration/source");
+  await expect(page.getByText("Último intento", { exact: true })).toBeVisible();
+  await expect(page.getByText("Fallida", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cambios confirmados en el último intento")).toBeVisible();
+  await expect(page.getByText("No confirmados", { exact: true })).toBeVisible();
+  await expect(page.getByText("2 incorporados", { exact: true })).toHaveCount(0);
+});
+
+test("REC-UX-501 · éxito con advertencias no se anuncia como éxito incondicional", async ({ page }) => {
+  await mockSourceOverview(page, { runWarnings: 1 });
+  await page.goto("/configuration/source");
+  await expect(page.getByText("Completada con avisos", { exact: true })).toBeVisible();
+  await expect(page.getByText("0 incorporados · con avisos", { exact: true })).toBeVisible();
+  await expect(page.getByText("Completada", { exact: true })).toHaveCount(0);
 });
