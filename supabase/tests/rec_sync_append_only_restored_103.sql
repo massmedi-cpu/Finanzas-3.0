@@ -1,5 +1,5 @@
 -- REC-SYNC-410: production-v10.0.103 PG17 restore ONLY, NEVER live Supabase.
--- Twenty synthetic observations, idempotence, historic conflict atomic rollback,
+-- Thirty synthetic observations (27 checking + 3 savings), replay, atomic rollback,
 -- cross-workspace denial and zero residue. Sensitive originals are never printed.
 \set ON_ERROR_STOP on
 DO $guard$
@@ -20,13 +20,16 @@ RETURNS text LANGUAGE plpgsql AS $fixture$
 DECLARE
   v_key text := 'SYN-' || pg_catalog.lpad(p_number::text,3,'0');
   v_source text := '__rec_sync_410_synthetic_only__';
+  v_sheet text := CASE WHEN p_number <= 27 THEN 'synthetic-checking' ELSE 'synthetic-savings' END;
+  v_account text := CASE WHEN p_number <= 27 THEN 'REC SYNC synthetic checking' ELSE 'REC SYNC synthetic savings' END;
+  v_identifier text := CASE WHEN p_number <= 27 THEN '****0000' ELSE '****0001' END;
   v_result record; v_payload jsonb; v_fingerprint text;
 BEGIN
-  IF p_number<1 OR p_number>20 THEN RAISE EXCEPTION 'REC_SYNC_410_INVALID_ROW'; END IF;
+  IF p_number<1 OR p_number>30 THEN RAISE EXCEPTION 'REC_SYNC_410_INVALID_ROW'; END IF;
   v_payload:=pg_catalog.jsonb_build_object(
     'ID origen',v_key,'Fecha','21/10/2026','Hora',NULL,
-    'Producto o cuenta','REC SYNC synthetic checking','Entidad','Synthetic Bank',
-    'Identificador','****0000','Tipo de producto','Cuenta bancaria',
+    'Producto o cuenta',v_account,'Entidad','Synthetic Bank',
+    'Identificador',v_identifier,'Tipo de producto','Cuenta bancaria',
     'Tipo de movimiento','Gasto','Categoría',NULL,'Subcategoría',NULL,
     'Concepto original','REC SYNC synthetic movement',
     'Concepto normalizado','REC SYNC synthetic movement',
@@ -42,10 +45,10 @@ BEGIN
   v_fingerprint:=pg_catalog.md5('rec410-original:'||v_key||p_revision::text)
     ||pg_catalog.md5('rec410-typed:'||v_key||p_revision::text);
   SELECT * INTO STRICT v_result FROM financial_app.ingest_source_observation(
-    v_source,'synthetic-sheet',v_key,
-    v_source||'::synthetic-sheet::'||v_key,v_fingerprint,v_payload,
+    v_source,v_sheet,v_key,
+    v_source||'::'||v_sheet||'::'||v_key,v_fingerprint,v_payload,
     DATE '2026-10-21','REC SYNC synthetic movement','REC SYNC synthetic movement',
-    (-100*p_number)::bigint,NULL::bigint,'REC SYNC synthetic checking',
+    (-100*p_number)::bigint,NULL::bigint,v_account,
     'expense','pending',pg_catalog.now()
   );
   IF v_result.transaction_id IS NULL OR v_result.source_record_id IS NULL THEN
@@ -59,6 +62,10 @@ SELECT financial_app.ensure_source_account_mapping(
   '__rec_sync_410_synthetic_only__','REC SYNC synthetic checking',
   'REC SYNC synthetic checking','Synthetic Bank','checking',0::bigint,'active','****0000'
 );
+SELECT financial_app.ensure_source_account_mapping(
+  '__rec_sync_410_synthetic_only__','REC SYNC synthetic savings',
+  'REC SYNC synthetic savings','Synthetic Bank','savings',0::bigint,'active','****0001'
+);
 DO $conflict$
 DECLARE n integer; disposition text; expected boolean:=false;
 BEGIN
@@ -67,13 +74,14 @@ BEGIN
     PERFORM pg_catalog.pg_advisory_xact_lock(
       pg_catalog.hashtext('financial_app.source_sync:__rec_sync_410_synthetic_only__'));
     INSERT INTO financial_app.sync_runs(source_file_id,status,rows_seen,schema_fingerprint)
-    VALUES ('__rec_sync_410_synthetic_only__','started',20,pg_catalog.repeat('a',64));
-    FOR n IN 1..20 LOOP
+    VALUES ('__rec_sync_410_synthetic_only__','started',30,pg_catalog.repeat('a',64));
+    FOR n IN 1..30 LOOP
       disposition:=pg_temp.rec_sync_fixture(n);
       IF disposition<>'insert' THEN RAISE EXCEPTION 'REC_SYNC_410_WRONG_INSERT'; END IF;
     END LOOP;
     INSERT INTO financial_app.sync_cursors(source_file_id,source_sheet_id,last_source_row_key)
-    VALUES ('__rec_sync_410_synthetic_only__','synthetic-sheet','SYN-020');
+    VALUES ('__rec_sync_410_synthetic_only__','synthetic-checking','SYN-027'),
+           ('__rec_sync_410_synthetic_only__','synthetic-savings','SYN-030');
     disposition:=pg_temp.rec_sync_fixture(1,true);
     IF disposition<>'append_revision' THEN RAISE EXCEPTION 'REC_SYNC_410_CONFLICT_NOT_DETECTED'; END IF;
     -- This is precisely the gateway's fail-closed disposition guard.
@@ -92,20 +100,24 @@ END $conflict$;
 DO $success$
 DECLARE n integer; disposition text;
 BEGIN
-  FOR n IN 1..20 LOOP
+  FOR n IN 1..30 LOOP
     disposition:=pg_temp.rec_sync_fixture(n);
     IF disposition<>'insert' THEN RAISE EXCEPTION 'REC_SYNC_410_NOT_APPEND_ONLY'; END IF;
   END LOOP;
-  FOR n IN 1..20 LOOP
+  FOR n IN 1..30 LOOP
     disposition:=pg_temp.rec_sync_fixture(n);
     IF disposition<>'skip' THEN RAISE EXCEPTION 'REC_SYNC_410_REPLAY_NOT_IDEMPOTENT'; END IF;
   END LOOP;
   IF (SELECT count(*) FROM financial_app.transaction_source_records
-      WHERE source_file_id='__rec_sync_410_synthetic_only__')<>20
+      WHERE source_file_id='__rec_sync_410_synthetic_only__')<>30
     OR (SELECT count(*) FROM financial_app.transactions
-      WHERE source_row_identity LIKE '__rec_sync_410_synthetic_only__::%')<>20
+      WHERE source_row_identity LIKE '__rec_sync_410_synthetic_only__::%')<>30
     OR (SELECT coalesce(sum(amount_cents),0) FROM financial_app.transactions
-      WHERE source_row_identity LIKE '__rec_sync_410_synthetic_only__::%')<>-21000
+      WHERE source_row_identity LIKE '__rec_sync_410_synthetic_only__::%')<>-46500
+    OR (SELECT count(*) FROM financial_app.transaction_source_records
+      WHERE source_file_id='__rec_sync_410_synthetic_only__' AND source_sheet_id='synthetic-checking')<>27
+    OR (SELECT count(*) FROM financial_app.transaction_source_records
+      WHERE source_file_id='__rec_sync_410_synthetic_only__' AND source_sheet_id='synthetic-savings')<>3
     OR EXISTS(SELECT 1 FROM financial_app.transaction_source_records
       WHERE source_file_id='__rec_sync_410_synthetic_only__'
         AND supersedes_source_record_id IS NOT NULL)
@@ -125,5 +137,5 @@ BEGIN
     OR EXISTS(SELECT 1 FROM financial_app.workspaces WHERE id IN
       ('a0f41000-0000-4000-8000-000000000001'::uuid,'a0f41000-0000-4000-8000-000000000002'::uuid))
   THEN RAISE EXCEPTION 'REC_SYNC_410_RESTORED_DB_NOT_CLEAN'; END IF;
-  RAISE NOTICE 'REC_SYNC_AP5_REHEARSAL|status=ok|inserts=20|replay_skips=20|conflict_rolls_back=true|workspace_isolated=true|no_residue=true';
+  RAISE NOTICE 'REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true';
 END $residue$;
