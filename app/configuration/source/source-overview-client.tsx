@@ -5,8 +5,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
-import { isConfirmedSourcePostflightReport, type PublicSourcePostflightReport } from "../../../src/domain/source-postflight-reconciliation";
-import { SourcePostflightReportPanel } from "./source-postflight-report";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
 
@@ -122,12 +120,10 @@ export default function SourceOverviewClient() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
-  const [postflight, setPostflight] = useState<PublicSourcePostflightReport | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
     setPreflight(null);
-    setPostflight(null);
     setLoading(true);
     setError(null);
     try {
@@ -197,7 +193,6 @@ export default function SourceOverviewClient() {
     if (!connected || !runtimeReady || busy) return;
     setBusy(true);
     setPreflight(null);
-    setPostflight(null);
     setNotice(null);
     setError(null);
     try {
@@ -210,46 +205,12 @@ export default function SourceOverviewClient() {
     }
   }
 
-  async function reconcileWithoutImporting() {
-    if (!connected || !runtimeReady || busy) return;
-    setBusy(true);
-    setPreflight(null);
-    setPostflight(null);
-    setNotice(null);
-    setError(null);
-    try {
-      const response = await fetch("/api/source/google/postflight", { cache: "no-store" });
-      const payload = await readJson<Partial<PublicSourcePostflightReport>>(response);
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) {
-          setGoogle(null);
-          setRuntime(null);
-          setSyncStatus(EMPTY_SYNC_STATUS);
-          throw new Error(response.status === 401
-            ? "Inicia sesión para consultar la fuente bancaria."
-            : "La sesión actual no tiene acceso a esta fuente bancaria.");
-        }
-        throw new Error("La conciliación no está disponible. No se han modificado datos.");
-      }
-      // The same fail-closed contract used in domain tests protects UI.
-      if (!isConfirmedSourcePostflightReport(payload)) {
-        throw new Error("La conciliación no ha devuelto resultados completos y verificables.");
-      }
-      setPostflight(payload);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se ha podido completar la conciliación sin importar.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function updateFromGoogle() {
     if (!connected || !runtimeReady || busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
     setPreflight(null);
-    setPostflight(null);
     let syncWasRequested = false;
     try {
       const payload = await synchronizeOfficialSource();
@@ -301,7 +262,7 @@ export default function SourceOverviewClient() {
         </div>
         <div className="configuration-summary" role="group" aria-label="Resumen de la fuente bancaria">
           <div><strong>{!sourceVerified ? "—" : connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Última actualización</span></div>
+          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Último intento</span></div>
           <div><strong>{stateLabel}</strong><span>Estado</span></div>
         </div>
       </header>
@@ -338,11 +299,13 @@ export default function SourceOverviewClient() {
               </div>
               <div>
                 <dt>Último resultado</dt>
-                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? "Completada" : run?.status === "failed" ? "Fallida" : run ? "En revisión" : "Sin actualizaciones"}</dd>
+                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? hasProblem ? "Completada con avisos" : staleSuccess ? "Pendiente de comprobar" : "Completada" : run?.status === "failed" ? "Fallida" : run?.status === "partial" ? "Parcial" : run?.status === "started" ? "En curso" : run ? "En revisión" : "Sin actualizaciones"}</dd>
               </div>
               <div>
-                <dt>Cambios de la última actualización</dt>
-                <dd>{run ? `${Math.max(0, run.rowsInserted) + Math.max(0, run.rowsRevised)} incorporados` : "Aún no disponible"}</dd>
+                <dt>Cambios confirmados en el último intento</dt>
+                <dd>{run?.status === "success"
+                  ? `${Math.max(0, run.rowsInserted) + Math.max(0, run.rowsRevised)} incorporados${hasProblem ? " · con avisos" : ""}`
+                  : run ? "No confirmados" : "Aún no disponible"}</dd>
               </div>
             </dl>
 
@@ -377,11 +340,6 @@ export default function SourceOverviewClient() {
                   Comprobar sin importar
                 </button>
               )}
-              {connected && runtimeReady && (
-                <button className="secondary-button" type="button" disabled={busy} onClick={() => void reconcileWithoutImporting()}>
-                  Conciliar con datos guardados
-                </button>
-              )}
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
@@ -395,7 +353,6 @@ export default function SourceOverviewClient() {
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
             {preflight && <SourcePreflightReport summary={preflight} />}
-            {postflight && <SourcePostflightReportPanel report={postflight} />}
 
           </section>
 
