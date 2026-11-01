@@ -59,6 +59,25 @@ export type CashFlowForecastCounts = Record<CashFlowEventState, number>;
 
 // FA-UI-024: keep calendar labels compact without mistaking missing bank data
 // for a genuine zero. Full coverage is announced on each day's button.
+/**
+ * Every daily control announces the bank evidence separately from forecasts.
+ * A planned event is never proof that a day has confirmed banking coverage.
+ */
+export function cashFlowCalendarAccessibleLabel(
+  dateLabel: string,
+  bankCovered: boolean,
+  forecastReady: boolean,
+  signals: string,
+): string {
+  if (bankCovered && forecastReady) return `${dateLabel}: ${signals || "sin actividad registrada"}`;
+  const facts = [
+    !bankCovered ? "sin cobertura bancaria confirmada" : null,
+    !forecastReady ? "previsión no disponible" : null,
+    signals || null,
+  ].filter((fact): fact is string => fact !== null);
+  return `${dateLabel}: ${facts.join("; ")}`;
+}
+
 export function cashFlowCalendarCountLabel(realCount: number | null, plannedCount: number | null): string {
   if (realCount || plannedCount) {
     return [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null]

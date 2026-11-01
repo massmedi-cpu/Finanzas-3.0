@@ -5,6 +5,7 @@ import {
   assembleCashFlow,
   cashFlowEventState,
   cashFlowMonth,
+  cashFlowCalendarAccessibleLabel,
   isTransactionPage,
   type CashFlowTransaction,
 } from "../../src/application/cash-flow/cash-flow-model";
@@ -266,4 +267,23 @@ test("REC-CFLOW-023 · no completed sync or damaged source may color an unverifi
     expect(result.evolution.every((point) => point.realCumulativeCents === null)).toBe(true);
     expect(result.evolution.every((point) => point.combinedCumulativeCents === null)).toBe(true);
   }
+});
+
+ 
+test("REC-CFLOW-028 · previsión visible nunca oculta una jornada bancaria sin cobertura", () => {
+  const date = "viernes, 11 de septiembre de 2026";
+  expect(cashFlowCalendarAccessibleLabel(date, false, true, "entradas previstas"))
+    .toBe(`${date}: sin cobertura bancaria confirmada; entradas previstas`);
+  expect(cashFlowCalendarAccessibleLabel(date, false, true, "eventos confirmados"))
+    .toBe(`${date}: sin cobertura bancaria confirmada; eventos confirmados`);
+  expect(cashFlowCalendarAccessibleLabel(date, false, false, ""))
+    .toBe(`${date}: sin cobertura bancaria confirmada; previsión no disponible`);
+  expect(cashFlowCalendarAccessibleLabel(date, true, false, "salidas reales"))
+    .toBe(`${date}: previsión no disponible; salidas reales`);
+  expect(cashFlowCalendarAccessibleLabel(date, true, true, ""))
+    .toBe(`${date}: sin actividad registrada`);
+  expect(cashFlowCalendarAccessibleLabel(date, true, true, "entradas reales"))
+    .toBe(`${date}: entradas reales`);
+  const client = readFileSync(resolve(process.cwd(), "app/cash-flow/cash-flow-client.tsx"), "utf8");
+  expect(client).toContain("aria-label={cashFlowCalendarAccessibleLabel(formatDate(day.date), dayActualCovered, forecastReady, signals)}");
 });

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CashFlowDay, CashFlowEventState, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
-import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow, cashFlowObservedDaySignal, cashFlowCalendarCountLabel } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow, cashFlowObservedDaySignal, cashFlowCalendarCountLabel, cashFlowCalendarAccessibleLabel } from "../../src/application/cash-flow/cash-flow-model";
 import { formatMoneyCents } from "../../src/core/money";
 import { dateHasConfirmedCoverage, periodComparisonIsReliable } from "../../src/application/data-coverage";
 import { CashFlowEvolution } from "./cash-flow-evolution";
@@ -190,7 +190,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
               const plannedCount = forecastReady ? day.forecasts.filter((item) => item.status === "planned").length : null;
               return (
                 <button key={day.date} type="button" className={`${styles.day} ${selected === day.date ? styles.active : ""}`}
-                  aria-label={`${formatDate(day.date)}: ${signals || (!dayActualCovered ? "sin cobertura bancaria confirmada" : forecastReady ? "sin actividad registrada" : "previsión no disponible")}`}
+                  aria-label={cashFlowCalendarAccessibleLabel(formatDate(day.date), dayActualCovered, forecastReady, signals)}
                   aria-pressed={selected === day.date} onClick={() => setSelected(day.date)}>
                   <strong>{Number(day.date.slice(-2))}</strong>
                   <span className={styles.dayCounts}>{cashFlowCalendarCountLabel(realCount, plannedCount)}</span>
