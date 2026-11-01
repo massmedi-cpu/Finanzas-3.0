@@ -169,40 +169,49 @@ async function mockSourceOverviewForPostflight(page: import("@playwright/test").
   return { mutations: () => mutationCalls };
 }
 
-test("REC-POST-292 · la interfaz muestra pendientes reales como pendientes sin POST ni falsos éxitos", async ({ page }) => {
-  const source = await mockSourceOverviewForPostflight(page);
+test("REC-POST-292 · la vista personal no exige conciliación manual ni consulta el postflight", async ({ page }) => {
+  let postflightReads = 0;
+  let mutations = 0;
+  await mockSourceOverviewForPostflight(page);
+  await page.route("**/api/source/google/postflight", async route => {
+    postflightReads++;
+    await route.fulfill({ status: 500, json: { error: "should_not_be_called" } });
+  });
+  await page.route("**/api/source/google/sync", async route => {
+    if (route.request().method() !== "GET") mutations++;
+    await route.fulfill({ json: { run: null, cursors: [] } });
+  });
   await page.goto("/configuration/source");
-  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
-  const report = page.getByRole("region", { name: "Conciliación con los movimientos guardados" });
-  await expect(report).toContainText("Hay movimientos pendientes de incorporar");
-  await expect(report).toContainText("Sin modificar datos");
-  await expect(report).toContainText("Coincidentes");
-  await expect(report).toContainText("Pendientes");
-  await expect(report).toContainText("saldos desconocidos");
-  await expect(report).toContainText("no a una transacción atómica");
-  expect(source.mutations()).toBe(0);
+  await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Detalles técnicos" })).toBeVisible();
+  expect(postflightReads).toBe(0);
+  expect(mutations).toBe(0);
 });
 
-test("REC-POST-293 · un postflight inválido no se presenta como éxito", async ({ page }) => {
+test("REC-POST-293 · el contrato interno se conserva pero no aparece como éxito en la interfaz principal", async ({ page }) => {
   const state = await mockSourceOverviewForPostflight(page, { payload: {
     status: "verified", scope: "supplied_snapshots_only",
     sourceRows: 100, persistedRows: 2, matchingRows: 2, pendingRows: 0,
     orphanRows: 0, differingRows: 0, accounts: [],
   } });
   await page.goto("/configuration/source");
-  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
-  await expect(page.locator(".config-message.error")).toContainText("resultados completos y verificables");
   await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
+  const routeSource = readFileSync("app/api/source/google/postflight/route.ts", "utf8");
+  expect(routeSource).toContain("toPublicSourcePostflightReport(report)");
 });
 
-test("REC-POST-294 · sesión caducada revoca el reporte y los botones", async ({ page }) => {
-  const state = await mockSourceOverviewForPostflight(page, {
-    status: 401, payload: { error: "authentication_required" },
-  });
+test("REC-POST-294 · sesión caducada revoca las acciones bancarias sin ofrecer conciliación", async ({ page }) => {
+  const state = await mockSourceOverviewForPostflight(page);
+  await page.route("**/api/source/google/status", route => route.fulfill({
+    status: 401, json: { error: "authentication_required" },
+  }));
   await page.goto("/configuration/source");
-  await page.getByRole("button", { name: "Conciliar con datos guardados" }).click();
   await expect(page.locator(".config-message.error")).toContainText("Inicia sesión");
+  await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
