@@ -1,5 +1,8 @@
+import { formatMoneyInputCents } from "../../core/money";
+
+/** Exact cent-by-cent representation; floating-point euros can lose one cent. */
 export function formatSplitAmountInput(cents: number) {
-  return new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(cents) / 100);
+  return formatMoneyInputCents(Math.abs(cents), true);
 }
 
 export function parseSplitAmountInput(value: string): number | null {
@@ -12,6 +15,7 @@ export function parseSplitAmountInput(value: string): number | null {
   if (!grouped && !commaDecimal && !dotDecimal) return null;
   const normalized = grouped ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(",", ".");
   const [euros, decimals = ""] = normalized.split(".");
-  const cents = Number(euros) * 100 + Number(decimals.padEnd(2, "0"));
-  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
+  // Assemble exact cents first; do not multiply floating-point euros by 100.
+  const cents = BigInt(euros) * 100n + BigInt(decimals.padEnd(2, "0"));
+  return cents > 0n && cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
 }

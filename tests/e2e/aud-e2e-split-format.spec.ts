@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { formatSplitAmountInput, parseSplitAmountInput } from "../../src/application/transactions/split-amount-format";
+import { formatMoneyCents, parseMoneyInputToCents, parseSpanishMoneyToCents } from "../../src/core/money";
 
 test("AUD-E2E-FMT-001 · importe español y sumas exactas", () => {
   expect(formatSplitAmountInput(-1732)).toBe("17,32");
@@ -16,8 +17,6 @@ test("AUD-E2E-FMT-001 · pegado y rechazo de importes ambiguos", () => {
     expect(parseSplitAmountInput(invalid), invalid).toBeNull();
   }
 });
-
-import { formatMoneyCents, parseMoneyInputToCents, parseSpanishMoneyToCents } from "../../src/core/money";
 
 test("REC-MONEY-001 · reject misplaced whitespace without silently changing euros or cents", () => {
   const malformed = [
@@ -38,4 +37,19 @@ test("REC-MONEY-002 · preserve Spanish grouping, EUR suffix and legitimate deci
   expect(parseMoneyInputToCents("1.234,56 €")).toBe(123456);
   expect(parseMoneyInputToCents(formatMoneyCents(123456))).toBe(123456);
   expect(parseMoneyInputToCents("-12,34")).toBe(-1234);
+});
+
+
+test("REC-SPLIT-003 · round trip of extreme but safe cent values without fractional loss", () => {
+  for (const cents of [1, 87, 100, 1732, 123456, 9_007_199_254_740_987, Number.MAX_SAFE_INTEGER]) {
+    const display = formatSplitAmountInput(cents);
+    expect(parseSplitAmountInput(display), `${cents}: ${display}`).toBe(cents);
+  }
+  expect(formatSplitAmountInput(Number.MAX_SAFE_INTEGER)).toBe("90.071.992.547.409,91");
+  expect(formatSplitAmountInput(-Number.MAX_SAFE_INTEGER)).toBe("90.071.992.547.409,91");
+});
+
+test("REC-SPLIT-004 · refuse cent values above the safe exact integer boundary", () => {
+  expect(parseSplitAmountInput("90.071.992.547.409,92")).toBeNull();
+  expect(parseSplitAmountInput("999999999999999999,99")).toBeNull();
 });
