@@ -7,6 +7,8 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/tests/aud_e2e_production_upgrade_rollback.sql'
       - 'supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql'
+      - 'supabase/tests/rec_ap8_restored_post_ddl_audit.sql'
+      - 'tests/unit/ap8-post-ddl-mode.test.mjs'
       - 'supabase/tests/ap1_private_document_original_immutable.sql'
       - 'supabase/tests/aud_e2e_budget_balance.sql'
       - 'supabase/tests/aud_e2e_document_designation.sql'
@@ -170,6 +172,8 @@ jobs:
         run: node scripts/verify-ap8-restored-acl-matrix.mjs
       - name: Verify backup selection against unsafe and stale metadata
         run: node --test tests/unit/ap8-verified-backup.test.mjs
+      - name: Prove both authenticated backup modes select safe independent SQL
+        run: node --test tests/unit/ap8-post-ddl-mode.test.mjs
       # REC-AP8-503: select the most recent completed trusted backup, never an
       # older fallback after a failed or ambiguous run. No plaintext is read.
       - name: Select recent verified immutable backup (no plaintext access)

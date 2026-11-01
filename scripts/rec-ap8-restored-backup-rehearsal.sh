@@ -39,8 +39,30 @@ fi
 # The exact artifact/run date is checked by the caller: do not falsely label
 # every fresh restore as a backup from an old calendar date.
 echo 'REC_AP8_REAL_BACKUP|stage=restore|status=ok|baseline_version=10.0.103|verified_artifact=true'
+# Differentiate authentic pre-DDL and post-DDL backups, without ever
+# running the already-applied five migrations against a current restored DB.
+baseline_guard="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 \
+  -c "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and tgenabled='O' and not tgisinternal" \
+  2>"$private_log")" || fail restored_guard_unavailable
+case "$baseline_guard" in
+  0) fixture='supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql'; mode='pre_ddl' ;;
+  1)
+    fixture='supabase/tests/rec_ap8_restored_post_ddl_audit.sql'; mode='post_ddl'
+    # pg_dump --no-privileges intentionally drops effective function ACLs.
+    # Reconstruct only the previously verified live grants in LOOPBACK PG17,
+    # never through a connection or service credential to Supabase live.
+    psql "$local_db" -X -q -v ON_ERROR_STOP=1 >"$private_log" 2>&1 <<'POST_DDL_ACL'
+REVOKE ALL ON FUNCTION financial_app.prevent_private_original_rewrite() FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION financial_app.prevent_private_original_rewrite() TO financial_app_gateway;
+POST_DDL_ACL
+    readiness="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 \
+      -f scripts/rec-ap8-readiness-readonly.sql 2>"$private_log")" || fail post_ddl_readiness_query
+    [[ "$readiness" == 'ready|{}|6|32|32|1|1|1|0|3188|3188|0|0' ]] || fail post_ddl_readiness_blocked
+    ;;
+  *) fail unknown_restored_baseline ;;
+esac
 if ! psql "$local_db" -X -v ON_ERROR_STOP=1 -q \
-  -f supabase/tests/rec_ap8_restored_backup_upgrade_rollback.sql >"$private_log" 2>&1; then
+  -f "$fixture" >"$private_log" 2>&1; then
   # SQL errors may contain user data: print only stable sanitized codes.
   node - "$private_log" <<'NODE'
 const fs=require('node:fs');
@@ -53,17 +75,21 @@ console.log('REC_AP8_REAL_BACKUP|status=failed|phase='+phase+'|reason='+reason);
 NODE
   exit 1
 fi
-node - "$private_log" <<'NODE'
+node - "$private_log" "$mode" <<'NODE'
 const fs = require('node:fs');
-const log = fs.readFileSync(process.argv[2], 'utf8');
-if (!log.includes('REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored')
- || !log.includes('REC_AP8_DELTA|rollback=passed')
- || !log.includes('REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true')) {
-  process.exit(1);
-}
+const log = fs.readFileSync(process.argv[2],'utf8');
+const mode = process.argv[3];
+const oldMarker = log.includes('REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored')
+  && log.includes('REC_AP8_DELTA|rollback=passed')
+  && log.includes('REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true');
+const newMarker = log.includes('REC_AP8_POST_DDL|status=ok|checked_points=384|data_read_only=true');
+if (!((mode === 'pre_ddl' && oldMarker) || (mode === 'post_ddl' && newMarker))) process.exit(1);
 NODE
-# Verify final trigger absent again (baseline restored), without reading rows.
-final_guard="$(psql "$local_db" -X -At -v ON_ERROR_STOP=1 -c \
- "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and not tgisinternal")"
-[[ "$final_guard" == 0 ]] || fail guard_not_rolled_back
-echo "REC_AP8_REAL_BACKUP|status=ok|authentic_restored=true|upgrade_migrations=5|rollback=true|data_digest_identical=true|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
+final_guard="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 -c \
+ "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and tgenabled='O' and not tgisinternal")"
+[[ "$final_guard" == "$baseline_guard" ]] || fail guard_baseline_changed
+if [[ "$mode" == post_ddl ]]; then
+  echo "REC_AP8_REAL_BACKUP|status=ok|baseline=post_ddl|original_guard=preserved|financial_data_writes=false|upgrade_migrations=already_applied|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
+else
+  echo "REC_AP8_REAL_BACKUP|status=ok|baseline=pre_ddl|original_guard=rolled_back|upgrade_migrations=5|rollback=true|data_digest_identical=true|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
+fi
