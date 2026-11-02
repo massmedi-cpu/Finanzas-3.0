@@ -247,7 +247,7 @@ export default function ReviewClient() {
                       <h3>{item.name}</h3>
                       <p>{item.description}</p>
                     </div>
-                    <Link prefetch={false} className={styles.action} href={item.href}>Revisar</Link>
+                    <Link prefetch={false} className={styles.action} href={item.href} aria-label={`Revisar: ${item.name}`}>Revisar</Link>
                   </article>
                 ))}
               </div>
@@ -287,7 +287,7 @@ export default function ReviewClient() {
                 {unavailableItems.map((item) => (
                   <li key={item.name}>
                     <span>{item.name}</span>
-                    <Link prefetch={false} href={item.href}>Abrir sección</Link>
+                    <Link prefetch={false} href={item.href} aria-label={`Abrir sección: ${item.name}`}>Abrir sección</Link>
                   </li>
                 ))}
               </ul>
