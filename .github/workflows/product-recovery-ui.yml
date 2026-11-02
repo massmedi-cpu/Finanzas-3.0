@@ -245,6 +245,7 @@ jobs:
           tests/e2e/forecast-horizons-integrity.spec.ts
           tests/e2e/comparison-ui.spec.ts
           tests/e2e/recurrences.spec.ts
+          tests/e2e/merchants.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
           tests/e2e/analysis-contract-navigation.spec.ts
