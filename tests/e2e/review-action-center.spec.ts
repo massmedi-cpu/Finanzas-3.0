@@ -40,7 +40,7 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
   await expect(actions.getByRole("heading", { name: "Presupuestos excedidos" })).toBeVisible();
   await expect(actions.getByRole("heading", { name: "Posibles duplicados" })).toHaveCount(0);
 
-  const reviewLink = actions.getByRole("link", { name: "Revisar" }).first();
+  const reviewLink = actions.getByRole("link", { name: "Revisar: Movimientos por revisar", exact: true });
   await expect(reviewLink).toHaveAttribute("href", "/transactions?reviewState=needs_review");
 
   const clear = page.getByRole("region", { name: "Sin incidencias en áreas verificadas" });
@@ -50,7 +50,7 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
 
   const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
   await expect(unavailable.getByText("Previsiones con baja confianza", { exact: true })).toBeVisible();
-  await expect(unavailable.getByRole("link", { name: "Abrir sección" })).toHaveAttribute("href", "/forecast");
+  await expect(unavailable.getByRole("link", { name: "Abrir sección: Previsiones con baja confianza", exact: true })).toHaveAttribute("href", "/forecast");
   await expect(page.getByText("Todo en orden", { exact: true })).toHaveCount(0);
 });
 
@@ -71,11 +71,33 @@ test("Para revisar no confunde un control de signo caído con cero incoherencias
   const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
   const signMismatchItem = unavailable.getByRole("listitem").filter({ hasText: "Signos incoherentes" });
   await expect(signMismatchItem).toBeVisible();
-  await expect(signMismatchItem.getByRole("link", { name: "Abrir sección" }))
+  await expect(signMismatchItem.getByRole("link", { name: "Abrir sección: Signos incoherentes", exact: true }))
     .toHaveAttribute("href", "/transactions?signMismatch=true");
 
   const clear = page.getByRole("region", { name: "Sin incidencias en áreas verificadas" });
   await expect(clear.getByText("Signos incoherentes", { exact: true })).toHaveCount(0);
+});
+
+
+test("FA-UI-032 · enlaces de Revisar tienen nombres accesibles únicos en móvil y escritorio", async ({ page }) => {
+  await mockReviewSources(page, { failSignMismatch: true });
+  for (const width of [360, 390, 1366]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/review");
+    const actions = page.getByRole("region", { name: "Requiere atención" });
+    const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+    await expect(actions.getByRole("link", { name: "Revisar: Movimientos por revisar", exact: true }))
+      .toHaveAttribute("href", "/transactions?reviewState=needs_review");
+    await expect(unavailable.getByRole("link", { name: "Abrir sección: Signos incoherentes", exact: true }))
+      .toHaveAttribute("href", "/transactions?signMismatch=true");
+    await expect(unavailable.getByRole("link", { name: "Abrir sección: Previsiones con baja confianza", exact: true }))
+      .toHaveAttribute("href", "/forecast");
+    const labels = await page.locator("main a[aria-label]").evaluateAll((links) =>
+      links.map((link) => link.getAttribute("aria-label") ?? ""),
+    );
+    expect(labels.length).toBeGreaterThanOrEqual(3);
+    expect(new Set(labels).size).toBe(labels.length);
+  }
 });
 
 test("Para revisar conserva navegación táctil y sin desbordamiento en móvil", async ({ page }) => {
