@@ -190,7 +190,7 @@ export default function MerchantsClient() {
       if (savedId) setSelectedMerchantId(savedId);
       setEditingMerchantId(null);
       setMerchantForm(EMPTY_FORM);
-    }, editingMerchantId ? "Comercio actualizado." : "Comercio creado y persistido.");
+    }, editingMerchantId ? "Comercio actualizado." : "Comercio creado y guardado.");
   }
 
   async function toggleLifecycle(merchant: Merchant) {
@@ -277,14 +277,14 @@ export default function MerchantsClient() {
           <section className={styles.panel} aria-labelledby="merchant-list-heading">
             <div className={styles.panelHeading}>
               <div>
-                <p className={styles.kicker}>FUENTE DE VERDAD</p>
+                <p className={styles.kicker}>TU LISTADO</p>
                 <h2 id="merchant-list-heading">Comercios</h2>
               </div>
               <span>{filteredMerchants.length}</span>
             </div>
 
             <div className={styles.merchantList}>
-              {filteredMerchants.length === 0 ? <p className={styles.empty}>No hay comercios que coincidan con la búsqueda.</p> : filteredMerchants.map((merchant) => (
+              {filteredMerchants.length === 0 ? <p className={styles.empty}>{data.merchants.length === 0 ? "Aún no hay comercios guardados. Puedes crear el primero." : "No hay comercios que coincidan con la búsqueda. Prueba con otro nombre o alias."}</p> : filteredMerchants.map((merchant) => (
                 <article key={merchant.id} className={`${styles.merchantCard} ${selectedMerchantId === merchant.id ? styles.selected : ""}`}>
                   <button className={styles.cardMain} type="button" onClick={() => setSelectedMerchantId(merchant.id)} aria-pressed={selectedMerchantId === merchant.id}>
                     <span className={styles.merchantTitle}>{merchant.name}</span>
