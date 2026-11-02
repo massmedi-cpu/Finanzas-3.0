@@ -98,5 +98,18 @@ test("REC-AP8-503 · rehearse against the newest independently verified recent e
   const runner = readFileSync("scripts/rec-ap8-restored-backup-rehearsal.sh", "utf8");
   expect(runner).toContain("baseline_version=10.0.103|verified_artifact=true");
   expect(runner).not.toContain("source=2026-10-20");
-  expect(runner).toContain("REC_AP8_REAL_BACKUP|status=ok|authentic_restored=true|upgrade_migrations=5|rollback=true|data_digest_identical=true");
+  // Both baseline generations must be distinguishable: five migrations are only
+  // upgraded and rolled back on a pre-DDL authentic backup. A post-DDL backup
+  // must be audited read-only, without replaying already applied migrations.
+  expect(runner).toContain("mode='pre_ddl'");
+  expect(runner).toContain("mode='post_ddl'");
+  expect(runner).toContain("rec_ap8_restored_backup_upgrade_rollback.sql");
+  expect(runner).toContain("rec_ap8_restored_post_ddl_audit.sql");
+  expect(runner).toContain("REC_AP8_DELTA|rollback=passed");
+  expect(runner).toContain("REC_AP8_POST_DDL|status=ok|checked_points=384|data_read_only=true");
+  expect(runner).toContain("post_ddl_readiness_blocked");
+  expect(runner).toContain('[[ "$final_guard" == "$baseline_guard" ]] || fail guard_baseline_changed');
+  expect(runner).toContain("baseline=pre_ddl|original_guard=rolled_back|upgrade_migrations=5|rollback=true|data_digest_identical=true");
+  expect(runner).toContain("baseline=post_ddl|original_guard=preserved|financial_data_writes=false|upgrade_migrations=already_applied");
+  expect(runner).toContain("live_production_writes=false");
 });
