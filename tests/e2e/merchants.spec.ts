@@ -136,7 +136,10 @@ test("FA-UI-014 · Comercios distingue catálogo vacío, filtro sin resultados y
   await expect(page.getByRole("button", { name: "+ Nuevo comercio" })).toBeVisible();
 
   // La búsqueda sin resultados no significa que el catálogo guardado esté vacío.
-  await page.unroute("**/api/merchants");
+  await page.route("**/api/merchants", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ merchants, aliases }) });
+  });
   await page.reload();
   await page.getByRole("textbox", { name: "Buscar comercio o alias" }).fill("sin-coincidencias-12345");
   await expect(page.getByText("No hay comercios que coincidan con la búsqueda. Prueba con otro nombre o alias.")).toBeVisible();
