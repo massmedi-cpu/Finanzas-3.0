@@ -36,4 +36,13 @@ test("FA-UI-031 · quick presets discard stale conflicting filters but keep owne
     return [p.get("kind"), p.get("categoryId"), p.get("uncategorized"), p.get("duplicateState"), p.get("q")];
   }).toEqual([null, null, null, "suspected", "Mercadona"]);
   await expect(nav.getByRole("link", { name: "Posibles duplicados", exact: true })).toHaveAttribute("aria-current", "page");
+  
+  // FA-UI-031-TODOS: clear only quick-preset constraints; an owner-selected
+  // search/date range must not be silently discarded when choosing Todos.
+  await nav.getByRole("link", { name: "Todos", exact: true }).click();
+  await expect.poll(() => {
+    const p = new URL(page.url()).searchParams;
+    return [p.get("kind"), p.get("categoryId"), p.get("uncategorized"), p.get("duplicateState"), p.get("dateFrom"), p.get("dateTo"), p.get("q")];
+  }).toEqual([null, null, null, null, "2026-09-25", "2026-09-25", "Mercadona"]);
+  await expect(nav.getByRole("link", { name: "Todos", exact: true })).toHaveAttribute("aria-current", "page");
 });
