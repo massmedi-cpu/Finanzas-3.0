@@ -119,3 +119,37 @@ test("Comercios y alias permite alta canónica y comprobación de equivalencias"
   await page.getByRole("button", { name: "Resolver" }).click();
   await expect(page.getByText("Coincide con Carrefour.")).toBeVisible();
 });
+
+
+test("FA-UI-014 · Comercios distingue catálogo vacío, filtro sin resultados y error de lectura", async ({ page }) => {
+  await mockMerchantApis(page);
+  await page.route("**/api/merchants", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ merchants: [], aliases: [] }),
+    });
+  });
+  await page.goto("/configuration/merchants");
+  await expect(page.getByText("Aún no hay comercios guardados. Puedes crear el primero.")).toBeVisible();
+  await expect(page.getByText("No hay comercios que coincidan con la búsqueda.", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "+ Nuevo comercio" })).toBeVisible();
+
+  // La búsqueda sin resultados no significa que el catálogo guardado esté vacío.
+  await page.unroute("**/api/merchants");
+  await page.reload();
+  await page.getByRole("textbox", { name: "Buscar comercio o alias" }).fill("sin-coincidencias-12345");
+  await expect(page.getByText("No hay comercios que coincidan con la búsqueda. Prueba con otro nombre o alias.")).toBeVisible();
+  await expect(page.getByText("Aún no hay comercios guardados.", { exact: false })).toHaveCount(0);
+
+  // Una respuesta 503 tampoco debe presentarse como cero comercios o como alta inicial.
+  await page.route("**/api/merchants", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) });
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Comercios sin verificar" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "+ Nuevo comercio" })).toHaveCount(0);
+  await expect(page.getByText("Aún no hay comercios guardados.", { exact: false })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+});
