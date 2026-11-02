@@ -10,8 +10,12 @@ type Preset = {
   matches: (params: URLSearchParams) => boolean;
 };
 
+// A quick preset replaces its own selection scope while retaining searches,
+// banking accounts, merchants and dates selected by the owner.
+const PRESET_FILTER_KEYS = ["kind", "categoryId", "uncategorized", "duplicateState"] as const;
+
 const presets: Preset[] = [
-  { label: "Todos", href: "/transactions", matches: (params) => params.size === 0 },
+  { label: "Todos", href: "/transactions", matches: (params) => PRESET_FILTER_KEYS.every((key) => !params.has(key)) },
   { label: "Gastos", href: "/transactions?kind=expense", matches: (params) => params.get("kind") === "expense" },
   { label: "Ingresos", href: "/transactions?kind=income", matches: (params) => params.get("kind") === "income" },
   { label: "Transferencias", href: "/transactions?kind=transfer", matches: (params) => params.get("kind") === "transfer" },
@@ -19,9 +23,6 @@ const presets: Preset[] = [
   { label: "Posibles duplicados", href: "/transactions?duplicateState=suspected", matches: (params) => params.get("duplicateState") === "suspected" },
 ];
 
-// A quick preset replaces its own selection scope while retaining searches,
-// banking accounts, merchants and dates selected by the owner.
-const PRESET_FILTER_KEYS = ["kind", "categoryId", "uncategorized", "duplicateState"] as const;
 
 function isPresetActive(preset: Preset, current: URLSearchParams) {
   if (!preset.matches(current)) return false;
@@ -37,12 +38,12 @@ function isPresetActive(preset: Preset, current: URLSearchParams) {
 }
 
 function contextualHref(preset: Preset, current: URLSearchParams) {
-  if (preset.label === "Todos") return "/transactions";
   const target = new URLSearchParams(current);
   for (const key of PRESET_FILTER_KEYS) target.delete(key);
   const override = new URLSearchParams(preset.href.split("?")[1] ?? "");
   for (const [key, value] of override) target.set(key, value);
-  return "/transactions?" + target.toString();
+  const query = target.toString();
+  return `/transactions${query ? `?${query}` : ""}`;
 }
 
 export default function TransactionsQuickNav() {
