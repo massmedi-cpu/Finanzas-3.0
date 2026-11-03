@@ -1189,7 +1189,13 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   // Start at a deliberately older month, then navigate to the SAME Next.js
   // route using the real product sidebar link (without the old query).
   await page.goto("/budgets?month=2026-07");
-  const monthInput = page.locator('main input[type="month"]');
+  // REC-BUD-007: the shell has its own contextual month selector, also inside
+  // <main> on mobile. Only the budget module's named control group is unique.
+  // Keep the uniqueness gate inside that group; never use .first() to mask
+  // duplicate budget controls after the App Router transition.
+  const budgetControls = page.getByRole("group", { name: "Controles de presupuesto" });
+  const monthInput = budgetControls.locator('input[type="month"]');
+  await expect(budgetControls).toHaveCount(1);
   await expect(monthInput).toHaveCount(1);
   await expect(monthInput).toHaveValue("2026-07");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
