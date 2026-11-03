@@ -309,6 +309,13 @@
   .unavailableList a { width: auto; flex: 0 0 auto; min-height: 2.75rem; padding-inline: .65rem; }
 }
 
+/* FA-UI-033: keyboard focus must remain discernible on the dark theme too. */
+.action:focus-visible,
+.unavailableList a:focus-visible {
+  outline: 3px solid var(--color-primary-bright);
+  outline-offset: 3px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .action,
   .unavailableList a { transition: none; }
