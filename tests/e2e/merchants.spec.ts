@@ -87,7 +87,13 @@ test("Comercios y alias mantiene una UX responsive, accesible y sin escritura ba
   await page.goto("/configuration/merchants");
 
   await expect(page.getByRole("heading", { name: "Comercios y alias", level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Comercios y alias" })).toHaveAttribute("aria-current", "page");
+  const configurationNav = page.getByRole("navigation", { name: "Áreas de configuración" });
+  const compactSummary = configurationNav.locator("details > summary");
+  if (await compactSummary.isVisible()) {
+    await expect(compactSummary.locator("strong")).toHaveText("Comercios y alias");
+    await compactSummary.click();
+  }
+  await expect(configurationNav.getByRole("link", { name: "Comercios y alias", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText("Carrefour", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("TPV CARREFOUR 123", { exact: true })).toBeVisible();
   await expect(page.getByText("Normalizado: carrefour")).toBeVisible();
@@ -113,7 +119,7 @@ test("Comercios y alias permite alta canónica y comprobación de equivalencias"
   await page.getByLabel("Nombre canónico").fill("Carrefour");
   await page.getByLabel("Categoría predeterminada").selectOption("20000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: "Crear comercio" }).click();
-  await expect(page.getByRole("status")).toContainText("Comercio creado y persistido.");
+  await expect(page.getByRole("status")).toContainText("Comercio creado y guardado.");
 
   await page.getByLabel("Texto recibido").fill("TPV CARREFOUR 123");
   await page.getByRole("button", { name: "Resolver" }).click();
