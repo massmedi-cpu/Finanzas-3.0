@@ -227,8 +227,20 @@ test("protected preview exposes F10 accounts from the existing financial and tra
   const balancesResponse = await request.get("/api/financial?mode=balances");
   expect(balancesResponse.ok()).toBeTruthy();
   const liveBalances = await balancesResponse.json();
-  expect(liveBalances.activeBalanceCents).toBe(18884599);
+  // The original fixed amount became stale as new read-only bank movements arrived.
+  // Validate the real financial invariant rather than pinning the owner's balance.
   expect(liveBalances.accounts).toHaveLength(2);
+  const activeBalances = liveBalances.accounts.map(
+    (account: { lifecycle: string; balanceCents: number | null }) => {
+      expect(account.lifecycle).toBe("active");
+      expect(Number.isSafeInteger(account.balanceCents)).toBe(true);
+      return account.balanceCents as number;
+    },
+  );
+  expect(Number.isSafeInteger(liveBalances.activeBalanceCents)).toBe(true);
+  expect(liveBalances.activeBalanceCents).toBe(activeBalances.reduce(
+    (total: number, amount: number) => total + amount, 0,
+  ));
   expect(liveBalances.quality.explicitBalanceAccounts).toBe(2);
 
   const selected = liveBalances.accounts[0];
