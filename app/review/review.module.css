@@ -302,8 +302,11 @@
   .hero { flex-direction: column; }
   .actionCard { grid-template-columns: auto minmax(0, 1fr); }
   .actionCard .action { grid-column: 1 / -1; width: 100%; }
-  .unavailableList li { align-items: stretch; flex-direction: column; }
-  .unavailableList a { width: 100%; }
+  /* REC-UI-543: keep each failed check and its action together on 360px screens.
+     A contextual aria-label stays on the link; the 44px tap target survives. */
+  .unavailableList li { align-items: center; flex-direction: row; gap: .5rem; }
+  .unavailableList li > span { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .unavailableList a { width: auto; flex: 0 0 auto; min-height: 2.75rem; padding-inline: .65rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
