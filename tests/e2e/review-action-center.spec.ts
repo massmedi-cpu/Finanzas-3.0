@@ -114,6 +114,45 @@ test("Para revisar conserva navegación táctil y sin desbordamiento en móvil",
   expect(undersizedLinks).toEqual([]);
 });
 
+test("FA-UI-033 · botones de comprobaciones no verificadas quedan alineados y con foco visible", async ({ page }) => {
+  await mockReviewSources(page, { failSignMismatch: true });
+
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/review");
+
+    const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+    const rows = unavailable.getByRole("listitem");
+    await expect(rows).toHaveCount(2);
+
+    for (const row of await rows.all()) {
+      const label = row.locator("span").first();
+      const action = row.getByRole("link");
+      const labelBox = await label.boundingBox();
+      const actionBox = await action.boundingBox();
+      expect(labelBox).not.toBeNull();
+      expect(actionBox).not.toBeNull();
+      expect(actionBox!.height).toBeGreaterThanOrEqual(44);
+      expect(actionBox!.x).toBeGreaterThanOrEqual(labelBox!.x + labelBox!.width - 1);
+      expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(width + 1);
+    }
+
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+    await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"));
+    await page.keyboard.press("Tab");
+    const focusLink = unavailable.getByRole("link", { name: "Abrir sección: Signos incoherentes", exact: true });
+    await focusLink.focus();
+    await expect(focusLink).toBeFocused();
+    const outline = await focusLink.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return { style: computed.outlineStyle, width: Number.parseFloat(computed.outlineWidth) };
+    });
+    expect(outline.style).not.toBe("none");
+    expect(outline.width).toBeGreaterThanOrEqual(3);
+  }
+});
+
 test("El centro de acción permanece read-only y reutiliza módulos propietarios", () => {
   const source = readFileSync(resolve(process.cwd(), "app/review/review-client.tsx"), "utf8");
   expect(source).toContain("/api/transactions?reviewState=needs_review&limit=1");
