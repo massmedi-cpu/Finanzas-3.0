@@ -54,6 +54,30 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
   await expect(page.getByText("Todo en orden", { exact: true })).toHaveCount(0);
 });
 
+test("FA-UI-034 · la revisión incompleta prioriza las comprobaciones desconocidas, no un cero", async ({ page }) => {
+  await page.route("**/api/**", (route) => route.fulfill({
+    status: 503,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "temporarily_unavailable" }),
+  }));
+
+  for (const width of [360, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/review");
+    const header = page.locator("main header").first();
+    const unverified = page.getByRole("region", { name: "No se pudo comprobar" });
+    await expect(unverified).toBeVisible();
+    const missingChecks = await unverified.getByRole("listitem").count();
+    expect(missingChecks).toBeGreaterThan(0);
+    await expect(header.locator("strong")).toHaveText(String(missingChecks));
+    await expect(header).toContainText(missingChecks === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar");
+    await expect(header).toContainText("No se han confirmado acciones; la revisión está incompleta");
+    await expect(header).not.toContainText("acciones pendientes confirmadas");
+    await expect(page.getByText("Revisión incompleta", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  }
+});
+
 test("Para revisar no confunde una fuente caída con cero incidencias", async ({ page }) => {
   await mockReviewSources(page);
   await page.goto("/review");
