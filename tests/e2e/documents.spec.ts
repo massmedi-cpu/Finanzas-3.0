@@ -1070,7 +1070,7 @@ test("Documentos uploads through private signed storage and leaves OCR for expli
   await expect(page.getByRole("status").filter({ hasText: "sólo se ejecutará" })).toBeVisible();
 });
 
-test("protected preview preserves phase 9 document persistence contract across later phases", async ({ request }) => {
+test("protected preview respects the active document release scope", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
   const build = await request.get("/api/build");
   expect(build.status()).toBe(200);
@@ -1082,6 +1082,30 @@ test("protected preview preserves phase 9 document persistence contract across l
     expect(buildJson.phaseBlockName).toBe("Gestión documental");
   }
   if (process.env.GITHUB_SHA) expect(buildJson.commit).toBe(process.env.GITHUB_SHA);
+  // A deferred release must not exercise the historical persistence contract.
+  // The outer owner-auth gate may answer 401 before the deferred API returns 404.
+  const releaseFeatures = buildJson.releaseFeatures;
+  expect(typeof releaseFeatures?.documents).toBe("boolean");
+  if (releaseFeatures.documents === false) {
+    expect(releaseFeatures).toEqual({
+      documents: false, documentOcr: false, documentDriveSync: false,
+    });
+    for (const path of [
+      "/api/documents?limit=50&offset=0",
+      `/api/documents?id=${unknownDocumentId}`,
+    ]) {
+      const blocked = await request.get(path);
+      const body = await blocked.json();
+      expect(blocked.headers()["cache-control"]).toContain("no-store");
+      if (blocked.status() === 401) {
+        expect(body).toEqual({ error: "authentication_required", code: null });
+      } else {
+        expect(blocked.status()).toBe(404);
+        expect(body).toEqual({ error: "feature_deferred", code: null });
+      }
+    }
+    return;
+  }
   const snapshot = await request.get("/api/documents?limit=50&offset=0");
   expect(snapshot.status()).toBe(200);
   const body = await snapshot.json();

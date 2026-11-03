@@ -1375,7 +1375,7 @@ test("protected preview returns the current split-aware Axioma §52 budget contr
   expect(Array.isArray(snapshot.categories)).toBeTruthy();
 });
 
-test("protected preview rejects a valid but unknown budget category without persisting", async ({ request }) => {
+test("protected preview denies budget mutations before category lookup", async ({ request }) => {
   test.skip(!isProtectedPreview, "Budget domain error classification is a protected-preview gate.");
 
   const response = await request.patch("/api/budgets", {
@@ -1385,10 +1385,19 @@ test("protected preview rejects a valid but unknown budget category without pers
       manualAmountCents: 10000,
     },
   });
-  expect(response.status()).toBe(404);
-  await expect(response.json()).resolves.toEqual({
-    error: "not_found",
-    code: "budget_category_not_found",
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  const body = await response.json();
+  if (response.status() === 401) {
+    // The outer owner-auth boundary rejects unauthenticated requests first.
+    expect(body).toEqual({ error: "authentication_required", code: null });
+    return;
+  }
+  // Even a valid owner cannot write to the shared database from preview.
+  // Category validation is intentionally unreachable behind this boundary.
+  expect(response.status()).toBe(403);
+  expect(body).toEqual({
+    error: "persistence_failed",
+    code: "preview_production_write_forbidden",
   });
 });
 
