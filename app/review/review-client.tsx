@@ -208,6 +208,10 @@ export default function ReviewClient() {
   const clearItems = useMemo(() => items.filter((item) => item.count === 0), [items]);
   const unavailableItems = useMemo(() => loading ? [] : items.filter((item) => item.count === null), [items, loading]);
   const actionableCount = actionItems.reduce((sum, item) => sum + (item.count ?? 0), 0);
+  // FA-UI-034: an unverified source is not proof that nothing needs attention.
+  // When no actions can be confirmed, show missing checks before the zero.
+  const prioritizeUnverified = !loading && actionableCount === 0 && unavailableItems.length > 0;
+  const headlineCount = prioritizeUnverified ? unavailableItems.length : actionableCount;
 
   return (
     <main className={styles.shell}>
@@ -217,10 +221,16 @@ export default function ReviewClient() {
           <h1>Para revisar</h1>
         </div>
         <div className={styles.heroStatus} aria-live="polite">
-          <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
-          <span>{loading ? "Comprobando" : unavailableItems.length > 0 ? actionableCount === 1 ? "acción pendiente confirmada" : "acciones pendientes confirmadas" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          <strong>{loading ? "…" : formatInteger(headlineCount)}</strong>
+          <span>{loading ? "Comprobando" : prioritizeUnverified
+            ? unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"
+            : unavailableItems.length > 0
+              ? actionableCount === 1 ? "acción pendiente confirmada" : "acciones pendientes confirmadas"
+              : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
           {!loading && unavailableItems.length > 0 && (
-            <span role="status">{formatInteger(unavailableItems.length)} {unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"}</span>
+            <span role="status">{prioritizeUnverified
+              ? "No se han confirmado acciones; la revisión está incompleta"
+              : `${formatInteger(unavailableItems.length)} ${unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"}`}</span>
           )}
         </div>
       </header>
