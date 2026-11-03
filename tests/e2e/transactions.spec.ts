@@ -763,3 +763,21 @@ test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin invent
   expect(recoveryReads).toBe(1);
   expect(mutations).toEqual([]);
 });
+
+test("REC-REL-555 · la conciliación no es un filtro visible ni se aplica desde URL antiguas", async ({ page }) => {
+  await mockTransactionApi(page);
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/transactions" && url.searchParams.has("limit")) {
+      requests.push(url.search);
+    }
+  });
+  await page.goto("/transactions?reconciliation=Sí");
+  await page.getByRole("button", { name: "Más filtros", exact: true }).click();
+  await expect(page.getByText("Conciliación", { exact: true })).toHaveCount(0);
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  for (const query of requests) {
+    expect(new URLSearchParams(query).has("reconciliation")).toBe(false);
+  }
+});

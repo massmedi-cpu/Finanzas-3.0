@@ -114,7 +114,6 @@ type Facets = {
   }>;
   merchants: Array<{ id: string; name: string; lifecycle: Lifecycle }>;
   channels: string[];
-  reconciliationStates: string[];
   years: number[];
   tags: string[];
 };
@@ -130,7 +129,6 @@ type Filters = {
   signMismatch: string;
   channel: string;
   counterparty: string;
-  reconciliation: string;
   recurring: string;
   internalTransfer: string;
   hasDocument: string;
@@ -187,7 +185,6 @@ const EMPTY_FILTERS: Filters = {
   signMismatch: "",
   channel: "",
   counterparty: "",
-  reconciliation: "",
   recurring: "",
   internalTransfer: "",
   hasDocument: "",
@@ -203,7 +200,7 @@ const EMPTY_FILTERS: Filters = {
   dateTo: "",
 };
 
-const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [], years: [], tags: [] };
+const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], years: [], tags: [] };
 
 const KIND_LABELS: Record<TransactionKind, string> = {
   income: "Ingreso",
@@ -290,7 +287,6 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["signMismatch", "signMismatch"],
     ["channel", "channel"],
     ["counterparty", "counterparty"],
-    ["reconciliation", "reconciliation"],
     ["recurring", "recurring"],
     ["internalTransfer", "internalTransfer"],
     ["hasDocument", "hasDocument"],
@@ -618,7 +614,6 @@ export default function TransactionsClient() {
             categories: payload.categories,
             merchants: payload.merchants,
             channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
-            reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
             years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
             tags: Array.isArray(payload.tags) ? payload.tags.filter((value: unknown): value is string => typeof value === "string") : [],
           });
@@ -651,7 +646,6 @@ export default function TransactionsClient() {
     const duplicateState = params.get("duplicateState");
     const signMismatch = params.get("signMismatch");
     const channel = params.get("channel");
-    const reconciliation = params.get("reconciliation");
     const recurring = params.get("recurring");
     const internalTransfer = params.get("internalTransfer");
     const hasDocument = params.get("hasDocument");
@@ -677,7 +671,6 @@ export default function TransactionsClient() {
       signMismatch: signMismatch === "true" ? "true" : "",
       channel: channel ? channel.trim().slice(0, 120) : "",
       counterparty: (params.get("counterparty") ?? "").trim().slice(0, 200),
-      reconciliation: reconciliation ? reconciliation.trim().slice(0, 120) : "",
       recurring: recurring === "true" ? "true" : "",
       internalTransfer: internalTransfer === "true" ? "true" : "",
       hasDocument: !isDocumentsDeferred() && hasDocument === "true" ? "true" : "",
@@ -721,7 +714,7 @@ export default function TransactionsClient() {
   );
   const advancedFilterKeys: Array<keyof Filters> = [
     "merchantId", "reviewState", "duplicateState", "signMismatch", "channel",
-    "counterparty", "reconciliation", "recurring", "internalTransfer",
+    "counterparty", "recurring", "internalTransfer",
     "hasDocument", "documentQuery", "tag", "ocrQuery", "splitLabel",
     "amountFrom", "amountTo", "year", "month",
   ];
@@ -1215,13 +1208,6 @@ async function saveEdit(row: TransactionRow) {
           <input value={draftFilters.counterparty} maxLength={200} onChange={(event) => updateFilter("counterparty", event.target.value)} placeholder="Nombre o texto de contraparte" />
         </label>
         <label>
-          <span>Conciliación</span>
-          <select value={draftFilters.reconciliation} onChange={(event) => updateFilter("reconciliation", event.target.value)}>
-            <option value="">Todas</option>
-            {facets.reconciliationStates.map((value) => <option key={value} value={value}>{value}</option>)}
-          </select>
-        </label>
-        <label>
           <span>Recurrente</span>
           <select value={draftFilters.recurring} onChange={(event) => updateFilter("recurring", event.target.value)}>
             <option value="">Todos</option>
@@ -1385,7 +1371,7 @@ async function saveEdit(row: TransactionRow) {
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
                           {row.signMismatch && <div><dt>Control de signo</dt><dd>El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.</dd></div>}
                           <div><dt>Etiquetas</dt><dd>{Array.isArray(row.tags) && row.tags.length > 0 ? row.tags.join(", ") : "—"}</dd></div>
-                          <div><dt>Canal</dt><dd>{row.source.channel ?? "—"}</dd></div><div><dt>Contraparte</dt><dd>{row.source.counterparty ?? "—"}</dd></div><div><dt>Conciliación</dt><dd>{row.source.reconciliation ?? "—"}</dd></div><div><dt>Subcategoría de origen</dt><dd>{row.source.sourceSubcategory ?? "—"}</dd></div>
+                          <div><dt>Canal</dt><dd>{row.source.channel ?? "—"}</dd></div><div><dt>Contraparte</dt><dd>{row.source.counterparty ?? "—"}</dd></div><div><dt>Subcategoría de origen</dt><dd>{row.source.sourceSubcategory ?? "—"}</dd></div>
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
                           {row.split?.exists && <><div><dt>Importe bancario</dt><dd>{formatMoney(row.amountCents)}</dd></div><div><dt>Parte personal</dt><dd>{formatMoney(row.split.personalAmountCents)}</dd></div><div><dt>Parte de otras personas</dt><dd>{formatMoney(row.split.otherAmountCents)}</dd></div><div><dt>Estado del reparto</dt><dd>{row.split.stale ? "Revisar tras cambio bancario" : row.split.active ? "Activo" : "Inactivo"}</dd></div></>}

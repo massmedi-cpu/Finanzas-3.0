@@ -173,23 +173,34 @@ test("accounts UI renders central balances, scoped metrics and recent movements"
   await expect(page.getByText("50,00 €", { exact: true })).toBeVisible();
 });
 
-test("account discrepancy opens an evidence trail and keeps movement links scoped", async ({ page }) => {
+test("account discrepancy warns without starting a bank reconciliation workflow", async ({ page }) => {
   await mockAccountsApis(page, true);
+  const reconciliationReads: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/financial" && url.searchParams.get("mode") === "reconciliation") {
+      reconciliationReads.push(url.toString());
+    }
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/accounts");
 
+  // Keep the truthful bank-balance warning; remove only the unnecessary task flow.
   await expect(page.getByText(/reconstrucción por movimientos difiere en 579,00/)).toBeVisible();
-  await page.getByRole("button", { name: "Examinar diferencia" }).click();
-  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toBeVisible();
-  await expect(page.getByText("2 días con cambios · 932 días con saldo bancario")).toBeVisible();
-  const firstLink = page.getByRole("link", { name: /Ver movimientos del 30\/05\/2019/ });
-  await expect(firstLink).toHaveAttribute("href", `/transactions?accountId=${accountA}&dateFrom=2019-05-30&dateTo=2019-05-30`);
-  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountA}`);
+  await expect(page.getByText("Saldo bancario prioritario.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Examinar diferencia" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute(
+    "href", `/transactions?accountId=${accountA}`,
+  );
+  expect(reconciliationReads).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.getByRole("button", { name: /Ahorro/ }).click();
-  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountB}`);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute(
+    "href", `/transactions?accountId=${accountB}`,
+  );
+  expect(reconciliationReads).toEqual([]);
 });
 
 test("accounts UI keeps touch targets usable on narrow mobile screens", async ({ page }) => {

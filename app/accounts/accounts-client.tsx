@@ -40,28 +40,6 @@ type BalancesResponse = {
   accounts: AccountBalance[];
 };
 
-type ReconciliationEvent = {
-  bankDate: string;
-  periodStartDate: string;
-  bankBalanceCents: number;
-  sourceRowKey: string;
-  deltaCents: number;
-  cumulativeDeltaCents: number;
-};
-
-type ReconciliationResponse = {
-  contractVersion: 1;
-  accountId: string;
-  asOfDate: string | null;
-  balanceSource: BalanceSource;
-  bankBalanceDate: string | null;
-  reconstructionDeltaCents: number | null;
-  unanchoredMovementCents: number | null;
-  anchorDays: number;
-  varianceDays: number;
-  events: ReconciliationEvent[];
-};
-
 type MonthlyRow = {
   monthStart: string;
   rows: number;
@@ -227,10 +205,6 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
-  const [showReconciliation, setShowReconciliation] = useState(false);
-  const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null);
-  const [reconciliationError, setReconciliationError] = useState("");
-  const [loadingReconciliation, setLoadingReconciliation] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -314,29 +288,6 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     return () => { cancelled = true; };
   }, [selectedAccount, balances]);
 
-  useEffect(() => {
-    if (!showReconciliation || !selectedAccount || !balances) return;
-    let cancelled = false;
-    setReconciliation(null);
-    setReconciliationError("");
-    setLoadingReconciliation(true);
-    const dateQuery = balances.asOfDate ? `&dateTo=${encodeURIComponent(balances.asOfDate)}` : "";
-    readJson<ReconciliationResponse>(
-      `/api/financial?mode=reconciliation&accountId=${encodeURIComponent(selectedAccount.id)}${dateQuery}`,
-    ).then((result) => {
-      if (cancelled) return;
-      if (result.accountId !== selectedAccount.id) throw new Error("account_reconciliation_scope_mismatch");
-      setReconciliation(result);
-    }).catch((caught) => {
-      if (!cancelled) setReconciliationError(caught instanceof Error && caught.message === "account_reconciliation_scope_mismatch"
-        ? "El desglose recibido pertenece a otra cuenta y no se muestra."
-        : "No se ha podido consultar el desglose. Inténtalo de nuevo.");
-    }).finally(() => {
-      if (!cancelled) setLoadingReconciliation(false);
-    });
-    return () => { cancelled = true; };
-  }, [showReconciliation, selectedAccount, balances]);
-
   const activeCount = balances?.accounts.filter((account) => account.lifecycle === "active").length ?? null;
   const scale = monthlyScale(snapshot?.monthly.rows ?? []);
   const balanceDate = balances?.asOfDate ?? null;
@@ -347,7 +298,6 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
       : `reconstructed:${account.id}`,
   ));
   const mixedBalanceReferences = distinctBalanceReferences.size > 1;
-  const visibleReconciliation = reconciliation?.accountId === selectedAccount?.id ? reconciliation : null;
   const visibleSnapshot = detailAccountId === selectedAccount?.id ? snapshot : null;
   const visibleTransactions = detailAccountId === selectedAccount?.id ? transactions : null;
 
@@ -414,8 +364,6 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                   aria-pressed={selected}
                   onClick={() => {
                     setSelectedId(account.id);
-                    setShowReconciliation(false);
-                    setReconciliation(null);
                   }}
                 >
                   <span className={styles.accountIcon} aria-hidden="true">{account.type === "savings" ? "◇" : "○"}</span>
@@ -465,64 +413,10 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
               </div>
 
               {selectedAccount.reconstructionDeltaCents !== null && selectedAccount.reconstructionDeltaCents !== 0 ? (
-                <div className={styles.integrityNotice}>
+                <div className={styles.integrityNotice} role="status">
                   <strong>Saldo bancario prioritario.</strong>{" "}
                   La reconstrucción por movimientos difiere en {formatMoney(Math.abs(selectedAccount.reconstructionDeltaCents))}; se muestra el saldo explícito del banco como fuente de verdad.
-                  <button
-                    type="button"
-                    className={styles.reconciliationToggle}
-                    aria-expanded={showReconciliation}
-                    onClick={() => setShowReconciliation((value) => !value)}
-                  >
-                    {showReconciliation ? "Ocultar detalle" : "Examinar diferencia"}
-                  </button>
                 </div>
-              ) : null}
-
-              {showReconciliation && selectedAccount.reconstructionDeltaCents !== 0 ? (
-                <section className={styles.reconciliationPanel} aria-label="Desglose de la diferencia de saldo">
-                  <div className={styles.reconciliationHeading}>
-                    <div>
-                      <p className={styles.sectionEyebrow}>TRAZABILIDAD BANCARIA</p>
-                      <h3>Dónde cambia la diferencia</h3>
-                    </div>
-                    {visibleReconciliation ? <span>{visibleReconciliation.varianceDays} días con cambios · {visibleReconciliation.anchorDays} días con saldo bancario</span> : null}
-                  </div>
-                  <p>Comparamos el saldo bancario al cierre de cada día con la suma de movimientos y el saldo inicial. Un cambio señala un punto para revisar; por sí solo no prueba que falte un movimiento.</p>
-                  {loadingReconciliation ? <p role="status">Consultando saldos bancarios…</p> : null}
-                  {reconciliationError ? <p role="alert">{reconciliationError}</p> : null}
-                  {visibleReconciliation && visibleReconciliation.events.length === 0 ? <p>Los días con saldo bancario no muestran cambios en la diferencia acumulada.</p> : null}
-                  {visibleReconciliation?.unanchoredMovementCents ? (
-                    <p className={styles.reconciliationFootnote}>
-                      Desde el último saldo bancario hay movimientos por {formatMoney(visibleReconciliation.unanchoredMovementCents)} sin un saldo bancario posterior en estos datos.
-                    </p>
-                  ) : null}
-                  {visibleReconciliation?.events.length ? (
-                    <div className={styles.reconciliationEvents}>
-                      {visibleReconciliation.events.map((event) => (
-                        <article key={event.bankDate} className={styles.reconciliationEvent}>
-                          <div>
-                            <strong>{formatDate(event.bankDate)}</strong>
-                            <span>Desde {formatDate(event.periodStartDate)} · saldo bancario {formatMoney(event.bankBalanceCents)}</span>
-                          </div>
-                          <div className={styles.reconciliationEventValue}>
-                            <strong>{event.deltaCents > 0 ? "+" : ""}{formatMoney(event.deltaCents)}</strong>
-                            <span>Diferencia acumulada {formatMoney(event.cumulativeDeltaCents)}</span>
-                          </div>
-                          <Link
-                            prefetch={false}
-                            href={`/transactions?accountId=${encodeURIComponent(selectedAccount.id)}&dateFrom=${event.periodStartDate}&dateTo=${event.bankDate}`}
-                          >
-                            Ver movimientos<span className={styles.visuallyHidden}> del {formatDate(event.periodStartDate)} al {formatDate(event.bankDate)}</span>
-                          </Link>
-                        </article>
-                      ))}
-                    </div>
-                  ) : null}
-                  {visibleReconciliation && visibleReconciliation.varianceDays > visibleReconciliation.events.length ? (
-                    <p className={styles.reconciliationFootnote}>Se muestran los {visibleReconciliation.events.length} cambios de mayor importe.</p>
-                  ) : null}
-                </section>
               ) : null}
 
               {loadingDetail ? <div className={styles.loading}>Actualizando detalle…</div> : null}
