@@ -77,7 +77,6 @@ for (const token of [
 
 for (const token of [
   "channels: string[]",
-  "reconciliationStates: string[]",
   "years: number[]",
   "counterparty: string",
   "recurring: string",
@@ -87,7 +86,6 @@ for (const token of [
   "splitLabel: string",
   "Canal",
   "Contraparte",
-  "Conciliación",
   "Solo recurrentes confirmados",
   "Solo transferencias internas",
   "Con documento asociado",
@@ -96,6 +94,17 @@ for (const token of [
   "Año",
   "Mes",
 ]) requireText(client, token, "ui-v3");
+
+// The legacy SQL/API fields remain available for immutable source provenance.
+// The single-owner release deliberately omits bank reconciliation tasks from UI.
+checks.push([
+  !client.includes("reconciliationStates: string[]")
+    && !client.includes("<span>Conciliación</span>")
+    && !client.includes("<dt>Conciliación</dt>")
+    && !client.includes('["reconciliation", "reconciliation"]')
+    && !client.includes("draftFilters.reconciliation"),
+  "ui-v3: conciliación bancaria no figura como tarea, filtro ni detalle visible",
+]);
 
 const failures = checks.filter(([ok]) => !ok);
 for (const [, label] of failures) console.error(`❌ ${label}`);
