@@ -683,6 +683,22 @@ test("REC-SYNC-573 · Diagnósticos distingue éxito antiguo de actualización r
   expect(state.syncBodies).toHaveLength(0);
 });
 
+
+for (const path of ["/configuration/source", "/configuration/source/diagnostics"]) {
+  test(`REC-SYNC-574 · ${path} rechaza HTTP 200 de estado incompleto sin simular primera importación`, async ({ page }) => {
+    const state = await mockConfirmedSource(page);
+    await page.route("**/api/source/google/sync", (route) => {
+      if (route.request().method() !== "GET") return route.fallback();
+      return route.fulfill({ status: 200, json: { run: {}, cursors: null } });
+    });
+    await page.goto(path);
+    await expect(page.locator(".config-message.error")).toContainText("No se ha podido verificar el estado de la última sincronización");
+    await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
+    await expect(page.getByText("Actualización completada. No hay cambios nuevos.")).toHaveCount(0);
+    expect(state.syncBodies).toHaveLength(0);
+  });
+}
+
 // Keep all 14 layout/accessibility scenarios independent: each gets a fresh
 // browser context and the unchanged per-test timeout, instead of accumulating
 // fourteen axe scans inside one 30-second test.
