@@ -178,6 +178,68 @@ async function readJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+const DATE_ISO = /^\\d{4}-\\d{2}-\\d{2}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function safeCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function safeBankDate(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && DATE_ISO.test(value)
+    && Number.isFinite(Date.parse(`${value}T12:00:00Z`)));
+}
+
+// HTTP 200, a partial account list or a null balance is NOT a verified zero.
+function verifiedBalances(value: unknown): value is BalancesResponse {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Partial<BalancesResponse>;
+  if (!Array.isArray(payload.accounts) || !safeCents(payload.activeBalanceCents)
+    || !safeCents(payload.totalBalanceCents) || !safeBankDate(payload.asOfDate)
+    || typeof payload.includeArchived !== "boolean") return false;
+  const ids = new Set<string>();
+  let activeTotal = 0;
+  for (const account of payload.accounts) {
+    if (account === null || typeof account !== "object" || !UUID.test(account.id)
+      || ids.has(account.id) || typeof account.name !== "string" || !account.name.trim()
+      || account.currency !== "EUR" || (account.lifecycle !== "active" && account.lifecycle !== "archived")
+      || (account.balanceSource !== "bank_explicit" && account.balanceSource !== "reconstructed")
+      || !safeCents(account.balanceCents) || !safeBankDate(account.explicitBalanceDate)
+      || !(account.reconstructionDeltaCents === null || safeCents(account.reconstructionDeltaCents))) return false;
+    ids.add(account.id);
+    if (account.lifecycle === "active") activeTotal += account.balanceCents;
+  }
+  return Number.isSafeInteger(activeTotal) && activeTotal === payload.activeBalanceCents;
+}
+
+function verifiedSnapshot(value: unknown, accountId: string): value is FinancialSnapshot {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const snapshot = value as Partial<FinancialSnapshot>;
+  const period = snapshot.period;
+  const monthly = snapshot.monthly;
+  if (!period || !monthly || period.accountId !== accountId || monthly.accountId !== accountId
+    || !safeBankDate(period.dateFrom) || !safeBankDate(period.dateTo)
+    || !Array.isArray(monthly.rows) || !period.transfers) return false;
+  if (![period.incomeCents, period.expenseCents, period.operatingNetCents, period.transfers.grossCents]
+    .every(safeCents)) return false;
+  return monthly.rows.every((row) => row && safeBankDate(row.monthStart) && row.monthStart !== null
+    && safeCents(row.incomeCents) && safeCents(row.expenseCents) && safeCents(row.operatingNetCents));
+}
+
+function verifiedRecentMovements(value: unknown, accountId: string): value is TransactionsResponse {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const page = value as Partial<TransactionsResponse>;
+  if (!Array.isArray(page.rows) || !Number.isSafeInteger(page.totalCount) || page.totalCount! < 0
+    || page.totalCount! < page.rows.length || (page.totalCount! > 0 && page.rows.length === 0)) return false;
+  return page.rows.every((row) =>
+    row && typeof row.id === "string" && UUID.test(row.id)
+    && safeBankDate(row.bankDate) && row.bankDate !== null && safeCents(row.amountCents)
+    && row.account?.id === accountId
+    && typeof row.concept?.effective === "string"
+    && (row.category?.effectiveName === null || typeof row.category?.effectiveName === "string")
+    && Object.prototype.hasOwnProperty.call(KIND_LABELS, row.kind?.effective));
+}
+
 function yearStart(asOfDate: string | null) {
   return asOfDate ? `${asOfDate.slice(0, 4)}-01-01` : null;
 }
@@ -214,6 +276,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     readJson<BalancesResponse>(`/api/financial?mode=balances${suffix}`)
       .then((next) => {
         if (cancelled) return;
+        if (!verifiedBalances(next)) throw new Error("account_balances_unverified");
         setBalances(next);
         setSelectedId((current) => {
           if (current && next.accounts.some((account) => account.id === current)) return current;
@@ -262,10 +325,14 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     ])
       .then(([nextSnapshot, nextTransactions]) => {
         if (cancelled) return;
-        if (nextSnapshot.period.accountId !== selectedAccount.id
-          || nextSnapshot.monthly.accountId !== selectedAccount.id
-          || nextTransactions.rows.some((row) => row.account.id !== selectedAccount.id)) {
+        if (nextSnapshot?.period?.accountId !== selectedAccount.id
+          || nextSnapshot?.monthly?.accountId !== selectedAccount.id
+          || nextTransactions?.rows?.some((row) => row?.account?.id !== selectedAccount.id)) {
           throw new Error("account_response_scope_mismatch");
+        }
+        if (!verifiedSnapshot(nextSnapshot, selectedAccount.id)
+          || !verifiedRecentMovements(nextTransactions, selectedAccount.id)) {
+          throw new Error("account_detail_unverified");
         }
         setSnapshot(nextSnapshot);
         setTransactions(nextTransactions);
@@ -278,7 +345,9 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
           setDetailAccountId(null);
           setError(caught instanceof Error && caught.message === "account_response_scope_mismatch"
             ? "El detalle recibido no corresponde a la cuenta elegida. No se muestran cifras ajenas; vuelve a intentarlo."
-            : "No se ha podido cargar el detalle de la cuenta seleccionada.");
+            : caught instanceof Error && caught.message === "account_detail_unverified"
+              ? "El detalle bancario está incompleto o contiene importes incoherentes. No se muestran cifras sin verificar."
+              : "No se ha podido cargar el detalle de la cuenta seleccionada.");
         }
       })
       .finally(() => {
