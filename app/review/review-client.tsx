@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { hasCompletedSourceSyncEvidence, hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
+import { hasRecentSourceSyncEvidence, hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
 import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../src/application/release-document-scope";
 import styles from "./review.module.css";
@@ -134,7 +134,8 @@ export default function ReviewClient() {
       const syncStatus = valueOf(results[8]);
 
       // A configured connection and an HTTP 200 are not proof that a source
-      // import finished. Unverified history must not appear in "Sin incidencias".
+      // import finished. Only a recently completed run with full evidence may be
+      // marked clear; an old success is NOT proof of current source coverage.
       const sourceCount = sourceStatus === null
         ? null
         : sourceStatus.configured === false || sourceStatus.connection === null
@@ -144,7 +145,7 @@ export default function ReviewClient() {
             ? null
             : hasSourceSyncIncidents(syncStatus.run)
               ? 1
-              : hasCompletedSourceSyncEvidence(syncStatus.run)
+              : hasRecentSourceSyncEvidence(syncStatus.run)
                 ? 0
                 : null;
 
