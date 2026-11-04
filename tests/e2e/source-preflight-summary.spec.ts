@@ -7,6 +7,7 @@ import {
 } from "../../src/application/source-confirmation-contract";
 import { summarizeSourceBalanceContinuity } from "../../src/domain/source-balance-continuity";
 import { readOfficialSourcePreflight, synchronizeOfficialSource } from "../../src/application/source-sync-client";
+import { hasPersistedSourceSyncReceipt } from "../../src/application/source-sync-incidents";
 import {
   assertSourceSyncRuntimeCapabilities,
   SourceSyncRuntimeCompatibilityError,
@@ -638,6 +639,48 @@ test("REC-SYNC-571 · éxito automático sin run persistido avisa y no se repite
   expect(state.statusReads()).toBeGreaterThanOrEqual(2);
   await page.reload();
   expect(state.syncBodies).toHaveLength(1);
+});
+
+test("REC-SYNC-573 · recibo con ID correcto y filas fallidas no acredita sincronización", () => {
+  const receipt = {
+    syncRunId: "run-test", sourceRevision: "v1", rowsSeen: 3,
+    rowsInserted: 1, rowsRevised: 0, rowsSkipped: 2,
+    rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+  };
+  const run = {
+    id: "run-test", sourceRevision: "v1", status: "success",
+    finishedAt: new Date().toISOString(),
+    rowsSeen: 3, rowsInserted: 1, rowsRevised: 0, rowsSkipped: 2,
+    rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0,
+    warningsCount: 0, errorCode: null,
+  };
+  expect(hasPersistedSourceSyncReceipt(run, receipt)).toBe(true);
+  expect(hasPersistedSourceSyncReceipt({ ...run, rowsFailed: 1 }, receipt)).toBe(false);
+  expect(hasPersistedSourceSyncReceipt({ ...run, errorCode: "partial_run" }, receipt)).toBe(false);
+  expect(hasPersistedSourceSyncReceipt({ ...run, id: "another-run" }, receipt)).toBe(false);
+  expect(hasPersistedSourceSyncReceipt({ ...run, finishedAt: "2026-10-09T12:00:00.000Z" }, receipt)).toBe(false);
+});
+
+test("REC-SYNC-573 · Diagnósticos distingue éxito antiguo de actualización reciente", async ({ page }) => {
+  const state = await mockConfirmedSource(page);
+  await page.route("**/api/source/google/sync", (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    return route.fulfill({ json: {
+      run: {
+        id: "historical-run", sourceRevision: state.summary.sourceRevision,
+        status: "success", startedAt: "2026-10-09T12:00:00.000Z",
+        finishedAt: "2026-10-09T12:00:00.000Z",
+        rowsSeen: 3, rowsInserted: 0, rowsRevised: 0, rowsSkipped: 3,
+        rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+        errorCode: null, errorMessage: null,
+      },
+      cursors: [],
+    } });
+  });
+  await page.goto("/configuration/source/diagnostics");
+  await expect(page.getByText("Pendiente de comprobar", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Última sincronización sin vigencia acreditada" })).toBeVisible();
+  expect(state.syncBodies).toHaveLength(0);
 });
 
 // Keep all 14 layout/accessibility scenarios independent: each gets a fresh
