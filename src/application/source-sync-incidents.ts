@@ -111,3 +111,27 @@ export function hasPersistedSourceSyncReceipt(
     && run.duplicatesDetected === receipt.duplicatesDetected
     && run.warningsCount === receipt.warningsCount;
 }
+
+/**
+ * A malformed HTTP 200 status cannot be converted into "no sync has run".
+ * This is an untrusted JSON shape check, not evidence of bank freshness.
+ */
+export function isVerifiedSourceSyncStatus(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.cursors) || !record.cursors.every((cursor) =>
+    cursor !== null && typeof cursor === "object" && !Array.isArray(cursor)
+    && typeof cursor.sourceSheetId === "string" && cursor.sourceSheetId.trim().length > 0)) return false;
+  if (record.run === null) return true;
+  if (!record.run || typeof record.run !== "object" || Array.isArray(record.run)) return false;
+  const run = record.run as Record<string, unknown>;
+  const counts = [
+    run.rowsSeen, run.rowsInserted, run.rowsRevised, run.rowsSkipped,
+    run.rowsFailed, run.rowsMissing, run.duplicatesDetected, run.warningsCount,
+  ];
+  return typeof run.id === "string" && run.id.trim().length > 0
+    && typeof run.status === "string" && run.status.trim().length > 0
+    && typeof run.startedAt === "string" && Number.isFinite(Date.parse(run.startedAt))
+    && (run.finishedAt === null || (typeof run.finishedAt === "string" && Number.isFinite(Date.parse(run.finishedAt))))
+    && counts.every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
+}
