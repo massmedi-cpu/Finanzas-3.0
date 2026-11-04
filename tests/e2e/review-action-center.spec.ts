@@ -21,9 +21,62 @@ async function mockReviewSources(page: Page, options: { failSignMismatch?: boole
   await page.route("**/api/budgets**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ categories: [{ status: "over" }, { status: "over" }, { status: "within" }] }) }));
   await page.route("**/api/forecast**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "temporary_unavailable" }) }));
   await page.route("**/api/source/google/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ configured: true, connection: { connected: true } }) }));
-  await page.route("**/api/source/google/sync", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { status: "success", finishedAt: "2026-11-03T12:00:00Z", rowsSeen: 3188, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null } }) }));
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { status: "success", finishedAt: new Date().toISOString(), rowsSeen: 3188, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null } }) }));
 }
 
+
+test("FA-UI-039 · sincronización antigua sin errores no acredita fuente bancaria actual", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "success", finishedAt: "2026-10-09T12:11:06Z", rowsSeen: 3188,
+      rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null,
+    } }),
+  }));
+  await page.goto("/review");
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  await expect(unavailable.getByText("Sincronización bancaria", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sin incidencias en áreas verificadas" })
+    .getByText("Sincronización bancaria", { exact: true })).toHaveCount(0);
+});
+
+test("FA-UI-039 · éxito reciente con contadores íntegros conserva estado verificado", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.goto("/review");
+  await expect(page.getByRole("region", { name: "Sin incidencias en áreas verificadas" })
+    .getByText("Sincronización bancaria", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "No se pudo comprobar" })
+    .getByText("Sincronización bancaria", { exact: true })).toHaveCount(0);
+});
+
+test("FA-UI-039 · incidencias confirmadas siguen siendo prioritarias aunque la ejecución sea antigua", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "partial", finishedAt: "2026-10-09T12:11:06Z", rowsSeen: 3188,
+      rowsFailed: 2, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 2, errorCode: null,
+    } }),
+  }));
+  await page.goto("/review");
+  await expect(page.getByRole("region", { name: "Requiere atención" })
+    .getByRole("heading", { name: "Sincronización bancaria" })).toBeVisible();
+});
+
+test("FA-UI-039 · fecha futura tampoco confirma la sincronización", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: {
+      status: "success", finishedAt: new Date(Date.now() + 60_000).toISOString(), rowsSeen: 3188,
+      rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null,
+    } }),
+  }));
+  await page.goto("/review");
+  await expect(page.getByRole("region", { name: "No se pudo comprobar" })
+    .getByText("Sincronización bancaria", { exact: true })).toBeVisible();
+});
 
 test("FA-UI-035 · sin ejecución terminada la sincronización no se considera verificada", async ({ page }) => {
   await mockReviewSources(page);
