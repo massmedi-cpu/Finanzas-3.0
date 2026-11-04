@@ -471,6 +471,79 @@ for (const path of ["/configuration/source", "/configuration/source/diagnostics"
   });
 }
 
+
+for (const path of ["/configuration/source", "/configuration/source/diagnostics"]) {
+  test(`REC-SYNC-569 · ${path} no declara importación sin una ejecución persistida coincidente`, async ({ page }) => {
+    const state = await mockConfirmedSource(page);
+    await page.goto(path);
+    if (path.endsWith("/diagnostics")) {
+      await page.getByRole("button", { name: "Validar fuente antes de importar" }).click();
+    }
+    await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+    await expect(page.locator(".config-message.error")).toContainText(/no se pudo (verificar|acreditar) el mismo lote/i);
+    await expect(page.locator(".config-message.success")).toHaveCount(0);
+    expect(state.syncBodies).toEqual([sourcePreflightConfirmation(state.summary)]);
+    expect(state.statusReads()).toBeGreaterThanOrEqual(2);
+  });
+}
+
+for (const path of ["/configuration/source", "/configuration/source/diagnostics"]) {
+  test(`REC-SYNC-569 · ${path} confirma únicamente el mismo lote de la base`, async ({ page }) => {
+    const state = await mockConfirmedSource(page);
+    let postSeen = false;
+    await page.route("**/api/source/google/sync", (route) => {
+      if (route.request().method() === "POST") {
+        postSeen = true;
+        return route.fallback();
+      }
+      if (!postSeen) return route.fallback();
+      return route.fulfill({ json: {
+        run: {
+          id: "synthetic-run", sourceFileId: state.summary.sourceFileId,
+          sourceRevision: state.summary.sourceRevision, status: "success",
+          startedAt: new Date(Date.now() - 500).toISOString(),
+          finishedAt: new Date().toISOString(),
+          rowsSeen: 3, rowsInserted: 1, rowsRevised: 0, rowsSkipped: 2,
+          rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+          errorCode: null, errorMessage: null,
+        },
+        cursors: [],
+      } });
+    });
+    await page.goto(path);
+    if (path.endsWith("/diagnostics")) {
+      await page.getByRole("button", { name: "Validar fuente antes de importar" }).click();
+    }
+    await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+    await expect(page.locator(".config-message.success")).toContainText("Actualización completada");
+    await expect(page.locator(".config-message.error")).toHaveCount(0);
+    expect(state.syncBodies).toHaveLength(1);
+  });
+}
+
+test("REC-SYNC-569 · un run persistido con ID distinto no puede acreditar el POST", async ({ page }) => {
+  const state = await mockConfirmedSource(page);
+  let postSeen = false;
+  await page.route("**/api/source/google/sync", (route) => {
+    if (route.request().method() === "POST") { postSeen = true; return route.fallback(); }
+    if (!postSeen) return route.fallback();
+    return route.fulfill({ json: {
+      run: {
+        id: "another-run", sourceRevision: state.summary.sourceRevision, status: "success",
+        startedAt: new Date(Date.now() - 500).toISOString(), finishedAt: new Date().toISOString(),
+        rowsSeen: 3, rowsInserted: 1, rowsRevised: 0, rowsSkipped: 2,
+        rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      },
+      cursors: [],
+    } });
+  });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  await expect(page.locator(".config-message.error")).toContainText("el mismo lote");
+  await expect(page.locator(".config-message.success")).toHaveCount(0);
+  expect(state.syncBodies).toHaveLength(1);
+});
+
 test("REC-SYNC-269 · contrato limitado y comparación exacta preceden a toda persistencia", () => {
   const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
   const post = route.slice(route.indexOf("export async function POST(request: Request)"));
