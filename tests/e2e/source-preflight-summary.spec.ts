@@ -636,7 +636,9 @@ test("REC-SYNC-571 · éxito automático sin run persistido avisa y no se repite
   await expect(page.getByRole("alert").filter({ hasText: "lote persistido no se ha podido comprobar" })).toBeVisible();
   await expect(page.getByText("Última sincronización automática de esta sesión:", { exact: false })).toHaveCount(0);
   expect(state.syncBodies).toHaveLength(1);
-  expect(state.statusReads()).toBeGreaterThanOrEqual(2);
+  // Preferences itself does not load the sync status: the verification is
+  // exactly one GET after the POST. More requests are not safer.
+  expect(state.statusReads()).toBe(1);
   await page.reload();
   expect(state.syncBodies).toHaveLength(1);
 });
