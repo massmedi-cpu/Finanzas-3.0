@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isConfirmedSourcePreflight } from "../../../src/application/source-confirmation-contract";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
-import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasPersistedSourceSyncReceipt, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary as PreflightSummary } from "../../../src/application/source-preflight";
 import { SourcePreflightReport } from "./source-preflight-report";
 import { useActionFeedback } from "../../action-feedback";
@@ -228,7 +228,8 @@ export default function SourceClient() {
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
           : "La sesión actual no tiene acceso a esta fuente bancaria.");
-        return false;
+        return { connected: false, run: null };
+
       }
 
       setGoogle(googleResponse.ok ? googlePayload : null);
@@ -246,7 +247,11 @@ export default function SourceClient() {
       } else if (!syncResponse.ok) {
         setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
-      return googleResponse.ok && googlePayload.connection?.connected === true;
+      return {
+        connected: googleResponse.ok && googlePayload.connection?.connected === true,
+        run: syncResponse.ok && syncPayload && Array.isArray(syncPayload.cursors)
+          ? syncPayload.run : null,
+      };
     } catch {
       setGoogle(null);
       setRuntime(null);
@@ -255,7 +260,7 @@ export default function SourceClient() {
       setSyncResult(null);
       setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
-      return false;
+      return { connected: false, run: null };
     } finally {
       setLoading(false);
     }
@@ -268,7 +273,7 @@ export default function SourceClient() {
 
     void (async () => {
       const connectionVerified = await load();
-      if (googleResult === "connected" && connectionVerified) {
+      if (googleResult === "connected" && connectionVerified.connected) {
         setNotice({
           message: "Google se ha conectado y la fuente oficial ha superado la validación previa de solo lectura.",
           tone: "success",
@@ -341,6 +346,17 @@ export default function SourceClient() {
     try {
       const payload = await synchronizeOfficialSource({ preflight: confirmedPreflight });
 
+      // The POST receipt is only a claim until the GET confirms that the
+      // same run ID and counters have actually been persisted.
+      const persisted = await load();
+      if (!hasPersistedSourceSyncReceipt(persisted.run, payload)) {
+        const message = "El servidor respondió a la actualización, pero no se pudo acreditar el mismo lote en la base de datos. Puede haberse guardado: consulta el estado antes de repetirla.";
+        setSyncResult(null);
+        setNotice(null);
+        setError(message);
+        actionFeedback.error(feedbackId, message);
+        return;
+      }
       setSyncResult(payload);
       const incident = sourceIncidentMessage(payload);
       const summary = `Actualización completada: ${payload.rowsInserted} nuevos, ${payload.rowsRevised} revisados y ${payload.rowsSkipped} sin cambios.`;
@@ -348,7 +364,6 @@ export default function SourceClient() {
         message: incident ? `${summary} ${incident}` : summary,
         tone: incident ? "warning" : "success",
       });
-      await load();
       actionFeedback.success(feedbackId, summary);
     } catch (cause) {
       const message = cause instanceof SourceSyncClientError ? sourceActionErrorMessage(cause.code) : cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
