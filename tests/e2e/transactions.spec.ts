@@ -587,6 +587,112 @@ test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sol
   await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
 });
 
+test("REC-TXN-041 · HTTP 200 sin candidatos no simula ausencia de duplicados", async ({ page }) => {
+  await mockTransactionApi(page);
+  let reads = 0;
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "POST") writes += 1;
+    if (url.searchParams.get("mode") === "duplicate-group") {
+      reads += 1;
+      return route.fulfill({ status: 200, json: { rows: null } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Los candidatos de revisión están incompletos");
+  await expect(page.getByTestId("duplicate-group")).toHaveCount(0);
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(reads).toBe(1);
+  expect(writes).toBe(0);
+});
+
+test("REC-TXN-041 · HTTP 200 con contraparte mal formada no permite emparejar", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST") writes += 1;
+    if (new URL(req.url()).searchParams.get("mode") === "transfer-candidates") {
+      return route.fulfill({ status: 200, json: { rows: [{
+        id: transferCandidateId, account_name: "Cuenta ahorro", concept_normalized: "TRASPASO",
+        bank_date: "2026-09-05", amount_cents: null, day_gap: 1, transfer_pair_id: null,
+      }] } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await page.getByTestId(`review-transfer-${secondId}`).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Los candidatos de revisión están incompletos");
+  await expect(page.getByTestId("transfer-candidates")).toHaveCount(0);
+  expect(writes).toBe(0);
+});
+
+test("REC-TXN-042 · PATCH 200 sin recibo contable acreditado no anuncia modificación", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes += 1;
+      return route.fulfill({ status: 200, json: { result: { changedTransactions: 1 } } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Cambio no acreditado");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("save-edit")).toBeDisabled();
+  await expect(page.getByText(/Movimiento actualizado/)).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-042 · PATCH válido sin relectura no da un éxito engañoso", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writeCount = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "PATCH") writeCount += 1;
+    if (writeCount && req.method() === "GET" && !new URL(req.url()).searchParams.has("mode")) {
+      return route.fulfill({ status: 503, json: { error: "temporary_unavailable" } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Cambio sin lectura posterior");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toContainText("el listado no se pudo volver a verificar");
+  await expect(page.getByText(/Movimiento actualizado/)).toHaveCount(0);
+  expect(writeCount).toBe(1);
+});
+
+test("REC-TXN-042 · revisión POST sin relectura no anuncia duplicado confirmado", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST") writes += 1;
+    if (writes && req.method() === "GET" && !new URL(req.url()).searchParams.has("mode")) {
+      return route.fulfill({ status: 503, json: { error: "temporary_unavailable" } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toContainText("el listado no se pudo volver a verificar");
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
 test("REC-TXN-004 · PATCH con 503 bloquea escrituras hasta nueva lectura comprobable", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   let reads = 0;
