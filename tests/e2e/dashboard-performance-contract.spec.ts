@@ -46,10 +46,16 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   // REC-SYNC-275: Inicio no debe hacer un POST bancario directo.
   // Todos los puntos de entrada comparten el preflight y la confirmación
   // de snapshot en el cliente verificado, que valida también el recibo.
-  // The shared verified client must also recheck persistence after the POST.
-  expect(client).toContain("synchronizeOfficialSource");
-  expect(client).toContain("verifyPersistedSourceSyncReceipt");
-  expect(client).toContain("await synchronizeOfficialSource()");
+  // The shared client must verify the exact persisted run after the POST.
+  // Mentioning these helper names in comments is not sufficient proof.
+  expect(client).toMatch(
+    /import\s*\{\s*synchronizeOfficialSource\s*,\s*verifyPersistedSourceSyncReceipt\s*\}\s*from\s*["']\.\.\/src\/application\/source-sync-client["']/,
+  );
+  expect(client).toMatch(
+    /const payload = await synchronizeOfficialSource\(\);\s*const runVerified = await verifyPersistedSourceSyncReceipt\(payload\);/,
+  );
+  expect(client).toContain("setSyncFeedback(runVerified");
+  expect(client).toContain("Puede haberse aplicado");
   expect(client).not.toContain('fetch("/api/source/google/sync"');
   expect(sourceSyncClient).toContain('("/api/source/google/preflight"');
   expect(sourceSyncClient).toContain('("/api/source/google/sync"');
