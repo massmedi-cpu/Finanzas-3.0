@@ -23,7 +23,7 @@ const cases = [
   ["tests/e2e/source-preflight-summary.spec.ts", [
     "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
     "REC-SYNC-266", "REC-SYNC-267", "REC-SYNC-268", "REC-SYNC-269",
-    "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274", "REC-UI-040", "REC-SYNC-569",
+    "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274", "REC-UI-040", "REC-SYNC-569", "REC-SYNC-571",
     "REC-SYNC-276", "REC-SYNC-277", "REC-SYNC-278", "REC-SYNC-279", "REC-SYNC-356",
   ]],
   ["tests/e2e/source-postflight-boundary.spec.ts", [
@@ -61,7 +61,7 @@ const cases = [
   ["tests/e2e/financial-api-query-guards.spec.ts", ["REC-OBS-001"]],
   ["tests/e2e/alerts-center.spec.ts", ["REC-UI-ALERT-013"]],
   ["tests/e2e/review-action-center.spec.ts", ["FA-UI-033", "FA-UI-034", "FA-UI-035", "FA-UI-037", "FA-UI-039"]],
-  ["tests/e2e/inicio-sync-feedback.spec.ts", ["REC-HOME-SYNC-015"]],
+  ["tests/e2e/inicio-sync-feedback.spec.ts", ["REC-HOME-SYNC-015", "REC-HOME-SYNC-572"]],
   ["tests/e2e/preference-storage-safety.spec.ts", ["FA-STORE-001", "FA-STORE-002", "FA-STORE-003"]],
   ["tests/e2e/configuration-area-nav-mobile.spec.ts", ["FA-UI-032"]],
   ["tests/e2e/transactions-quick-presets-regression.spec.ts", ["FA-UI-031"]],
