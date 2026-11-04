@@ -61,6 +61,7 @@ const cases = [
   ["tests/e2e/alerts-center.spec.ts", ["REC-UI-ALERT-013"]],
   ["tests/e2e/review-action-center.spec.ts", ["FA-UI-033", "FA-UI-034", "FA-UI-035", "FA-UI-037", "FA-UI-039"]],
   ["tests/e2e/inicio-sync-feedback.spec.ts", ["REC-HOME-SYNC-015"]],
+  ["tests/e2e/preference-storage-safety.spec.ts", ["FA-STORE-001", "FA-STORE-002", "FA-STORE-003"]],
   ["tests/e2e/document-ocr-natural-review.spec.ts", ["REC-OCR-UI-015", "REC-OCR-326"]],
   ["tests/e2e/document-ocr-error-messages.spec.ts", ["REC-OCR-UX-030", "REC-OCR-UX-031", "REC-OCR-UX-032"]],
   ["tests/e2e/document-ocr-confirmation-integrity.spec.ts", ["REC-OCR-CONF-033"]],
