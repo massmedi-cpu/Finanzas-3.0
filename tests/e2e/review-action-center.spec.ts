@@ -53,6 +53,52 @@ test("FA-UI-035 · HTTP 200 con éxito sin evidencia completa no acredita la sin
   await expect(page.getByRole("region", { name: "Requiere atención" }).getByText("Sincronización bancaria", { exact: true })).toHaveCount(0);
 });
 
+test("FA-UI-037 · una respuesta 200 mal formada no silencia las otras comprobaciones", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/budgets**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ categories: { status: "over" } }),
+  }));
+  await page.route("**/api/recurrences**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ candidates: null }),
+  }));
+  await page.goto("/review");
+  const actions = page.getByRole("region", { name: "Requiere atención" });
+  await expect(actions.getByRole("heading", { name: "Movimientos por revisar" })).toBeVisible();
+  await expect(actions.getByRole("heading", { name: "Signos incoherentes" })).toBeVisible();
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  await expect(unavailable.getByText("Presupuestos excedidos", { exact: true })).toBeVisible();
+  await expect(unavailable.getByText("Recurrentes sin decidir", { exact: true })).toBeVisible();
+});
+
+test("FA-UI-037 · recuento negativo no puede aparecer como incidencia verificada", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("reviewState") === "needs_review") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ totalCount: -1 }) });
+    } else {
+      await route.fallback();
+    }
+  });
+  await page.goto("/review");
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  await expect(unavailable.getByText("Movimientos por revisar", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Requiere atención" })
+    .getByRole("heading", { name: "Movimientos por revisar" })).toHaveCount(0);
+});
+
+test("FA-UI-037 · fuente desconectada se indica aunque falle la lectura del último intento", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/status", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ configured: true, connection: { connected: false } }),
+  }));
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 503, contentType: "application/json", body: JSON.stringify({ error: "unavailable" }),
+  }));
+  await page.goto("/review");
+  await expect(page.getByRole("region", { name: "Requiere atención" })
+    .getByRole("heading", { name: "Sincronización bancaria" })).toBeVisible();
+});
+
 test("Para revisar prioriza acciones reales y compacta las áreas sin incidencias", async ({ page }) => {
   await mockReviewSources(page);
   await page.goto("/review");
