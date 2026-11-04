@@ -186,8 +186,11 @@ function safeCents(value: unknown): value is number {
 }
 
 function safeBankDate(value: unknown): value is string | null {
-  return value === null || (typeof value === "string" && DATE_ISO.test(value)
-    && Number.isFinite(Date.parse(`${value}T12:00:00Z`)));
+  if (value === null) return true;
+  if (typeof value !== "string" || !DATE_ISO.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  // Date.parse silently normalizes invalid dates such as 30 February.
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 // HTTP 200, a partial account list or a null balance is NOT a verified zero.
@@ -206,6 +209,10 @@ function verifiedBalances(value: unknown): value is BalancesResponse {
       || (account.balanceSource !== "bank_explicit" && account.balanceSource !== "reconstructed")
       || !safeCents(account.balanceCents) || !safeBankDate(account.explicitBalanceDate)
       || !(account.reconstructionDeltaCents === null || safeCents(account.reconstructionDeltaCents))) return false;
+    if (account.balanceSource === "bank_explicit"
+      && (!safeCents(account.explicitBalanceCents)
+        || account.explicitBalanceCents !== account.balanceCents
+        || account.explicitBalanceDate === null)) return false;
     ids.add(account.id);
     if (account.lifecycle === "active") activeTotal += account.balanceCents;
   }
@@ -217,8 +224,11 @@ function verifiedSnapshot(value: unknown, accountId: string): value is Financial
   const snapshot = value as Partial<FinancialSnapshot>;
   const period = snapshot.period;
   const monthly = snapshot.monthly;
-  if (!period || !monthly || period.accountId !== accountId || monthly.accountId !== accountId
+  if (!period || !monthly || snapshot.contractVersion !== 1
+    || snapshot.principles?.bankSource !== "read_only"
+    || period.accountId !== accountId || monthly.accountId !== accountId
     || !safeBankDate(period.dateFrom) || !safeBankDate(period.dateTo)
+    || (period.dateFrom && period.dateTo && period.dateFrom > period.dateTo)
     || !Array.isArray(monthly.rows) || !period.transfers) return false;
   if (![period.incomeCents, period.expenseCents, period.operatingNetCents, period.transfers.grossCents]
     .every(safeCents)) return false;
@@ -230,7 +240,12 @@ function verifiedRecentMovements(value: unknown, accountId: string): value is Tr
   if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
   const page = value as Partial<TransactionsResponse>;
   if (!Array.isArray(page.rows) || !Number.isSafeInteger(page.totalCount) || page.totalCount! < 0
-    || page.totalCount! < page.rows.length || (page.totalCount! > 0 && page.rows.length === 0)) return false;
+    || page.totalCount! < page.rows.length || (page.totalCount! > 0 && page.rows.length === 0)
+    || typeof page.hasMore !== "boolean"
+    || (!page.hasMore && page.totalCount! > page.rows.length)
+    || (page.hasMore && (!page.nextCursor
+      || !safeBankDate(page.nextCursor.bankDate) || page.nextCursor.bankDate === null
+      || typeof page.nextCursor.id !== "string" || !UUID.test(page.nextCursor.id)))) return false;
   return page.rows.every((row) =>
     row && typeof row.id === "string" && UUID.test(row.id)
     && safeBankDate(row.bankDate) && row.bankDate !== null && safeCents(row.amountCents)
