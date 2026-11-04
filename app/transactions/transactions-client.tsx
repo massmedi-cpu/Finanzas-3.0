@@ -877,6 +877,16 @@ export default function TransactionsClient() {
           typeof payload.result !== "object" || Array.isArray(payload.result)) {
         throw new Error("WRITE_UNVERIFIED");
       }
+      if (method === "PATCH") {
+        const count = Array.isArray(body.transactionIds) ? body.transactionIds.length : 0;
+        const receipt = payload.result;
+        if (count < 1 || receipt.requestedTransactions !== count
+          || !Number.isSafeInteger(receipt.changedTransactions)
+          || receipt.changedTransactions < 0 || receipt.changedTransactions > count
+          || !Number.isSafeInteger(receipt.auditChanges) || receipt.auditChanges < 0) {
+          throw new Error("WRITE_UNVERIFIED");
+        }
+      }
       return payload;
     } catch (cause) {
       if (timedOut || cause instanceof TypeError) {
@@ -914,14 +924,21 @@ export default function TransactionsClient() {
     setNotice(null);
     try {
       const payload = await submitTransactionWrite("PATCH", { transactionIds: ids, patch });
-      const changed = payload?.result?.changedTransactions;
-      setNotice(Number.isInteger(changed) ? `${message} · ${formatInteger(changed)} modificados.` : message);
+      const changed = payload.result.changedTransactions as number;
+      setNotice(changed > 0
+        ? `${message} · ${formatInteger(changed)} modificados.`
+        : "No hay modificaciones nuevas: los valores ya estaban guardados.");
       setEditingId(null);
       setEditor(null);
       setSelectedIds([]);
       closeReview();
       if (ids.length === 1) pendingFocusId.current = ids[0];
-      await fetchPage(appliedFilters, null, false);
+      if (!await fetchPage(appliedFilters, null, false)) {
+        setNotice(null);
+        setWriteUnverified(true);
+        setError("La edición recibió un recibo del servidor, pero el listado no se pudo volver a verificar. Comprueba los movimientos antes de repetirla.");
+        return false;
+      }
       return true;
     } catch (cause) {
       const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
@@ -958,7 +975,25 @@ export default function TransactionsClient() {
       const response = await fetch(`/api/transactions?${params.toString()}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(readableError(payload));
-      const loadedRows = Array.isArray(payload.rows) ? payload.rows : [];
+      // HTTP 200 without verified candidates is NOT an empty review.
+      const loadedRows: unknown = payload?.rows;
+      const valid = Array.isArray(loadedRows) && loadedRows.every((candidate) => {
+        if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)
+          || typeof candidate.id !== "string" || !UUID.test(candidate.id)
+          || typeof candidate.account_name !== "string"
+          || typeof candidate.concept_normalized !== "string"
+          || typeof candidate.bank_date !== "string" || !DATE.test(candidate.bank_date)
+          || !Number.isSafeInteger(candidate.amount_cents)) return false;
+        return mode === "duplicate"
+          ? Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, candidate.duplicate_state)
+          : (candidate.transfer_pair_id === null
+            || (typeof candidate.transfer_pair_id === "string" && UUID.test(candidate.transfer_pair_id)))
+            && Number.isSafeInteger(candidate.day_gap)
+            && candidate.day_gap >= 0 && candidate.day_gap <= 7;
+      });
+      if (!valid) {
+        throw new Error("Los candidatos de revisión están incompletos. No se consideran vacíos; vuelve a consultarlos sin guardar.");
+      }
       if (mode === "duplicate") setDuplicateGroup(loadedRows as DuplicateGroupRow[]);
       else setTransferCandidates(loadedRows as TransferCandidate[]);
     } catch (cause) {
@@ -980,7 +1015,11 @@ export default function TransactionsClient() {
       closeReview();
       const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
       if (focusId) pendingFocusId.current = focusId;
-      await fetchPage(appliedFilters, null, false);
+      if (!await fetchPage(appliedFilters, null, false)) {
+        setNotice(null);
+        setWriteUnverified(true);
+        setError("La revisión recibió un recibo del servidor, pero el listado no se pudo volver a verificar. Comprueba el movimiento antes de repetirla.");
+      }
     } catch (cause) {
       const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
       if (uncertain) {
