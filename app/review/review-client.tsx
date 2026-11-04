@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
+import { hasCompletedSourceSyncEvidence, hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
 import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../src/application/release-document-scope";
 import styles from "./review.module.css";
@@ -23,6 +23,8 @@ type GoogleStatus = { configured?: boolean; connection?: { connected?: boolean }
 type SyncStatus = {
   run?: {
     status?: string;
+    finishedAt?: string | null;
+    rowsSeen?: number;
     rowsFailed?: number;
     rowsMissing?: number;
     duplicatesDetected?: number;
@@ -119,15 +121,17 @@ export default function ReviewClient() {
       const sourceStatus = valueOf(results[7]);
       const syncStatus = valueOf(results[8]);
 
+      // A configured connection and an HTTP 200 are not proof that a source
+      // import finished. Unverified history must not appear in "Sin incidencias".
       const sourceCount = sourceStatus === null || syncStatus === null
         ? null
-        : (
-            sourceStatus.configured !== true ||
-            sourceStatus.connection?.connected !== true ||
-            hasSourceSyncIncidents(syncStatus.run)
-          )
+        : sourceStatus.configured !== true || sourceStatus.connection?.connected !== true
           ? 1
-          : 0;
+          : hasSourceSyncIncidents(syncStatus.run)
+            ? 1
+            : hasCompletedSourceSyncEvidence(syncStatus.run)
+              ? 0
+              : null;
 
       setCounts({
         transactions: reviewTransactions && Number.isInteger(reviewTransactions.totalCount) ? reviewTransactions.totalCount! : null,
