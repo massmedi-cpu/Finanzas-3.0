@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
-import { hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
@@ -31,6 +31,8 @@ type RuntimeHealth = {
 };
 
 type SyncRun = {
+  id: string;
+  sourceRevision: string | null;
   status: string;
   startedAt: string;
   finishedAt: string | null;
@@ -146,7 +148,7 @@ export default function SourceOverviewClient() {
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
           : "La sesión actual no tiene acceso a esta fuente bancaria.");
-        return;
+        return null;
       }
 
       setGoogle(googleResponse.ok ? googlePayload : null);
@@ -161,6 +163,10 @@ export default function SourceOverviewClient() {
       else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido comprobar si la actualización está disponible.");
       } else if (!syncResponse.ok) setError("No se ha podido consultar la última actualización.");
+      // Return the exact data from this GET, not React state from a previous
+      // render. An unavailable status cannot confirm the preceding POST.
+      return googleResponse.ok && runtimeResponse.ok && syncResponse.ok
+        && Array.isArray(syncPayload.cursors) ? syncPayload : null;
     } catch {
       // Network failures do not prove that a former connection is still
       // usable; fail closed and remove stale bank metadata and success notices.
@@ -169,6 +175,7 @@ export default function SourceOverviewClient() {
       setSyncStatus(EMPTY_SYNC_STATUS);
       setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -217,6 +224,12 @@ export default function SourceOverviewClient() {
       syncWasRequested = true;
 
       const changed = Math.max(0, payload.rowsInserted ?? 0) + Math.max(0, payload.rowsRevised ?? 0);
+      const persisted = await load();
+      if (!hasPersistedSourceSyncReceipt(persisted?.run, payload)) {
+        setNotice(null);
+        setError("El servidor confirmó la solicitud, pero no se pudo verificar el mismo lote en el historial persistido. Puede haberse guardado: comprueba el estado antes de repetir la operación.");
+        return;
+      }
       const warning = incidentSummary(payload);
       setNotice({
         tone: warning ? "warning" : "success",
@@ -226,7 +239,6 @@ export default function SourceOverviewClient() {
             ? `Actualización completada: ${changed} ${changed === 1 ? "cambio incorporado" : "cambios incorporados"}.`
             : "Actualización completada. No hay cambios nuevos.",
       });
-      await load();
     } catch (cause) {
       // Only a status GET may follow an ambiguous mutation response. Never
       // automatically repeat the POST: a first attempt could have committed.
