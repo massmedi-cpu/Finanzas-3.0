@@ -378,11 +378,12 @@ test("REC-SYNC-265 · recibo internamente coherente pero ajeno al preflight nunc
   ]) expect(isConfirmedSourceSyncResponse({ ...receipt, ...changed }, summary)).toBe(false);
 });
 
-async function mockConfirmedSource(page: Page, options: { receiptMismatch?: boolean; conflict?: boolean; summary?: ReturnType<typeof buildOfficialSourcePreflightSummary> } = {}) {
+async function mockConfirmedSource(page: Page, options: { receiptMismatch?: boolean; conflict?: boolean; persistRunAfterSync?: boolean; summary?: ReturnType<typeof buildOfficialSourcePreflightSummary> } = {}) {
   const summary = options.summary ?? buildOfficialSourcePreflightSummary(snapshot());
   const syncBodies: unknown[] = [];
   let statusReads = 0;
   let sourceChecks = 0;
+  let runPersisted = false;
   await page.route("**/api/source/google/status", (route) => route.fulfill({ json: {
     configured: true, authMode: "service-account", connection: {
       connected: true, accountEmail: "reader@example.invalid", sourceFileName: "Fuente sintética",
@@ -397,10 +398,20 @@ async function mockConfirmedSource(page: Page, options: { receiptMismatch?: bool
   await page.route("**/api/source/google/sync", (route) => {
     if (route.request().method() === "GET") {
       statusReads++;
-      return route.fulfill({ json: { run: null, cursors: [] } });
+      const run = runPersisted && options.persistRunAfterSync ? {
+        id: "synthetic-run", sourceFileId: summary.sourceFileId,
+        sourceRevision: summary.sourceRevision, status: "success",
+        startedAt: new Date(Date.now() - 500).toISOString(),
+        finishedAt: new Date().toISOString(),
+        rowsSeen: 3, rowsInserted: 1, rowsRevised: 0, rowsSkipped: 2,
+        rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+        errorCode: null, errorMessage: null,
+      } : null;
+      return route.fulfill({ json: { run, cursors: [] } });
     }
     syncBodies.push(route.request().postDataJSON());
     if (options.conflict) return route.fulfill({ status: 409, json: { error: "google_source_preflight_changed" } });
+    runPersisted = true;
     return route.fulfill({ json: {
       status: "success", syncRunId: "synthetic-run", rowsSeen: 3, rowsInserted: 1,
       rowsRevised: 0, rowsSkipped: 2, rowsMissing: 0, duplicatesDetected: 0,
@@ -605,7 +616,7 @@ test("REC-SYNC-272 · los cuatro puntos de sincronización usan el mismo protoco
 });
 
 test("REC-SYNC-273 · actualización automática exige confirmación real y se limita a una por sesión", async ({ page }) => {
-  const state = await mockConfirmedSource(page);
+  const state = await mockConfirmedSource(page, { persistRunAfterSync: true });
   await page.addInitScript(() => localStorage.setItem("financial-app:product-preferences-v1", JSON.stringify({ syncOnOpen: true, privacyOnBlur: false })));
   await page.goto("/configuration/preferences");
   await expect(page.getByText("Última sincronización automática de esta sesión:", { exact: false })).toBeVisible();
@@ -615,6 +626,18 @@ test("REC-SYNC-273 · actualización automática exige confirmación real y se l
   await expect(page.getByRole("checkbox", { name: "Intentar sincronizar una vez por sesión" })).toBeChecked();
   expect(state.syncBodies).toHaveLength(1);
   expect(state.sourceChecks()).toBe(1);
+});
+
+test("REC-SYNC-571 · éxito automático sin run persistido avisa y no se repite al recargar", async ({ page }) => {
+  const state = await mockConfirmedSource(page);
+  await page.addInitScript(() => localStorage.setItem("financial-app:product-preferences-v1", JSON.stringify({ syncOnOpen: true, privacyOnBlur: false })));
+  await page.goto("/configuration/preferences");
+  await expect(page.getByRole("alert").filter({ hasText: "lote persistido no se ha podido comprobar" })).toBeVisible();
+  await expect(page.getByText("Última sincronización automática de esta sesión:", { exact: false })).toHaveCount(0);
+  expect(state.syncBodies).toHaveLength(1);
+  expect(state.statusReads()).toBeGreaterThanOrEqual(2);
+  await page.reload();
+  expect(state.syncBodies).toHaveLength(1);
 });
 
 // Keep all 14 layout/accessibility scenarios independent: each gets a fresh
