@@ -48,7 +48,7 @@ const cases = [
   ["tests/e2e/analysis.spec.ts", ["REC-DATE-003"]],
   ["tests/e2e/analysis.spec.ts", ["REC-MONTH-002"]],
   ["tests/e2e/budgets.spec.ts", ["REC-MONTH-001"]],
-  ["tests/e2e/transactions.spec.ts", ["REC-DATE-004"]],
+  ["tests/e2e/transactions.spec.ts", ["REC-DATE-004", "REC-TXN-041", "REC-TXN-042"]],
   ["tests/e2e/forecast-horizons-integrity.spec.ts", ["REC-DATE-005"]],
   ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001", "REC-CHART-021", "REC-VIS-006"]],
   ["tests/e2e/analysis-contract-navigation.spec.ts", ["REC-SEC-ANA-001"]],
