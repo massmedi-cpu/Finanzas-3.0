@@ -100,7 +100,8 @@ export function hasPersistedSourceSyncReceipt(
   },
 ) {
   if (!run || !hasRecentSourceSyncEvidence(run)) return false;
-  return typeof run.id === "string" && run.id === receipt.syncRunId
+  return run.rowsFailed === 0 && !run.errorCode
+    && typeof run.id === "string" && run.id === receipt.syncRunId
     && run.sourceRevision === receipt.sourceRevision
     && run.rowsSeen === receipt.rowsSeen
     && run.rowsInserted === receipt.rowsInserted
