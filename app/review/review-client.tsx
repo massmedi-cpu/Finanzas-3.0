@@ -86,6 +86,18 @@ function valueOf<T>(result: PromiseSettledResult<T>) {
   return result.status === "fulfilled" ? result.value : null;
 }
 
+// A successful HTTP response is not evidence of a valid financial count.
+function verifiedCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function verifiedEntries(value: unknown): Array<Record<string, unknown>> | null {
+  return Array.isArray(value) && value.every((item) =>
+    item !== null && typeof item === "object" && !Array.isArray(item))
+    ? value as Array<Record<string, unknown>>
+    : null;
+}
+
 export default function ReviewClient() {
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<ReviewCounts>(EMPTY_COUNTS);
@@ -123,30 +135,31 @@ export default function ReviewClient() {
 
       // A configured connection and an HTTP 200 are not proof that a source
       // import finished. Unverified history must not appear in "Sin incidencias".
-      const sourceCount = sourceStatus === null || syncStatus === null
+      const sourceCount = sourceStatus === null
         ? null
-        : sourceStatus.configured !== true || sourceStatus.connection?.connected !== true
+        : sourceStatus.configured === false || sourceStatus.connection === null
+          || sourceStatus.connection?.connected === false
           ? 1
-          : hasSourceSyncIncidents(syncStatus.run)
-            ? 1
-            : hasCompletedSourceSyncEvidence(syncStatus.run)
-              ? 0
-              : null;
+          : sourceStatus.configured !== true || sourceStatus.connection?.connected !== true || syncStatus === null
+            ? null
+            : hasSourceSyncIncidents(syncStatus.run)
+              ? 1
+              : hasCompletedSourceSyncEvidence(syncStatus.run)
+                ? 0
+                : null;
+
+      const recurrentItems = verifiedEntries(recurrences?.candidates);
+      const budgetItems = verifiedEntries(budgets?.categories);
+      const forecastItems = verifiedEntries(forecast?.items);
 
       setCounts({
-        transactions: reviewTransactions && Number.isInteger(reviewTransactions.totalCount) ? reviewTransactions.totalCount! : null,
-        signMismatches: signMismatches && Number.isInteger(signMismatches.totalCount) ? signMismatches.totalCount! : null,
-        duplicates: suspectedDuplicates && Number.isInteger(suspectedDuplicates.totalCount) ? suspectedDuplicates.totalCount! : null,
-        recurrences: recurrences?.candidates
-          ? recurrences.candidates.filter((candidate) => candidate.existingStatus == null).length
-          : null,
-        documents: documents && Number.isInteger(documents.total) ? documents.total! : null,
-        budgets: budgets?.categories
-          ? budgets.categories.filter((category) => category.status === "over").length
-          : null,
-        forecast: forecast?.items
-          ? forecast.items.filter((item) => item.status === "planned" && item.confidence === "low").length
-          : null,
+        transactions: verifiedCount(reviewTransactions?.totalCount),
+        signMismatches: verifiedCount(signMismatches?.totalCount),
+        duplicates: verifiedCount(suspectedDuplicates?.totalCount),
+        recurrences: recurrentItems ? recurrentItems.filter((candidate) => candidate.existingStatus == null).length : null,
+        documents: verifiedCount(documents?.total),
+        budgets: budgetItems ? budgetItems.filter((category) => category.status === "over").length : null,
+        forecast: forecastItems ? forecastItems.filter((item) => item.status === "planned" && item.confidence === "low").length : null,
         source: sourceCount,
       });
       setLoading(false);
