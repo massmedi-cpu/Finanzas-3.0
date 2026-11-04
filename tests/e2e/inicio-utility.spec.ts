@@ -129,14 +129,15 @@ async function mockInicio(page: Page) {
       } else {
         await json(route, {
           run: {
-            id: "run-1",
+            id: postCount > 0 ? "synthetic-run" : "run-1",
+            sourceRevision: "synthetic-revision",
             status: "success",
             startedAt: "2026-09-15T09:04:08.000Z",
             finishedAt: "2026-09-15T09:04:08.000Z",
             rowsSeen: 3174,
-            rowsInserted: 2,
+            rowsInserted: postCount > 0 ? 0 : 2,
             rowsRevised: 0,
-            rowsSkipped: 3172,
+            rowsSkipped: postCount > 0 ? 3174 : 3172,
             rowsFailed: 0,
             rowsMissing: 0,
             duplicatesDetected: 0,
