@@ -10,6 +10,8 @@ export default function PreferencesClient() {
     privacyOnBlur,
     homeDestination,
     lastAutomaticSyncAt,
+    persistenceUnavailable,
+    automaticSyncWarning,
     setBudgetFocus,
     setSyncOnOpen,
     setPrivacyOnBlur,
@@ -32,6 +34,15 @@ export default function PreferencesClient() {
           <p className="hero-copy">Elige cómo quieres ver tus datos. Fechas e importes se muestran en español de España y euros.</p>
         </div>
       </section>
+
+      {persistenceUnavailable ? (
+        <p className="config-message error" role="alert">
+          El navegador no permite guardar las preferencias. Los cambios actuales se perderán al recargar la página.
+        </p>
+      ) : null}
+      {automaticSyncWarning ? (
+        <p className="config-message warning" role="alert">{automaticSyncWarning}</p>
+      ) : null}
 
       <div className="configuration-grid">
         <section className="config-panel">
