@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { synchronizeOfficialSource } from "../src/application/source-sync-client";
+import { synchronizeOfficialSource, verifyPersistedSourceSyncReceipt } from "../src/application/source-sync-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
@@ -537,9 +537,15 @@ export default function InicioOverview() {
     setSyncFeedback(null);
     try {
       const payload = await synchronizeOfficialSource();
-      setSyncFeedback(syncFeedbackFromResult(payload));
+      const runVerified = await verifyPersistedSourceSyncReceipt(payload);
+      // Refresh the read-only dashboard even if a response is ambiguous: a
+      // confirmed POST might already have committed, but cannot claim success
+      // until the same persisted run has been checked.
       await refreshDashboard();
       setEvolutionRevision((current) => current + 1);
+      setSyncFeedback(runVerified
+        ? syncFeedbackFromResult(payload)
+        : "La actualización respondió, pero no se pudo confirmar el mismo lote guardado. Puede haberse aplicado: comprueba el estado antes de repetirla.");
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
       await loadSyncStatus(generationRef.current);
