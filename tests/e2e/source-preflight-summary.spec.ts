@@ -451,6 +451,21 @@ test("REC-SYNC-268 · cambio desde preflight exige comprobación nueva, sin fals
   expect(state.statusReads()).toBeGreaterThanOrEqual(2);
 });
 
+test("REC-UI-040 · histórico cambiado bloquea la importación sin exigir conciliación", async ({ page }) => {
+  await mockConfirmedSource(page);
+  await page.route("**/api/source/google/sync", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    return route.fulfill({ status: 409, json: { error: "google_source_existing_rows_changed" } });
+  });
+  await page.goto("/configuration/source");
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+  const error = page.locator(".config-message.error");
+  await expect(error).toContainText("La importación se ha bloqueado para proteger el histórico");
+  await expect(error).toContainText("no se ha reimportado, modificado ni borrado");
+  await expect(error).not.toContainText(/conciliaci[oó]n/i);
+  await expect(page.locator(".config-message.success")).toHaveCount(0);
+});
+
 test("REC-SYNC-269 · contrato limitado y comparación exacta preceden a toda persistencia", () => {
   const route = readFileSync("app/api/source/google/sync/route.ts", "utf8");
   const post = route.slice(route.indexOf("export async function POST(request: Request)"));
