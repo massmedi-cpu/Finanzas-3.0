@@ -1,4 +1,9 @@
 export type SourceSyncIncidentInput = {
+  id?: string | null;
+  sourceRevision?: string | null;
+  rowsInserted?: number | null;
+  rowsRevised?: number | null;
+  rowsSkipped?: number | null;
   status?: string | null;
   finishedAt?: string | null;
   rowsSeen?: number | null;
@@ -73,4 +78,35 @@ export function hasRecentSourceSyncEvidence(
   if (!hasCompletedSourceSyncEvidence(value) || !Number.isFinite(nowMs)) return false;
   const elapsed = nowMs - Date.parse(value!.finishedAt!);
   return elapsed >= 0 && elapsed <= 48 * 60 * 60 * 1000;
+}
+
+/**
+ * A successful POST receipt and an HTTP 200 GET are not, separately, proof
+ * that the *same* import was persisted. Confirm the exact run and its totals.
+ * This function only checks the persisted receipt, not that Google is fresh.
+ */
+export function hasPersistedSourceSyncReceipt(
+  run: SourceSyncIncidentInput | null | undefined,
+  receipt: {
+    syncRunId: string;
+    sourceRevision: string | null;
+    rowsSeen: number;
+    rowsInserted: number;
+    rowsRevised: number;
+    rowsSkipped: number;
+    rowsMissing: number;
+    duplicatesDetected: number;
+    warningsCount: number;
+  },
+) {
+  if (!run || !hasRecentSourceSyncEvidence(run)) return false;
+  return typeof run.id === "string" && run.id === receipt.syncRunId
+    && run.sourceRevision === receipt.sourceRevision
+    && run.rowsSeen === receipt.rowsSeen
+    && run.rowsInserted === receipt.rowsInserted
+    && run.rowsRevised === receipt.rowsRevised
+    && run.rowsSkipped === receipt.rowsSkipped
+    && run.rowsMissing === receipt.rowsMissing
+    && run.duplicatesDetected === receipt.duplicatesDetected
+    && run.warningsCount === receipt.warningsCount;
 }
