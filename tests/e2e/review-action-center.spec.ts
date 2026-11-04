@@ -21,8 +21,37 @@ async function mockReviewSources(page: Page, options: { failSignMismatch?: boole
   await page.route("**/api/budgets**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ categories: [{ status: "over" }, { status: "over" }, { status: "within" }] }) }));
   await page.route("**/api/forecast**", (route) => route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "temporary_unavailable" }) }));
   await page.route("**/api/source/google/status", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ configured: true, connection: { connected: true } }) }));
-  await page.route("**/api/source/google/sync", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { status: "success", rowsFailed: 0, warningsCount: 0, errorCode: null } }) }));
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { status: "success", finishedAt: "2026-11-03T12:00:00Z", rowsSeen: 3188, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null } }) }));
 }
+
+
+test("FA-UI-035 · sin ejecución terminada la sincronización no se considera verificada", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ run: null }),
+  }));
+  await page.goto("/review");
+
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  await expect(unavailable.getByText("Sincronización bancaria", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Sin incidencias en áreas verificadas" }).getByText("Sincronización bancaria", { exact: true })).toHaveCount(0);
+});
+
+test("FA-UI-035 · HTTP 200 con éxito sin evidencia completa no acredita la sincronización", async ({ page }) => {
+  await mockReviewSources(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ run: { status: "success", rowsFailed: 0, warningsCount: 0, errorCode: null } }),
+  }));
+  await page.goto("/review");
+
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  await expect(unavailable.getByText("Sincronización bancaria", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Requiere atención" }).getByText("Sincronización bancaria", { exact: true })).toHaveCount(0);
+});
 
 test("Para revisar prioriza acciones reales y compacta las áreas sin incidencias", async ({ page }) => {
   await mockReviewSources(page);
