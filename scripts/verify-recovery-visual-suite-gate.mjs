@@ -23,7 +23,7 @@ const cases = [
   ["tests/e2e/source-preflight-summary.spec.ts", [
     "REC-SYNC-262", "REC-BANK-263", "REC-BANK-264", "REC-SYNC-265",
     "REC-SYNC-266", "REC-SYNC-267", "REC-SYNC-268", "REC-SYNC-269",
-    "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274",
+    "REC-SYNC-270", "REC-SYNC-271", "REC-SYNC-272", "REC-SYNC-273", "REC-BANK-274", "REC-UI-040",
     "REC-SYNC-276", "REC-SYNC-277", "REC-SYNC-278", "REC-SYNC-279", "REC-SYNC-356",
   ]],
   ["tests/e2e/source-postflight-boundary.spec.ts", [
