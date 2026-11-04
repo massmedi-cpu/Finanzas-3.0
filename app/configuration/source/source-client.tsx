@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isConfirmedSourcePreflight } from "../../../src/application/source-confirmation-contract";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
-import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, isVerifiedSourceSyncStatus, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary as PreflightSummary } from "../../../src/application/source-preflight";
 import { SourcePreflightReport } from "./source-preflight-report";
 import { useActionFeedback } from "../../action-feedback";
@@ -190,6 +190,7 @@ export default function SourceClient() {
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
+  const [syncStateVerified, setSyncStateVerified] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [preflight, setPreflight] = useState<PreflightSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -212,9 +213,11 @@ export default function SourceClient() {
       ]);
       const googlePayload = await jsonOrEmpty<GoogleStatus>(googleResponse);
       const runtimePayload = await jsonOrEmpty<RuntimeHealth>(runtimeResponse);
-      const syncPayload = syncResponse.ok
-        ? await jsonOrEmpty<SyncStatus>(syncResponse)
-        : EMPTY_SYNC_STATUS;
+      const rawSync = syncResponse.ok
+        ? await jsonOrEmpty<unknown>(syncResponse)
+        : null;
+      const syncValid = isVerifiedSourceSyncStatus(rawSync);
+      const syncPayload = syncValid ? rawSync as SyncStatus : EMPTY_SYNC_STATUS;
 
       // Preserve no previous financial connection/preflight after an Auth
       // denial, even when only one of the three endpoints denied the session.
@@ -222,6 +225,7 @@ export default function SourceClient() {
         setGoogle(null);
         setRuntime(null);
         setSyncStatus(EMPTY_SYNC_STATUS);
+        setSyncStateVerified(false);
         setPreflight(null);
         setSyncResult(null);
         setNotice(null);
@@ -235,6 +239,7 @@ export default function SourceClient() {
       setGoogle(googleResponse.ok ? googlePayload : null);
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
+      setSyncStateVerified(syncValid);
 
       if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
         setError("Inicia sesión para consultar la fuente bancaria.");
@@ -244,18 +249,18 @@ export default function SourceClient() {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se han podido comprobar las condiciones para sincronizar de forma segura.");
-      } else if (!syncResponse.ok) {
-        setError("No se ha podido leer la trazabilidad persistida de sincronización.");
+      } else if (!syncResponse.ok || !syncValid) {
+        setError("No se ha podido verificar el estado de la última sincronización.");
       }
       return {
         connected: googleResponse.ok && googlePayload.connection?.connected === true,
-        run: syncResponse.ok && syncPayload && Array.isArray(syncPayload.cursors)
-          ? syncPayload.run : null,
+        run: syncResponse.ok && syncValid ? syncPayload.run : null,
       };
     } catch {
       setGoogle(null);
       setRuntime(null);
       setSyncStatus(EMPTY_SYNC_STATUS);
+      setSyncStateVerified(false);
       setPreflight(null);
       setSyncResult(null);
       setNotice(null);
@@ -294,9 +299,9 @@ export default function SourceClient() {
   const managedConnection = google?.connection?.managed === true;
   const runtimeReady = runtime?.compatible === true;
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
-  const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
+  const firstImportNeedsPreflight = connected && syncStateVerified && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
-  const readyToSync = connected && runtimeReady && !busy && isConfirmedSourcePreflight(preflight);
+  const readyToSync = connected && runtimeReady && syncStateVerified && !busy && isConfirmedSourcePreflight(preflight);
   const latestAttemptFailed = syncStatus.run?.status === "failed";
   const staleLastSuccess = syncStatus.run?.status === "success"
     && !hasRecentSourceSyncEvidence(syncStatus.run);
@@ -537,7 +542,7 @@ export default function SourceClient() {
                 </h2>
               </div>
               <span className={`lifecycle ${syncStatus.run?.status === "success" && !staleLastSuccess ? "active" : "archived"}`}>
-                {syncStatus.run?.status === "success" ? staleLastSuccess ? "Pendiente de comprobar" : "Completada" : syncStatus.run?.status === "failed" ? "Fallida" : syncStatus.run?.status === "partial" ? "Parcial" : syncStatus.run?.status === "started" ? "En curso" : syncStatus.run ? "Pendiente de revisar" : "Sin ejecuciones"}
+                {syncStatus.run?.status === "success" ? staleLastSuccess ? "Pendiente de comprobar" : "Completada" : syncStatus.run?.status === "failed" ? "Fallida" : syncStatus.run?.status === "partial" ? "Parcial" : syncStatus.run?.status === "started" ? "En curso" : syncStatus.run ? "Pendiente de revisar" : syncStateVerified ? "Sin ejecuciones" : "No verificado"}
               </span>
             </div>
 
@@ -578,7 +583,9 @@ export default function SourceClient() {
                 )}
               </>
             ) : (
-              <div className={styles.empty}>Todavía no existe una sincronización real persistida para esta fuente.</div>
+              <div className={styles.empty}>{syncStateVerified
+                ? "Todavía no existe una sincronización real persistida para esta fuente."
+                : "No se ha podido verificar el historial de sincronizaciones. Vuelve a comprobar el estado antes de actualizar."}</div>
             )}
 
             {syncResult && (
