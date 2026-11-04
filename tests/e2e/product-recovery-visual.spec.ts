@@ -195,12 +195,18 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto("/configuration/merchants");
       await expect(page.getByRole("heading", { name: "Comercios sin verificar" })).toBeVisible();
       await expect(page.getByRole("button", { name: "+ Nuevo comercio" })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      const merchantRetry = page.getByRole("button", { name: "Reintentar lectura" });
+      await expect(merchantRetry).toBeVisible();
+      await expect(merchantRetry).toHaveClass(/secondary-button/);
+      expect((await merchantRetry.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
       await noOverflow(page, width);
 
       await page.goto("/accounts");
       await expect(page.getByText("Estado sin verificar · saldo y fecha desconocidos")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Reintentar lectura" })).toBeVisible();
+      const accountRetry = page.getByRole("button", { name: "Reintentar lectura" });
+      await expect(accountRetry).toBeVisible();
+      await expect(accountRetry).toHaveClass(/secondary-button/);
+      expect((await accountRetry.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
       await noOverflow(page, width);
 
       await page.goto("/configuration/source");

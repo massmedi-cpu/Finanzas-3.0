@@ -271,7 +271,7 @@ export default function MerchantsClient() {
       </section>}
 
       {loading ? <section className={styles.panel}>Leyendo comercios…</section> : !dataCurrent ? (
-        <section className={styles.panel} role="status"><h2>Comercios sin verificar</h2><p>No se ha podido comprobar si hay comercios guardados. Se ocultan las altas para evitar duplicados.</p><button type="button" onClick={() => void load()}>Reintentar lectura</button></section>
+        <section className={styles.panel} role="status"><h2>Comercios sin verificar</h2><p>No se ha podido comprobar si hay comercios guardados. Se ocultan las altas para evitar duplicados.</p><button className="secondary-button" type="button" onClick={() => void load()}>Reintentar lectura</button></section>
       ) : (
         <div className={styles.layout}>
           <section className={styles.panel} aria-labelledby="merchant-list-heading">

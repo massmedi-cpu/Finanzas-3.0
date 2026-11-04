@@ -413,7 +413,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
         </div>
       </header>
 
-      {error ? <div className={styles.alert} role="alert">{error}{!balances && !loadingBalances ? <button type="button" onClick={() => setRetryBalances((value) => value + 1)}>Reintentar lectura</button> : null}</div> : null}
+      {error ? <div className={styles.alert} role="alert"><span>{error}</span>{!balances && !loadingBalances ? <button className="secondary-button" type="button" onClick={() => setRetryBalances((value) => value + 1)}>Reintentar lectura</button> : null}</div> : null}
 
       <section className={styles.workspace} aria-label="Cuentas y detalle financiero">
         <aside className={styles.accountsPanel}>
