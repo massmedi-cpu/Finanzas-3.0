@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
-import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, isVerifiedSourceSyncStatus, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
@@ -118,6 +118,7 @@ export default function SourceOverviewClient() {
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
+  const [syncStateVerified, setSyncStateVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +137,9 @@ export default function SourceOverviewClient() {
       ]);
       const googlePayload = await readJson<GoogleStatus>(googleResponse);
       const runtimePayload = await readJson<RuntimeHealth>(runtimeResponse);
-      const syncPayload = syncResponse.ok ? await readJson<SyncStatus>(syncResponse) : EMPTY_SYNC_STATUS;
+      const rawSync = syncResponse.ok ? await readJson<unknown>(syncResponse) : null;
+      const syncValid = isVerifiedSourceSyncStatus(rawSync);
+      const syncPayload = syncValid ? rawSync as SyncStatus : EMPTY_SYNC_STATUS;
 
       // An expired session must never leave previously authenticated source
       // metadata or actions visible while the next request is denied.
@@ -144,6 +147,7 @@ export default function SourceOverviewClient() {
         setGoogle(null);
         setRuntime(null);
         setSyncStatus(EMPTY_SYNC_STATUS);
+        setSyncStateVerified(false);
         setNotice(null);
         setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
           ? "Inicia sesión para consultar la fuente bancaria."
@@ -154,6 +158,7 @@ export default function SourceOverviewClient() {
       setGoogle(googleResponse.ok ? googlePayload : null);
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
+      setSyncStateVerified(syncValid);
 
       if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
         setError("Inicia sesión para consultar la fuente bancaria.");
@@ -162,17 +167,18 @@ export default function SourceOverviewClient() {
       } else if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
       else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido comprobar si la actualización está disponible.");
-      } else if (!syncResponse.ok) setError("No se ha podido consultar la última actualización.");
+      } else if (!syncResponse.ok || !syncValid) setError("No se ha podido verificar el estado de la última sincronización.");
       // Return the exact data from this GET, not React state from a previous
       // render. An unavailable status cannot confirm the preceding POST.
       return googleResponse.ok && runtimeResponse.ok && syncResponse.ok
-        && Array.isArray(syncPayload.cursors) ? syncPayload : null;
+        && syncValid ? syncPayload : null;
     } catch {
       // Network failures do not prove that a former connection is still
       // usable; fail closed and remove stale bank metadata and success notices.
       setGoogle(null);
       setRuntime(null);
       setSyncStatus(EMPTY_SYNC_STATUS);
+      setSyncStateVerified(false);
       setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
       return null;
@@ -188,7 +194,7 @@ export default function SourceOverviewClient() {
   const sourceVerified = google !== null && !loading;
   const connected = Boolean(google?.configured && google.connection?.connected);
   const runtimeReady = runtime?.compatible === true;
-  const firstImport = connected && syncStatus.cursors.length === 0;
+  const firstImport = connected && syncStateVerified && syncStatus.cursors.length === 0;
   const run = syncStatus.run;
   const incidents = useMemo(() => incidentSummary(run), [run]);
   const hasProblem = run?.status === "failed" || run?.status === "partial"
@@ -213,7 +219,7 @@ export default function SourceOverviewClient() {
   }
 
   async function updateFromGoogle() {
-    if (!connected || !runtimeReady || busy) return;
+    if (!connected || !runtimeReady || !syncStateVerified || busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -255,7 +261,9 @@ export default function SourceOverviewClient() {
       ? "Sin conectar"
     : !runtimeReady
       ? "Requiere atención"
-      : hasProblem
+      : !syncStateVerified
+        ? "Sin verificar"
+        : hasProblem
         ? "Requiere revisión"
         : run?.status === "started"
           ? "Actualizando"
@@ -311,7 +319,7 @@ export default function SourceOverviewClient() {
               </div>
               <div>
                 <dt>Último resultado</dt>
-                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? hasProblem ? "Completada con avisos" : staleSuccess ? "Pendiente de comprobar" : "Completada" : run?.status === "failed" ? "Fallida" : run?.status === "partial" ? "Parcial" : run?.status === "started" ? "En curso" : run ? "En revisión" : "Sin actualizaciones"}</dd>
+                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? hasProblem ? "Completada con avisos" : staleSuccess ? "Pendiente de comprobar" : "Completada" : run?.status === "failed" ? "Fallida" : run?.status === "partial" ? "Parcial" : run?.status === "started" ? "En curso" : run ? "En revisión" : syncStateVerified ? "Sin actualizaciones" : "No verificado"}</dd>
               </div>
               <div>
                 <dt>Cambios confirmados en el último intento</dt>
@@ -355,7 +363,7 @@ export default function SourceOverviewClient() {
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
-                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || busy} onClick={() => void updateFromGoogle()}>
+                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || !syncStateVerified || busy} onClick={() => void updateFromGoogle()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
