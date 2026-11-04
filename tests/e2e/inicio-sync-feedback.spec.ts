@@ -89,10 +89,13 @@ async function mockInicio(page: Page, mode: SyncMode) {
       const warned = mode === "duplicates-persisted" || posts > 0;
       await json(route, {
         run: {
-          id: "run-warning",
+          id: posts > 0 && mode !== "stale-success" ? "synthetic-run" : "run-warning",
+          sourceRevision: "synthetic-revision",
           status: "success",
-          startedAt: "2026-09-15T09:04:08.000Z",
-          finishedAt: "2026-09-15T09:04:08.000Z",
+          startedAt: posts > 0 && mode !== "stale-success"
+            ? new Date(Date.now() - 500).toISOString() : "2026-09-15T09:04:08.000Z",
+          finishedAt: posts > 0 && mode !== "stale-success"
+            ? new Date().toISOString() : "2026-09-15T09:04:08.000Z",
           rowsSeen: 10,
           rowsInserted: 0,
           rowsRevised: 0,
@@ -182,6 +185,18 @@ test("Inicio conserva tras recarga los posibles duplicados de la última sincron
   await expect(sourceHealth).toContainText("2 posibles duplicados detectados. Revisa la fuente.");
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+});
+
+test("REC-HOME-SYNC-572 · Inicio no promete sin cambios si no verifica el mismo run bancario", async ({ page }) => {
+  const postCount = await mockInicio(page, "stale-success");
+  await page.goto("/");
+  const section = page.locator('section[aria-label="Estado de los datos bancarios"]');
+  await section.getByRole("button", { name: "Actualizar datos" }).click();
+  await expect.poll(postCount).toBe(1);
+  await expect(section).toContainText("no se pudo confirmar el mismo lote guardado");
+  await expect(section).not.toContainText("Sin cambios nuevos.");
+  await expect(section).not.toContainText("Datos bancarios actualizados");
+  expect(postCount()).toBe(1);
 });
 
 test("REC-HOME-SYNC-015 · Inicio no certifica como actuales datos importados hace semanas", async ({ page }) => {
