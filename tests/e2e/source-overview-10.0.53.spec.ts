@@ -23,6 +23,7 @@ type MockOptions = {
 async function mockSourceOverview(page: Page, options: MockOptions = {}) {
   const syncPosts = options.syncPosts ?? [];
   const preflightPosts = options.preflightPosts ?? [];
+  let syncCommitted = false;
 
   await page.route(STATUS_ROUTE, async (route) => {
     if (options.networkFailure) {
@@ -107,6 +108,7 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "gateway_unavailable" }) });
         return;
       }
+      syncCommitted = true;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -133,19 +135,20 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        run: options.firstImport ? null : {
-          id: "run-1",
+        run: options.firstImport && !syncCommitted ? null : {
+          id: syncCommitted ? "11111111-1111-4111-8111-111111111111" : "run-1",
           sourceFileId: "source-file",
           sourceRevision: "rev-1",
           status: options.runStatus ?? "success",
-          startedAt: options.finishedAt
-            ? new Date(Date.parse(options.finishedAt) - 60_000).toISOString()
+          startedAt: syncCommitted ? new Date(Date.now() - 1000).toISOString()
+            : options.finishedAt ? new Date(Date.parse(options.finishedAt) - 60_000).toISOString()
             : "2026-10-02T07:55:00.000Z",
-          finishedAt: options.finishedAt ?? "2026-10-02T08:00:00.000Z",
+          finishedAt: syncCommitted ? new Date().toISOString()
+            : options.finishedAt ?? "2026-10-02T08:00:00.000Z",
           rowsSeen: 120,
-          rowsInserted: options.runStatus === "failed" ? 2 : 0,
-          rowsRevised: 0,
-          rowsSkipped: options.runStatus === "failed" ? 118 : 120,
+          rowsInserted: syncCommitted ? 2 : options.runStatus === "failed" ? 2 : 0,
+          rowsRevised: syncCommitted ? 1 : 0,
+          rowsSkipped: syncCommitted ? 117 : options.runStatus === "failed" ? 118 : 120,
           rowsFailed: options.runStatus === "failed" ? 1 : 0,
           rowsMissing: 0,
           duplicatesDetected: 0,
@@ -153,7 +156,7 @@ async function mockSourceOverview(page: Page, options: MockOptions = {}) {
           errorCode: null,
           errorMessage: null,
         },
-        cursors: options.firstImport ? [] : [{ sourceSheetId: "sheet-1" }],
+        cursors: options.firstImport && !syncCommitted ? [] : [{ sourceSheetId: "sheet-1" }],
       }),
     });
   });
