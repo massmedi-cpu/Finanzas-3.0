@@ -265,6 +265,62 @@ test("FA-UI-038 · respuesta truncada de movimientos no se confunde con un perio
   await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
 });
 
+test("REC-UI-043 · una fecha bancaria imposible no se considera un saldo válido", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, json: { ...balances, asOfDate: "2026-02-30" } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+});
+
+test("REC-UI-043 · saldo bancario y evidencia explícita distintos no se muestran como confirmados", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, json: {
+        ...balances, accounts: [{ ...balances.accounts[0], explicitBalanceCents: 1 }, balances.accounts[1]],
+      } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+});
+
+test("REC-UI-043 · métricas sin contrato de lectura bancaria no se presentan como verdad", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "snapshot") {
+      const accountId = url.searchParams.get("accountId") ?? accountA;
+      const base = snapshotFor(accountId);
+      await route.fulfill({ status: 200, json: {
+        ...base, principles: { ...base.principles, bankSource: "synthetic" },
+      } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText("300,00");
+});
+
+test("REC-UI-043 · movimientos recientes truncados no se presentan como historial completo", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/transactions?*", async (route) => {
+    const accountId = new URL(route.request().url()).searchParams.get("accountId") ?? accountA;
+    await route.fulfill({ status: 200, json: { ...transactionsFor(accountId), totalCount: 2, hasMore: false } });
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText("300,00");
+});
+
 test("accounts UI keeps touch targets usable on narrow mobile screens", async ({ page }) => {
   await mockAccountsApis(page);
   await page.setViewportSize({ width: 390, height: 844 });
