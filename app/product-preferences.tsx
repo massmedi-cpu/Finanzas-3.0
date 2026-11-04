@@ -1,6 +1,6 @@
 "use client";
 
-import { synchronizeOfficialSource } from "../src/application/source-sync-client";
+import { synchronizeOfficialSource, verifyPersistedSourceSyncReceipt } from "../src/application/source-sync-client";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type BudgetFocus = "all" | "attention";
@@ -114,7 +114,13 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
     syncTriggered.current = true;
     setAutomaticSyncWarning(null);
     void synchronizeOfficialSource()
-      .then(() => {
+      .then(async (receipt) => {
+        const verified = await verifyPersistedSourceSyncReceipt(receipt);
+        if (!verified) {
+          setLastAutomaticSyncAt(null);
+          setAutomaticSyncWarning("La actualización automática respondió, pero el lote persistido no se ha podido comprobar. Puede haberse guardado; consulta el estado de la fuente antes de reintentar.");
+          return;
+        }
         setLastAutomaticSyncAt(new Date().toISOString());
         setAutomaticSyncWarning(null);
       })
