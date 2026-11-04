@@ -668,7 +668,7 @@ test("REC-TXN-042 · PATCH válido sin relectura no da un éxito engañoso", asy
   await page.getByTestId("edit-concept").fill("Cambio sin lectura posterior");
   await page.getByTestId("save-edit").click();
   await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
-  await expect(page.locator("main").getByRole("alert")).toContainText("el listado no se pudo volver a verificar");
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "el listado no se pudo volver a verificar" })).toBeVisible();
   await expect(page.getByText(/Movimiento actualizado/)).toHaveCount(0);
   expect(writeCount).toBe(1);
 });
@@ -688,7 +688,7 @@ test("REC-TXN-042 · revisión POST sin relectura no anuncia duplicado confirmad
   await page.getByTestId(`review-duplicate-${firstId}`).click();
   await page.getByTestId("duplicate-confirm").click();
   await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
-  await expect(page.locator("main").getByRole("alert")).toContainText("el listado no se pudo volver a verificar");
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "el listado no se pudo volver a verificar" })).toBeVisible();
   await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
   expect(writes).toBe(1);
 });
