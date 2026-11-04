@@ -1,4 +1,5 @@
 import type { OfficialSourcePreflightSummary } from "./source-preflight";
+import { hasPersistedSourceSyncReceipt, type SourceSyncIncidentInput } from "./source-sync-incidents";
 import type { SourceSyncBatchResult } from "./source-sync-service";
 import {
   isConfirmedSourcePreflight, isConfirmedSourceSyncResponse, sourcePreflightConfirmation,
@@ -62,5 +63,27 @@ export async function synchronizeOfficialSource(
   } catch (error) {
     if (error instanceof SourceSyncClientError) throw error;
     throw new SourceSyncClientError("google_source_sync_unconfirmed", true);
+  }
+}
+
+/**
+ * An HTTP 200 POST may be acknowledged before the UI has independently read
+ * the persisted run. GET only; never retries a bank import.
+ */
+export async function verifyPersistedSourceSyncReceipt(
+  receipt: ConfirmedSyncResponse,
+  options: SourceClientOptions = {},
+): Promise<boolean> {
+  try {
+    const response = await (options.fetcher ?? fetch)("/api/source/google/sync", {
+      method: "GET", cache: "no-store", signal: options.signal,
+    });
+    if (!response.ok) return false;
+    const payload: unknown = await response.json().catch(() => null);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)
+      || !("run" in payload)) return false;
+    return hasPersistedSourceSyncReceipt(payload.run as SourceSyncIncidentInput | null, receipt);
+  } catch {
+    return false;
   }
 }
