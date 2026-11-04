@@ -17,6 +17,8 @@ type ProductPreferencesValue = ProductPreferences & {
   ready: boolean;
   privacyActive: boolean;
   lastAutomaticSyncAt: string | null;
+  persistenceUnavailable: boolean;
+  automaticSyncWarning: string | null;
   setBudgetFocus: (value: BudgetFocus) => void;
   setSyncOnOpen: (value: boolean) => void;
   setPrivacyOnBlur: (value: boolean) => void;
@@ -58,6 +60,8 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
   const [ready, setReady] = useState(false);
   const [privacyActive, setPrivacyActive] = useState(false);
   const [lastAutomaticSyncAt, setLastAutomaticSyncAt] = useState<string | null>(null);
+  const [persistenceUnavailable, setPersistenceUnavailable] = useState(false);
+  const [automaticSyncWarning, setAutomaticSyncWarning] = useState<string | null>(null);
   const syncTriggered = useRef(false);
 
   useEffect(() => {
@@ -69,8 +73,10 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
     if (!ready) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+      setPersistenceUnavailable(false);
     } catch {
-      // Las preferencias siguen activas durante la sesión si el navegador bloquea almacenamiento local.
+      // No afirmar que la configuración se guardó: se perderá al recargar.
+      setPersistenceUnavailable(true);
     }
     document.documentElement.dataset.privacyOnBlur = preferences.privacyOnBlur ? "true" : "false";
     document.documentElement.dataset.budgetFocus = preferences.budgetFocus;
@@ -96,12 +102,27 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     if (!ready || !preferences.syncOnOpen || syncTriggered.current) return;
-    if (window.sessionStorage.getItem(SESSION_SYNC_KEY) === "true") return;
+    // Sin marcador de sesión fiable, una recarga podría repetir una importación
+    // cuyo resultado anterior todavía no se haya podido verificar.
+    try {
+      if (window.sessionStorage.getItem(SESSION_SYNC_KEY) === "true") return;
+      window.sessionStorage.setItem(SESSION_SYNC_KEY, "true");
+    } catch {
+      setAutomaticSyncWarning("El navegador no permite recordar esta actualización. No se ha iniciado ninguna sincronización automática para evitar repeticiones.");
+      return;
+    }
     syncTriggered.current = true;
-    window.sessionStorage.setItem(SESSION_SYNC_KEY, "true");
+    setAutomaticSyncWarning(null);
     void synchronizeOfficialSource()
-      .then(() => setLastAutomaticSyncAt(new Date().toISOString()))
-      .catch(() => undefined);
+      .then(() => {
+        setLastAutomaticSyncAt(new Date().toISOString());
+        setAutomaticSyncWarning(null);
+      })
+      .catch(() => {
+        // Un fallo de red podría llegar después de que se guardara un lote.
+        // No reintentar automáticamente ni indicar que la fuente está actualizada.
+        setAutomaticSyncWarning("No se ha podido confirmar la actualización automática. Comprueba el estado de la fuente antes de volver a intentarlo.");
+      });
   }, [preferences.syncOnOpen, ready]);
 
   const value = useMemo<ProductPreferencesValue>(() => ({
@@ -109,12 +130,14 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
     ready,
     privacyActive,
     lastAutomaticSyncAt,
+    persistenceUnavailable,
+    automaticSyncWarning,
     setBudgetFocus: (budgetFocus) => setPreferences((current) => ({ ...current, budgetFocus })),
     setSyncOnOpen: (syncOnOpen) => setPreferences((current) => ({ ...current, syncOnOpen })),
     setPrivacyOnBlur: (privacyOnBlur) => setPreferences((current) => ({ ...current, privacyOnBlur })),
     setHomeDestination: (homeDestination) => setPreferences((current) => ({ ...current, homeDestination })),
     reset: () => setPreferences(DEFAULTS),
-  }), [preferences, ready, privacyActive, lastAutomaticSyncAt]);
+  }), [preferences, ready, privacyActive, lastAutomaticSyncAt, persistenceUnavailable, automaticSyncWarning]);
 
   return (
     <ProductPreferencesContext.Provider value={value}>
