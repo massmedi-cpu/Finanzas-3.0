@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { isConfirmedSourcePreflight } from "../../../src/application/source-confirmation-contract";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
-import { hasPersistedSourceSyncReceipt, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary as PreflightSummary } from "../../../src/application/source-preflight";
 import { SourcePreflightReport } from "./source-preflight-report";
 import { useActionFeedback } from "../../action-feedback";
@@ -298,6 +298,8 @@ export default function SourceClient() {
   const readyToPreflight = connected && runtimeReady && !busy;
   const readyToSync = connected && runtimeReady && !busy && isConfirmedSourcePreflight(preflight);
   const latestAttemptFailed = syncStatus.run?.status === "failed";
+  const staleLastSuccess = syncStatus.run?.status === "success"
+    && !hasRecentSourceSyncEvidence(syncStatus.run);
   const persistentIncidentCounts = normalizeSourceSyncIncidents(syncStatus.run);
   const persistentIncident = syncStatus.run ? sourceIncidentMessage(syncStatus.run) : null;
   const missingLabels = useMemo(
@@ -534,10 +536,17 @@ export default function SourceClient() {
                   {latestAttemptFailed ? "Último intento de sincronización" : "Última sincronización persistida"}
                 </h2>
               </div>
-              <span className={`lifecycle ${syncStatus.run?.status === "success" ? "active" : "archived"}`}>
-                {syncStatus.run?.status === "success" ? "Completada" : syncStatus.run?.status === "failed" ? "Fallida" : syncStatus.run?.status === "partial" ? "Parcial" : syncStatus.run?.status === "started" ? "En curso" : syncStatus.run ? "Pendiente de revisar" : "Sin ejecuciones"}
+              <span className={`lifecycle ${syncStatus.run?.status === "success" && !staleLastSuccess ? "active" : "archived"}`}>
+                {syncStatus.run?.status === "success" ? staleLastSuccess ? "Pendiente de comprobar" : "Completada" : syncStatus.run?.status === "failed" ? "Fallida" : syncStatus.run?.status === "partial" ? "Parcial" : syncStatus.run?.status === "started" ? "En curso" : syncStatus.run ? "Pendiente de revisar" : "Sin ejecuciones"}
               </span>
             </div>
+
+            {staleLastSuccess && (
+              <div className={styles.missingBox} role="status">
+                <strong>Última sincronización sin vigencia acreditada</strong>
+                <p>La última ejecución correcta tiene más de 48 horas, una fecha futura o datos de cierre incompletos. No demuestra que los movimientos actuales de Google estén incorporados.</p>
+              </div>
+            )}
 
             {syncStatus.run ? (
               <>
