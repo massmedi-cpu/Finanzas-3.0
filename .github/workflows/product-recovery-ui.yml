@@ -236,6 +236,7 @@ jobs:
           tests/e2e/transactions-race.spec.ts
           tests/e2e/transactions.spec.ts
           tests/e2e/accounts.spec.ts
+          tests/e2e/review-action-center.spec.ts
           tests/e2e/alerts-center.spec.ts
           tests/e2e/global-alerts-engine.spec.ts
           tests/e2e/cash-flow-evolution-plot.spec.ts
