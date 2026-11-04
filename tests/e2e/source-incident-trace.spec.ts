@@ -141,14 +141,14 @@ test("Diagnóstico explica las incidencias persistidas y las conserva tras recar
   await expect(trace.locator("dl div").filter({ hasText: "Duplicados detectados en esa ejecución" })).toContainText("1");
   await expect(trace.locator("dl div").filter({ hasText: "Otros avisos" })).toContainText("1");
 
-  const warning = trace.getByRole("status");
+  const warning = trace.getByRole("status").filter({ hasText: "2 movimientos importados anteriormente ya no aparecen en la fuente" });
   await expect(warning).toContainText("2 movimientos importados anteriormente ya no aparecen en la fuente");
   await expect(warning).toContainText("1 posible duplicado detectado");
   await expect(warning).toContainText("1 aviso adicional requiere revisión");
   await expect(warning).toContainText("la fuente bancaria original no se ha modificado");
 
   await page.reload();
-  await expect(page.getByRole("region", { name: "Última sincronización persistida" }).getByRole("status"))
+  await expect(page.getByRole("region", { name: "Última sincronización persistida" }).getByRole("status").filter({ hasText: "2 movimientos importados anteriormente ya no aparecen en la fuente" }))
     .toContainText("2 movimientos importados anteriormente ya no aparecen en la fuente");
 });
 
@@ -206,7 +206,7 @@ test("la vista simple resume una sincronización con incidencias y mantiene solo
 
     await json(route, {
       run: synchronized
-        ? { ...BASE_RUN, sourceRevision: "drive-version:128", rowsMissing: 1, duplicatesDetected: 2, warningsCount: 1 }
+        ? { ...BASE_RUN, sourceRevision: "drive-version:128", startedAt: new Date(Date.now() - 1000).toISOString(), finishedAt: new Date().toISOString(), rowsMissing: 1, duplicatesDetected: 2, warningsCount: 1 }
         : BASE_RUN,
       cursors: CURSORS,
     });
