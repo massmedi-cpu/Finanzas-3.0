@@ -231,6 +231,7 @@ jobs:
           tests/e2e/home-expense-average-coverage.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-sync-feedback.spec.ts
+          tests/e2e/preference-storage-safety.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
           tests/e2e/transactions-race.spec.ts
