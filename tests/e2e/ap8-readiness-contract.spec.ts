@@ -110,6 +110,10 @@ test("REC-AP8-503 · rehearse against the newest independently verified recent e
   expect(runner).toContain("post_ddl_readiness_blocked");
   expect(runner).toContain('[[ "$final_guard" == "$baseline_guard" ]] || fail guard_baseline_changed');
   expect(runner).toContain("baseline=pre_ddl|original_guard=rolled_back|upgrade_migrations=5|rollback=true|data_digest_identical=true");
-  expect(runner).toContain("baseline=post_ddl|original_guard=preserved|financial_data_writes=false|upgrade_migrations=already_applied");
+  // A restored post-DDL backup must verify the synthetic 30-row append-only
+  // rehearsal and original row digests before reporting a successful audit.
+  expect(runner).toContain("REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true");
+  expect(runner).toContain("REC_AP8_POST_DDL_SYNTHETIC|status=ok|inserts=30|replay_skips=30|rollback=clean|original_digests_preserved=true");
+  expect(runner).toContain("baseline=post_ddl|original_guard=preserved|financial_data_writes=false|synthetic_append_rollback=passed|original_digests_preserved=true|upgrade_migrations=already_applied");
   expect(runner).toContain("live_production_writes=false");
 });
