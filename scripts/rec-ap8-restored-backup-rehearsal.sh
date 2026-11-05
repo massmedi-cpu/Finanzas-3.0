@@ -82,14 +82,16 @@ const mode = process.argv[3];
 const oldMarker = log.includes('REC_AP8_DELTA|status=ok|baseline=authentic_10_0_103_restored')
   && log.includes('REC_AP8_DELTA|rollback=passed')
   && log.includes('REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true');
-const newMarker = log.includes('REC_AP8_POST_DDL|status=ok|checked_points=384|data_read_only=true');
+const newMarker = log.includes('REC_AP8_POST_DDL|status=ok|checked_points=384|data_read_only=true')
+  && log.includes('REC_SYNC_AP5_REHEARSAL|status=ok|inserts=30|replay_skips=30|checking=27|savings=3|conflict_rolls_back=true|workspace_isolated=true|no_residue=true')
+  && log.includes('REC_AP8_POST_DDL_SYNTHETIC|status=ok|inserts=30|replay_skips=30|rollback=clean|original_digests_preserved=true');
 if (!((mode === 'pre_ddl' && oldMarker) || (mode === 'post_ddl' && newMarker))) process.exit(1);
 NODE
 final_guard="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 -c \
  "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and tgenabled='O' and not tgisinternal")"
 [[ "$final_guard" == "$baseline_guard" ]] || fail guard_baseline_changed
 if [[ "$mode" == post_ddl ]]; then
-  echo "REC_AP8_REAL_BACKUP|status=ok|baseline=post_ddl|original_guard=preserved|financial_data_writes=false|upgrade_migrations=already_applied|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
+  echo "REC_AP8_REAL_BACKUP|status=ok|baseline=post_ddl|original_guard=preserved|financial_data_writes=false|synthetic_append_rollback=passed|original_digests_preserved=true|upgrade_migrations=already_applied|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
 else
   echo "REC_AP8_REAL_BACKUP|status=ok|baseline=pre_ddl|original_guard=rolled_back|upgrade_migrations=5|rollback=true|data_digest_identical=true|source_sha=$expected_source|candidate_sha=$AUD_VALIDATION_SHA|live_production_writes=false"
 fi

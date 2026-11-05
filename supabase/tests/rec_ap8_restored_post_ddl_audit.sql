@@ -73,3 +73,53 @@ BEGIN
 END $check$;
 SELECT 'REC_AP8_POST_DDL|status=ok|checked_points=384|data_read_only=true' AS result;
 COMMIT;
+
+-- REC-AP8-591: PostgreSQL 17 authentic backup AFTER current migrations.
+-- Only an isolated 127.0.0.1 copy is modified. Synthetic insertions
+-- exercise the real ingest routine, replay, conflict rollback, tenant ACL,
+-- then ROLLBACK; original banking rows remain completely unchanged.
+-- Capture only digests, never banking values or individual IDs.
+CREATE TEMP TABLE rec_ap8_pre_rehearsal_digests AS
+SELECT 'transaction_source_records'::text AS relation_name,
+       md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' ORDER BY t.id),'')) AS digest
+  FROM financial_app.transaction_source_records t
+UNION ALL
+SELECT 'transactions'::text AS relation_name,
+       md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' ORDER BY t.id),'')) AS digest
+  FROM financial_app.transactions t;
+
+\i supabase/tests/rec_ap8_restored_post_ddl_gateway_acl.sql
+\i supabase/tests/rec_sync_append_only_restored_103.sql
+
+BEGIN READ ONLY;
+DO $after_synthetic$
+BEGIN
+  IF current_database()<>'financial_app_production_backup_restore_check'
+    OR (SELECT count(*) FROM rec_ap8_pre_rehearsal_digests)<>2
+    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3188
+    OR (SELECT count(*) FROM financial_app.transactions)<>3188
+    OR EXISTS (
+      SELECT 1 FROM financial_app.transaction_source_records
+       WHERE source_file_id='__rec_sync_410_synthetic_only__'
+    )
+    OR EXISTS (
+      SELECT 1 FROM financial_app.workspaces
+       WHERE id IN ('a0f41000-0000-4000-8000-000000000001'::uuid,
+                    'a0f41000-0000-4000-8000-000000000002'::uuid)
+    )
+    OR (SELECT digest FROM rec_ap8_pre_rehearsal_digests
+          WHERE relation_name='transaction_source_records')
+        IS DISTINCT FROM (
+          SELECT md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' ORDER BY t.id),''))
+          FROM financial_app.transaction_source_records t
+        )
+    OR (SELECT digest FROM rec_ap8_pre_rehearsal_digests
+          WHERE relation_name='transactions')
+        IS DISTINCT FROM (
+          SELECT md5(coalesce(string_agg(md5(to_jsonb(t)::text),'' ORDER BY t.id),''))
+          FROM financial_app.transactions t
+        )
+  THEN RAISE EXCEPTION 'REC_AP8_POST_DDL_SYNTHETIC_RESIDUE_OR_DATA_DRIFT'; END IF;
+END $after_synthetic$;
+SELECT 'REC_AP8_POST_DDL_SYNTHETIC|status=ok|inserts=30|replay_skips=30|rollback=clean|original_digests_preserved=true' AS result;
+COMMIT;
