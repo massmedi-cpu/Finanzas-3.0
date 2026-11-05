@@ -28,6 +28,15 @@ test("identidad exacta del deployment de producción", async ({ request }) => {
   expect(build.environment).toBe("production");
   expectExactCommit(build.commit);
   expect(build.deploymentId).toBe(EXPECTED_DEPLOYMENT_ID);
+
+  // REC-REL-596: preview flags do not prove the production build used the
+  // same frozen launch profile. Fail closed before accepting 10.0.104.
+  // Prior production versions are intentionally unaffected by this release gate.
+  if (EXPECTED_VERSION === "10.0.104") {
+    expect(build.releaseFeatures,
+      "10.0.104 must be built with Documents, OCR and document Drive sync deferred"
+    ).toEqual({ documents: false, documentOcr: false, documentDriveSync: false });
+  }
 });
 
 test("la aplicación privada redirige al acceso y las APIs quedan cerradas", async ({ page, request }) => {
