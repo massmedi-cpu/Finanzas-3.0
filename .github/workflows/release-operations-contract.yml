@@ -12,6 +12,7 @@ on:
       - "playwright.production-postflight.config.ts"
       - "tests/e2e/production-postflight.spec.ts"
       - "scripts/verify-production-data-readonly.mjs"
+      - "scripts/release-source-coverage-gate.mjs"
       - "scripts/verify-release-operations-contract.mjs"
   workflow_dispatch:
 

@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { assertCompleteSourceHistory } from "./release-source-coverage-gate.mjs";
 
 const dbUrl = process.env.FINANCIAL_APP_DB_URL ?? "";
 let connection = null;
@@ -161,6 +162,9 @@ try {
   if (!Number.isInteger(snapshot.sourceRecords) || snapshot.sourceRecords < 1) fail("source records are unexpectedly empty.");
   if (!Number.isInteger(snapshot.transactions) || snapshot.transactions < 1) fail("transactions are unexpectedly empty.");
   if (snapshot.sourceRecords !== snapshot.transactions) fail("source record / transaction cardinality drift detected.");
+  // REC-REL-598: a balanced but stale database must not certify 10.0.104+.
+  // The workflow passes the immutable expected release version from dispatch.
+  assertCompleteSourceHistory(process.env.EXPECTED_APP_VERSION, snapshot.sourceRecords);
   if (!snapshot.minTransactionDate || !snapshot.maxTransactionDate) fail("transaction date coverage is missing.");
 
   for (const key of [
