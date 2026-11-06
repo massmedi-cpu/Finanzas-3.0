@@ -886,6 +886,39 @@ export default function TransactionsClient() {
           || !Number.isSafeInteger(receipt.auditChanges) || receipt.auditChanges < 0) {
           throw new Error("WRITE_UNVERIFIED");
         }
+      } else {
+        // REC-TXN-010: HTTP 200 and a JSON object do not prove the intended
+        // review/transfer operation was applied. Validate the SQL receipt
+        // against the exact requested action before announcing success.
+        const receipt = payload.result;
+        if (typeof body.transactionId !== "string"
+          || receipt.transactionId !== body.transactionId) {
+          throw new Error("WRITE_UNVERIFIED");
+        }
+        if (body.action === "duplicate-review") {
+          const expectedState = body.decision === "confirmed" ? "confirmed" : "none";
+          if ((body.decision !== "confirmed" && body.decision !== "dismissed")
+            || receipt.decision !== body.decision || receipt.duplicateState !== expectedState
+            || !Number.isSafeInteger(receipt.candidateCount) || receipt.candidateCount < 2
+            || typeof receipt.reviewedSourceRecordId !== "string"
+            || !UUID.test(receipt.reviewedSourceRecordId)) {
+            throw new Error("WRITE_UNVERIFIED");
+          }
+        } else if (body.action === "transfer-pair") {
+          if (receipt.pairId !== body.pairId || receipt.balanced !== true
+            || typeof receipt.changed !== "boolean"
+            || !Number.isSafeInteger(receipt.dayGap) || receipt.dayGap < 0 || receipt.dayGap > 3) {
+            throw new Error("WRITE_UNVERIFIED");
+          }
+        } else if (body.action === "transfer-unpair") {
+          if (typeof receipt.changed !== "boolean"
+            || !(receipt.pairId === null
+              || (typeof receipt.pairId === "string" && UUID.test(receipt.pairId)))) {
+            throw new Error("WRITE_UNVERIFIED");
+          }
+        } else {
+          throw new Error("WRITE_UNVERIFIED");
+        }
       }
       return payload;
     } catch (cause) {
@@ -1010,8 +1043,9 @@ export default function TransactionsClient() {
     setError(null);
     setNotice(null);
     try {
-      await submitTransactionWrite("POST", command);
-      setNotice(message);
+      const payload = await submitTransactionWrite("POST", command);
+      const unchanged = command.action !== "duplicate-review" && payload.result.changed === false;
+      setNotice(unchanged ? "La transferencia ya estaba en ese estado. No se han realizado cambios." : message);
       closeReview();
       const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
       if (focusId) pendingFocusId.current = focusId;
