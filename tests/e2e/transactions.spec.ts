@@ -97,10 +97,23 @@ async function mockTransactionApi(
     if (request.method() === "POST") {
       const body = request.postDataJSON() as ReviewBody;
       reviewBodies.push(body);
+      // Match the actual SQL receipt shape, including the exact action.
+      const result = body.action === "duplicate-review"
+        ? {
+            transactionId: body.transactionId, decision: body.decision,
+            duplicateState: body.decision === "confirmed" ? "confirmed" : "none",
+            candidateCount: 2, reviewedSourceRecordId: firstRow.source.sourceRecordId,
+          }
+        : body.action === "transfer-pair"
+          ? {
+              transactionId: body.transactionId, pairId: body.pairId,
+              balanced: true, changed: true, dayGap: 1,
+            }
+          : { transactionId: body.transactionId, pairId: transferCandidateId, changed: true };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ result: { changed: true, transactionId: body.transactionId } }),
+        body: JSON.stringify({ result }),
       });
       return;
     }
@@ -765,6 +778,37 @@ test("REC-TXN-006 · revisión POST con respuesta incierta no se duplica", async
   await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
   await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
   expect(postCount).toBe(1);
+});
+
+test("REC-TXN-010 · POST 200 con recibo de otro movimiento no anuncia éxito", async ({ page }) => {
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "POST") {
+      writes += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            transactionId: secondId, decision: "confirmed", duplicateState: "confirmed",
+            candidateCount: 2, reviewedSourceRecordId: firstRow.source.sourceRecordId,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(writes).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(writes).toBe(1);
 });
 
 test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo envío", async ({ page }) => {
