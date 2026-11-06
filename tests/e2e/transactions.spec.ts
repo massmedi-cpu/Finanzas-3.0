@@ -818,6 +818,66 @@ test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo en
   expect(writes).toBe(1);
 });
 
+test("REC-TXN-009 · reparto con PUT confirmado pero relectura fallida bloquea otro envío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let writes = 0;
+  let failListRead = false;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "PUT") {
+      writes += 1;
+      // A valid persistence receipt may precede a failed independent read.
+      failListRead = true;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ result: { ...split, exists: true, active: true } }),
+      });
+      return;
+    }
+    if (request.method() === "GET" && url.searchParams.get("mode") === "split") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (request.method() === "GET" && !url.searchParams.has("mode")) {
+      await route.fulfill(failListRead
+        ? { status: 503, json: { error: "temporary_read_unavailable" } }
+        : { status: 200, json: { rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null } });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/transactions");
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await page.getByTestId("split-amount-0").fill("7,34");
+  await page.getByTestId("split-amount-1").fill("5,00");
+  await page.getByTestId("save-split").click();
+
+  const unverified = page.getByTestId("transactions-write-unverified");
+  await expect(unverified).toBeVisible();
+  await expect(unverified).toContainText("Puede haberse guardado");
+  await expect(page.getByText("Reparto guardado y aplicado a la analítica personal.")).toHaveCount(0);
+  expect(writes).toBe(1);
+
+  // A successful recovery read removes the uncertainty without retrying PUT.
+  failListRead = false;
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(unverified).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
 test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin inventar un reparto vacío", async ({ page }) => {
   const split = {
     exists: false, active: false, stale: false, canSplit: true,
