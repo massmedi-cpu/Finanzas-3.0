@@ -233,9 +233,15 @@ test("AUD-E2E-UI-001 · texto funcional de Presupuestos mantiene tono legible en
   await mockBudgetRead(page);
   await page.goto("/budgets");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  const eyebrow = page.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
+  // Scope contrast checks to the active app landmark. Next may briefly keep
+  // an outgoing route tree mounted during mobile navigation; a global text
+  // locator would then match the inactive page as well (strict-mode flake).
+  const currentContent = page.locator("#main-content");
+  const eyebrow = currentContent.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
+  await expect(eyebrow).toHaveCount(1);
   await expect(eyebrow).toBeVisible();
-  const emptyMessage = page.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
+  const emptyMessage = currentContent.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
+  await expect(emptyMessage).toHaveCount(1);
   await expect(emptyMessage).toBeVisible();
 
   // El tema debe aplicar tokens de diseño, no un RGB histórico que ya no representa la paleta.
