@@ -1075,9 +1075,18 @@ function cancelSplit() {
 
 async function handleSplitSaved(row: TransactionRow, snapshot: TransactionSplitSummary) {
   setSplittingId(null);
-  setNotice(snapshot.exists ? "Reparto guardado y aplicado a la analítica personal." : "Reparto eliminado. El movimiento vuelve a usar el importe bancario completo.");
   pendingFocusId.current = row.id;
-  await fetchPage(appliedFilters, null, false);
+  // A successful PUT receipt is not proof that the resulting movement can
+  // be read back. Never keep a success message or allow another write when
+  // the independent list reload fails (REC-TXN-009).
+  if (!await fetchPage(appliedFilters, null, false)) {
+    pendingFocusId.current = null;
+    setNotice(null);
+    setWriteUnverified(true);
+    setError("El reparto recibió respuesta del servidor, pero el listado no se pudo volver a verificar. Puede haberse guardado: vuelve a consultar el movimiento antes de repetir la operación.");
+    return;
+  }
+  setNotice(snapshot.exists ? "Reparto guardado y aplicado a la analítica personal." : "Reparto eliminado. El movimiento vuelve a usar el importe bancario completo.");
 }
 
 async function saveEdit(row: TransactionRow) {
