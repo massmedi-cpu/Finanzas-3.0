@@ -1409,7 +1409,12 @@ async function saveEdit(row: TransactionRow) {
       )}
       {facetsError && (
         <div className={styles.error} role="alert">
-          No se han podido verificar las cuentas y categorías: {facetsError} La lectura del listado sigue disponible.
+          No se han podido verificar las cuentas y categorías: {facetsError}
+          {loading
+            ? " El listado se está comprobando."
+            : listUnverified
+              ? " El listado tampoco se ha podido verificar."
+              : " La lectura del listado sigue disponible."}
           <button className={styles.secondaryButton} type="button" onClick={() => setFacetsRetry((count) => count + 1)}>
             Reintentar cuentas y categorías
           </button>

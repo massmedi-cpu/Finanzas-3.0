@@ -298,6 +298,7 @@ test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento sol
   await page.goto("/transactions");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
   await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas y categorías");
+  await expect(page.locator("main").getByRole("alert")).toContainText("La lectura del listado sigue disponible");
   recoveryRequested = true;
   await page.getByRole("button", { name: "Reintentar cuentas y categorías" }).click();
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
@@ -306,6 +307,54 @@ test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento sol
   expect(facetReads).toBeGreaterThanOrEqual(2);
   expect(recoveredFacetReads).toBe(1);
   expect(listReads).toBeGreaterThanOrEqual(1);
+  expect(mutations).toEqual([]);
+});
+
+test("REC-TXN-012 · el aviso de filtros refleja el estado real de la lista", async ({ page }) => {
+  let releaseFirstRead: () => void = () => {};
+  const firstRead = new Promise<void>((resolve) => { releaseFirstRead = resolve; });
+  let listReads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
+  const mutations: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== "GET") {
+      mutations.push(request.method());
+      await route.fulfill({ status: 405, json: {} });
+      return;
+    }
+    if (url.searchParams.get("mode") === "facets") {
+      await route.fulfill({ status: 503, json: { error: "facets_timeout" } });
+      return;
+    }
+    listReads += 1;
+    if (!recoveryRequested) {
+      await firstRead;
+      await route.fulfill({ status: 503, json: { error: "list_timeout" } });
+      return;
+    }
+    recoveryReads += 1;
+    await route.fulfill({ json: { rows: [baseRow], totalCount: 1, hasMore: false, nextCursor: null } });
+  });
+
+  await page.goto("/transactions");
+  const facetsAlert = page.getByRole("alert").filter({ hasText: "No se han podido verificar las cuentas y categorías" });
+  await expect(facetsAlert).toContainText("El listado se está comprobando.");
+  await expect(facetsAlert).not.toContainText("La lectura del listado sigue disponible.");
+
+  releaseFirstRead();
+  await expect(facetsAlert).toContainText("El listado tampoco se ha podido verificar.");
+  await expect(facetsAlert).not.toContainText("La lectura del listado sigue disponible.");
+  await expect(page.getByText("Histórico sin verificar", { exact: true })).toBeVisible();
+
+  recoveryRequested = true;
+  await page.getByRole("button", { name: "Reintentar listado" }).click();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(facetsAlert).toContainText("La lectura del listado sigue disponible.");
+  expect(listReads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
   expect(mutations).toEqual([]);
 });
 
