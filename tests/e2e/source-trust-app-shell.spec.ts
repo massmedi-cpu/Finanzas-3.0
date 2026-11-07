@@ -201,6 +201,24 @@ test("10.0.29 · un available=false se trata como no comprobable", async ({ page
   await expect(status).toContainText("No hay evidencia suficiente");
 });
 
+test("REC-SYNC-199 · sin informe de sincronización no se presenta la fuente en verde", async ({ page }) => {
+  for (const latestMovementDate of ["2026-09-27", null]) {
+    await isolateData(page, { available: true, latestMovementDate, sync: null });
+    await page.setViewportSize({ width: 320, height: 760 });
+    await page.goto("/transactions");
+    const region = sourceRegion(page);
+    await expect(region.getByRole("status")).toContainText("Sincronización sin verificar");
+    await expect(region.locator("div").first()).toHaveClass(/warning/);
+    await expect(region.getByRole("status")).toContainText("No se puede confirmar si los datos están actualizados");
+    await expect(region.getByRole("status")).not.toContainText("Fuente comprobada");
+    if (latestMovementDate) await expect(region.getByRole("status")).toContainText("Último movimiento");
+    else await expect(region.getByRole("status")).not.toContainText("Último movimiento");
+    await expect(region.getByRole("link", { name: "Revisar fuente" })).toHaveAttribute("href", "/configuration/source");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+    await page.unrouteAll({ behavior: "wait" });
+  }
+});
+
 test("10.0.29 · el estado es usable a 320 px, sin overflow y con acciones táctiles", async ({ page }) => {
   await isolateData(page, null, 503);
   await page.setViewportSize({ width: 320, height: 760 });

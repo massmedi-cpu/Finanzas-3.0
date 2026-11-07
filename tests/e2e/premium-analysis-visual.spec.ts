@@ -614,7 +614,10 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: {
+        status: "success", startedAt: "2026-09-15T09:59:00Z", finishedAt: "2026-09-15T10:00:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      } }),
     });
   });
 
@@ -626,6 +629,52 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
   await expect(rateKpi).toContainText("Tasa agregada");
   await expect(rateKpi).toContainText(/Tasa de ahorro agregada (al alza|a la baja|estable)/);
   await expect(rateKpi).not.toContainText("Media mensual · 3 m");
+});
+
+test("REC-ANALYSIS-056 · oculta medias y tendencias cuando el histórico no tiene cobertura verificable", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) }));
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
+    }),
+  }));
+  await page.setViewportSize({ width: 360, height: 900 });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis.getByText("Histórico sin cobertura verificada")).toHaveCount(4);
+  await expect(kpis).not.toContainText("Media mensual · 3 m");
+  await expect(kpis).not.toContainText("Tasa agregada · 3 m");
+  await expect(kpis).not.toContainText(/Tasa de ahorro agregada (al alza|a la baja|estable)/);
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", colorScheme);
+    await expect(kpis.getByText("Histórico sin cobertura verificada")).toHaveCount(4);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+  }
+});
+
+test("REC-ANALYSIS-057 · muestra solo la ventana histórica que tiene cobertura", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) }));
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, earliestMovementDate: "2026-06-01", latestMovementDate: "2026-09-15", sync: {
+        status: "success", startedAt: "2026-09-15T09:59:00Z", finishedAt: "2026-09-15T10:00:00Z",
+        rowsSeen: 100, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      },
+    }),
+  }));
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis.getByText(/Media mensual · 3 m/)).toHaveCount(3);
+  await expect(kpis.getByText(/Tasa agregada · 3 m/)).toHaveCount(1);
+  await expect(kpis).not.toContainText("6 m ");
+  await expect(kpis).not.toContainText(/Tasa de ahorro agregada (al alza|a la baja|estable)/);
 });
 
 

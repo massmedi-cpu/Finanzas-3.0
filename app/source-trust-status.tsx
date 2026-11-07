@@ -110,10 +110,10 @@ function summarize(payload: SourceFreshness): Summary {
 
   if (!sync) {
     return {
-      label: "Fuente disponible",
-      detail: movement,
-      tone: "ok",
-      showReviewLink: false,
+      label: "Sincronización sin verificar",
+      detail: [movement, "No se puede confirmar si los datos están actualizados."].filter(Boolean).join(" · "),
+      tone: "warning",
+      showReviewLink: true,
     };
   }
 

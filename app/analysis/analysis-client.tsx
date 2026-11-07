@@ -12,6 +12,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { analysisHistoryCoverage, type HistoryCoverage } from "../../src/application/analysis/analysis-history-coverage";
 import type { SourceSyncIncidentInput } from "../../src/application/source-sync-incidents";
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import {
@@ -160,12 +161,14 @@ function monthHref(snapshot: AnalysisSnapshot, monthStart: string) {
   return `/transactions?${params.toString()}`;
 }
 
-function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps") {
+function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps", coverage: Record<3 | 6, HistoryCoverage>) {
   const value = (months: 3 | 6) => {
+    if (coverage[months] !== "covered") return null;
     const average = months === 3 ? snapshot.averages.last3Months : snapshot.averages.last6Months;
     if (!average) return null;
     const raw = average[metric];
-    return metric === "savingsRateBps" ? formatPercentBps(raw) : formatMoney(raw ?? 0);
+    if (metric === "savingsRateBps") return formatPercentBps(raw);
+    return raw === null ? null : formatMoney(raw);
   };
   const parts: string[] = [];
   const three = value(3);
@@ -175,12 +178,13 @@ function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "e
   return parts;
 }
 
-function HistoricalReference({ snapshot, metric }: {
+function HistoricalReference({ snapshot, metric, coverage }: {
   snapshot: AnalysisSnapshot;
   metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps";
+  coverage: Record<3 | 6, HistoryCoverage>;
 }) {
-  const parts = historicalMetric(snapshot, metric);
-  if (parts.length === 0) return <span>Histórico insuficiente</span>;
+  const parts = historicalMetric(snapshot, metric, coverage);
+  if (parts.length === 0) return <span>{coverage[3] === "unverified" || coverage[6] === "unverified" ? "Histórico sin cobertura verificada" : "Histórico insuficiente"}</span>;
   return <span>{metric === "savingsRateBps" ? "Tasa agregada" : "Media mensual"} · {parts.join(" · ")}</span>;
 }
 
@@ -371,12 +375,14 @@ function LoadingSkeleton() {
 
 export default function AnalysisClient({
   initialSnapshot,
+  sourceAvailable = false,
   latestMovementDate = null,
   earliestMovementDate = null,
   sourceSync = null,
   onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
+  sourceAvailable?: boolean;
   latestMovementDate?: string | null;
   earliestMovementDate?: string | null;
   sourceSync?: SourceSyncIncidentInput | null;
@@ -412,6 +418,10 @@ export default function AnalysisClient({
   }) : null;
   const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
   const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
+  const historyCoverage: Record<3 | 6, HistoryCoverage> = snapshot ? {
+    3: analysisHistoryCoverage(snapshot, 3, { available: sourceAvailable, latestMovementDate, earliestMovementDate, sync: sourceSync }),
+    6: analysisHistoryCoverage(snapshot, 6, { available: sourceAvailable, latestMovementDate, earliestMovementDate, sync: sourceSync }),
+  } : { 3: "insufficient", 6: "insufficient" };
   const incompleteComparisonLabel = coverage?.state === "unknown"
     ? "Cobertura desconocida · comparación no disponible"
     : "Comparación incompleta";
@@ -570,9 +580,9 @@ export default function AnalysisClient({
                   ? "Comparación pendiente · ingresos aún no representativos"
                   : "Comparación no disponible"}
               trend={snapshot.trends.income}
-              historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" coverage={historyCoverage} />}
               tone="income"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Gastos"
@@ -583,9 +593,9 @@ export default function AnalysisClient({
                 ? `${formatPercentBps(expenseComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : expenseComparisonPresentation?.label ?? "Comparación no disponible"}
               trend={snapshot.trends.expense}
-              historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" coverage={historyCoverage} />}
               tone="expense"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Neto del periodo"
@@ -594,9 +604,9 @@ export default function AnalysisClient({
                 ? incompleteComparisonLabel
                 : `${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
               trend={snapshot.trends.net}
-              historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" coverage={historyCoverage} />}
               tone="net"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Tasa de ahorro"
@@ -609,9 +619,9 @@ export default function AnalysisClient({
                   ? "Ingresos del mes aún no representativos"
                   : "Sin tasa disponible"}
               trend={snapshot.trends.savingsRate}
-              historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" coverage={historyCoverage} />}
               tone="rate"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
           </section>
 
