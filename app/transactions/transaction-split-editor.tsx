@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatMoneyCents } from "../../src/core/money";
 import { formatSplitAmountInput as formatInputAmount, parseSplitAmountInput as parseInputAmount } from "../../src/application/transactions/split-amount-format";
+import { matchesRequestedSplit, type SplitWriteAllocation } from "../../src/application/transactions/split-write-verification";
 import styles from "./transaction-split-editor.module.css";
 
 export type TransactionSplitSummary = {
@@ -227,8 +228,8 @@ export function TransactionSplitEditor({
     setLines((current) => current.filter((line) => line.key !== key));
   }
 
-  async function persist(allocations: Array<Record<string, unknown>>) {
-    if (saving || disabled) return;
+  async function persist(allocations: SplitWriteAllocation[]) {
+    if (saving || disabled || !detail) return;
     setSaving(true);
     onBusyChange(true);
     setError(null);
@@ -246,15 +247,37 @@ export function TransactionSplitEditor({
         signal: controller.signal,
       });
       const payload = await response.json().catch(() => null);
+      window.clearTimeout(deadline);
       if (!response.ok) {
         if (response.status >= 500) throw new Error("WRITE_UNVERIFIED");
         throw new Error(errorMessage(payload));
       }
-      const snapshot = payload?.result as TransactionSplitSummary | undefined;
-      if (!snapshot || typeof snapshot.exists !== "boolean" || !Number.isSafeInteger(snapshot.bankAmountCents)) {
+      const receipt = payload?.result;
+      if (!matchesRequestedSplit(receipt, detail.bankAmountCents, allocations)
+        || typeof receipt.changed !== "boolean"
+        || receipt.auditChanges !== (receipt.changed ? 1 : 0)) {
         throw new Error("WRITE_UNVERIFIED");
       }
-      await onSaved(snapshot);
+      // The receipt alone does not identify the transaction. Read that
+      // transaction independently and compare every part before reporting success.
+      const readController = new AbortController();
+      const readDeadline = window.setTimeout(() => readController.abort(), 15_000);
+      let snapshot: unknown;
+      try {
+        const params = new URLSearchParams({ mode: "split", transactionId: transaction.id });
+        const readResponse = await fetch(`/api/transactions?${params.toString()}`, {
+          cache: "no-store", signal: readController.signal,
+        });
+        snapshot = await readResponse.json().catch(() => null);
+        if (!readResponse.ok || !matchesRequestedSplit(snapshot, detail.bankAmountCents, allocations)) {
+          throw new Error("WRITE_UNVERIFIED");
+        }
+      } catch {
+        throw new Error("WRITE_UNVERIFIED");
+      } finally {
+        window.clearTimeout(readDeadline);
+      }
+      await onSaved(snapshot as TransactionSplitSummary);
     } catch (cause) {
       const uncertain = timedOut || cause instanceof TypeError
         || (cause instanceof Error && cause.message === "WRITE_UNVERIFIED");

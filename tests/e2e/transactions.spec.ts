@@ -8,6 +8,23 @@ const secondId = "60000000-0000-4000-8000-000000000112";
 const duplicatePeerId = "60000000-0000-4000-8000-000000000113";
 const transferCandidateId = "60000000-0000-4000-8000-000000000114";
 
+const splitEmpty = {
+  exists: false, active: false, stale: false, canSplit: true,
+  bankAmountCents: -1234, sourceAmountCents: null,
+  personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  effectiveKind: "expense", baseCategoryId: categoryId, allocations: [],
+};
+const splitSaved = {
+  ...splitEmpty, exists: true, active: true, sourceAmountCents: -1234,
+  personalAmountCents: -734, otherAmountCents: -500, allocationCount: 2, categoryCount: 1,
+  allocations: [
+    { id: "80000000-0000-4000-8000-000000000111", position: 0, scope: "personal", amountCents: -734,
+      categoryId: null, effectiveCategoryId: categoryId, categoryName: "Alimentación", inheritsCategory: true, label: "Parte personal" },
+    { id: "80000000-0000-4000-8000-000000000112", position: 1, scope: "other", amountCents: -500,
+      categoryId: null, effectiveCategoryId: categoryId, categoryName: "Alimentación", inheritsCategory: true, label: "Otra persona" },
+  ],
+};
+
 const firstRow = {
   id: firstId,
   bankDate: "2026-09-05",
@@ -881,14 +898,14 @@ test("REC-TXN-009 · reparto con PUT confirmado pero relectura fallida bloquea o
       failListRead = true;
       await route.fulfill({
         status: 200, contentType: "application/json",
-        body: JSON.stringify({ result: { ...split, exists: true, active: true } }),
+        body: JSON.stringify({ result: { ...splitSaved, changed: true, auditChanges: 1 } }),
       });
       return;
     }
     if (request.method() === "GET" && url.searchParams.get("mode") === "split") {
       await route.fulfill({
         status: 200, contentType: "application/json",
-        body: JSON.stringify({ ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+        body: JSON.stringify(failListRead ? splitSaved : { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
       });
       return;
     }
@@ -921,6 +938,79 @@ test("REC-TXN-009 · reparto con PUT confirmado pero relectura fallida bloquea o
   await expect(unverified).toHaveCount(0);
   expect(writes).toBe(1);
 });
+
+for (const scenario of ["incomplete receipt", "incorrect receipt", "stale independent read", "failed independent read", "successful save", "successful removal", "unchanged split"] as const) {
+  test(`REC-TXN-011 · split verification: ${scenario}`, async ({ page }) => {
+    const removing = scenario === "successful removal";
+    const alreadySaved = scenario === "unchanged split";
+    let writes = 0;
+    let verificationReads = 0;
+    let saved = false;
+    await mockTransactionApi(page);
+    await page.route("**/api/transactions**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() === "PUT") {
+        writes += 1;
+        saved = true;
+        const result = scenario === "incomplete receipt"
+          ? { exists: true, bankAmountCents: -1234 }
+          : scenario === "incorrect receipt"
+            ? { ...splitSaved, otherAmountCents: -499, changed: true, auditChanges: 1 }
+            : { ...(removing ? splitEmpty : splitSaved), changed: !alreadySaved, auditChanges: alreadySaved ? 0 : 1 };
+        await route.fulfill({ status: 200, json: { result } });
+        return;
+      }
+      if (request.method() === "GET" && url.searchParams.get("mode") === "split") {
+        expect(url.searchParams.get("transactionId")).toBe(firstId);
+        if (saved) verificationReads += 1;
+        if (saved && scenario === "failed independent read") {
+          await route.fulfill({ status: 503, json: { error: "temporary_read_unavailable" } });
+          return;
+        }
+        const result = !saved ? (removing || alreadySaved ? splitSaved : splitEmpty)
+          : scenario === "stale independent read" ? splitEmpty
+            : removing ? splitEmpty : splitSaved;
+        await route.fulfill({ status: 200, json: result });
+        return;
+      }
+      if (request.method() === "GET" && !url.searchParams.has("mode")) {
+        const split = saved && (scenario === "successful save" || alreadySaved) ? splitSaved
+          : (removing || alreadySaved) && !saved ? splitSaved : splitEmpty;
+        await route.fulfill({ status: 200, json: { rows: [{ ...firstRow, split }], totalCount: 1, hasMore: false, nextCursor: null } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/transactions");
+    await page.getByTestId(`split-${firstId}`).click();
+    if (removing) {
+      await page.getByRole("button", { name: "Eliminar reparto" }).click();
+    } else if (alreadySaved) {
+      await expect(page.getByTestId("split-amount-0")).toHaveValue("7,34");
+      await page.getByTestId("save-split").click();
+    } else {
+      await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+      await page.getByTestId("split-amount-0").fill("7,34");
+      await page.getByTestId("split-amount-1").fill("5,00");
+      await page.getByTestId("save-split").click();
+    }
+
+    if (["incomplete receipt", "incorrect receipt", "stale independent read", "failed independent read"].includes(scenario)) {
+      await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+      await expect(page.getByText("Reparto guardado y aplicado a la analítica personal.")).toHaveCount(0);
+      await expect(page.getByTestId("save-split")).toBeDisabled();
+    } else {
+      await expect(page.getByText(removing
+        ? "Reparto eliminado. El movimiento vuelve a usar el importe bancario completo."
+        : "Reparto guardado y aplicado a la analítica personal.", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+    }
+    expect(writes).toBe(1);
+    expect(verificationReads).toBe(scenario === "incomplete receipt" || scenario === "incorrect receipt" ? 0 : 1);
+  });
+}
 
 test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin inventar un reparto vacío", async ({ page }) => {
   const split = {
