@@ -173,23 +173,152 @@ test("accounts UI renders central balances, scoped metrics and recent movements"
   await expect(page.getByText("50,00 €", { exact: true })).toBeVisible();
 });
 
-test("account discrepancy opens an evidence trail and keeps movement links scoped", async ({ page }) => {
+test("account discrepancy warns without starting a bank reconciliation workflow", async ({ page }) => {
   await mockAccountsApis(page, true);
+  const reconciliationReads: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/financial" && url.searchParams.get("mode") === "reconciliation") {
+      reconciliationReads.push(url.toString());
+    }
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/accounts");
 
+  // Keep the truthful bank-balance warning; remove only the unnecessary task flow.
   await expect(page.getByText(/reconstrucción por movimientos difiere en 579,00/)).toBeVisible();
-  await page.getByRole("button", { name: "Examinar diferencia" }).click();
-  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toBeVisible();
-  await expect(page.getByText("2 días con cambios · 932 días con saldo bancario")).toBeVisible();
-  const firstLink = page.getByRole("link", { name: /Ver movimientos del 30\/05\/2019/ });
-  await expect(firstLink).toHaveAttribute("href", `/transactions?accountId=${accountA}&dateFrom=2019-05-30&dateTo=2019-05-30`);
-  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountA}`);
+  await expect(page.getByText("Saldo bancario prioritario.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Examinar diferencia" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute(
+    "href", `/transactions?accountId=${accountA}`,
+  );
+  expect(reconciliationReads).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   await page.getByRole("button", { name: /Ahorro/ }).click();
-  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toHaveCount(0);
-  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountB}`);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute(
+    "href", `/transactions?accountId=${accountB}`,
+  );
+  expect(reconciliationReads).toEqual([]);
+});
+
+test("FA-UI-038 · Cuentas no convierte un total bancario incoherente en saldo verificado", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ...balances, activeBalanceCents: balances.activeBalanceCents + 1,
+      }) });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+  await expect(page.getByRole("button", { name: /Cuenta principal/ })).toHaveCount(0);
+});
+
+test("FA-UI-038 · importes ausentes en una cuenta no se sustituyen por cero", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ...balances,
+        accounts: [{ ...balances.accounts[0], balanceCents: null }, balances.accounts[1]],
+      }) });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+  await expect(page.getByText("0,00 €", { exact: true })).toHaveCount(0);
+});
+
+test("FA-UI-038 · métricas incompletas no se presentan como balance del periodo", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "snapshot") {
+      const accountId = url.searchParams.get("accountId") ?? accountA;
+      const original = snapshotFor(accountId);
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        ...original, period: { ...original.period, incomeCents: null },
+      }) });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText("300,00");
+});
+
+test("FA-UI-038 · respuesta truncada de movimientos no se confunde con un periodo vacío", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/transactions?*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      rows: [], totalCount: 3, hasMore: false, nextCursor: null,
+    }) });
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByText("No hay movimientos en el periodo.")).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+});
+
+test("REC-UI-043 · una fecha bancaria imposible no se considera un saldo válido", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, json: { ...balances, asOfDate: "2026-02-30" } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+});
+
+test("REC-UI-043 · saldo bancario y evidencia explícita distintos no se muestran como confirmados", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "balances") {
+      await route.fulfill({ status: 200, json: {
+        ...balances, accounts: [{ ...balances.accounts[0], explicitBalanceCents: 1 }, balances.accounts[1]],
+      } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas ni sus saldos");
+  await expect(page.getByLabel("Saldo total en cuentas").locator("strong")).toHaveText("—");
+});
+
+test("REC-UI-043 · métricas sin contrato de lectura bancaria no se presentan como verdad", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "snapshot") {
+      const accountId = url.searchParams.get("accountId") ?? accountA;
+      const base = snapshotFor(accountId);
+      await route.fulfill({ status: 200, json: {
+        ...base, principles: { ...base.principles, bankSource: "synthetic" },
+      } });
+    } else await route.fallback();
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText("300,00");
+});
+
+test("REC-UI-043 · movimientos recientes truncados no se presentan como historial completo", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/transactions?*", async (route) => {
+    const accountId = new URL(route.request().url()).searchParams.get("accountId") ?? accountA;
+    await route.fulfill({ status: 200, json: { ...transactionsFor(accountId), totalCount: 2, hasMore: false } });
+  });
+  await page.goto("/accounts");
+  await expect(page.locator("main").getByRole("alert")).toContainText("detalle bancario está incompleto");
+  await expect(page.getByRole("group", { name: "Resumen del periodo de la cuenta" })).toHaveCount(0);
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText("300,00");
 });
 
 test("accounts UI keeps touch targets usable on narrow mobile screens", async ({ page }) => {
@@ -227,8 +356,20 @@ test("protected preview exposes F10 accounts from the existing financial and tra
   const balancesResponse = await request.get("/api/financial?mode=balances");
   expect(balancesResponse.ok()).toBeTruthy();
   const liveBalances = await balancesResponse.json();
-  expect(liveBalances.activeBalanceCents).toBe(18884599);
+  // The original fixed amount became stale as new read-only bank movements arrived.
+  // Validate the real financial invariant rather than pinning the owner's balance.
   expect(liveBalances.accounts).toHaveLength(2);
+  const activeBalances = liveBalances.accounts.map(
+    (account: { lifecycle: string; balanceCents: number | null }) => {
+      expect(account.lifecycle).toBe("active");
+      expect(Number.isSafeInteger(account.balanceCents)).toBe(true);
+      return account.balanceCents as number;
+    },
+  );
+  expect(Number.isSafeInteger(liveBalances.activeBalanceCents)).toBe(true);
+  expect(liveBalances.activeBalanceCents).toBe(activeBalances.reduce(
+    (total: number, amount: number) => total + amount, 0,
+  ));
   expect(liveBalances.quality.explicitBalanceAccounts).toBe(2);
 
   const selected = liveBalances.accounts[0];
@@ -251,4 +392,78 @@ test("protected preview exposes F10 accounts from the existing financial and tra
   const transactionPage = await transactionsResponse.json();
   expect(Array.isArray(transactionPage.rows)).toBe(true);
   for (const row of transactionPage.rows) expect(row.account.id).toBe(selected.id);
+});
+
+
+test("RECUPERACION-PRODUCTO · al cambiar de cuenta no muestra temporalmente los datos de la anterior", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "snapshot" && url.searchParams.get("accountId") === accountB) {
+      await new Promise((resolve) => setTimeout(resolve, 850));
+    }
+    await route.fallback();
+  });
+  await page.goto("/accounts");
+  const metrics = page.getByRole("group", { name: "Resumen del periodo de la cuenta" });
+  await expect(metrics).toContainText("1.500,00");
+  await expect(page.getByLabel("Saldo total en cuentas")).toContainText(
+    "los saldos individuales proceden de fechas o métodos distintos",
+  );
+  await page.getByRole("button", { name: /Ahorro · 0092/ }).click();
+  await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
+  await expect(metrics).toHaveCount(0);
+  await expect(page.getByText("Movimiento prueba")).toHaveCount(0);
+  await expect(metrics).toContainText("500,00");
+  await expect(metrics).not.toContainText("1.500,00");
+  await expect(page.getByText("Movimiento prueba")).toBeVisible();
+  await expect(page.getByText("Último saldo bancario conocido")).toBeVisible();
+  await expect(page.getByText("Fecha: 06/09/2026")).toBeVisible();
+});
+
+test("RECUPERACION-PRODUCTO · rechaza respuestas de otra cuenta sin mezclar ingresos ni movimientos", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "snapshot" && url.searchParams.get("accountId") === accountB) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(snapshotFor(accountA)),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/accounts");
+  const metrics = page.getByRole("group", { name: "Resumen del periodo de la cuenta" });
+  await expect(metrics).toContainText("1.500,00");
+  await page.getByRole("button", { name: /Ahorro · 0092/ }).click();
+  await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toContainText("no corresponde a la cuenta elegida");
+  await expect(metrics).toHaveCount(0);
+  await expect(page.getByText("Movimiento prueba")).toHaveCount(0);
+});
+
+test("RECUPERACION-PRODUCTO · totales simultáneos no llevan aviso de fechas mezcladas", async ({ page }) => {
+  await mockAccountsApis(page);
+  await page.route("**/api/financial?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "balances") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...balances,
+          accounts: balances.accounts.map((account) => ({ ...account, explicitBalanceDate: "2026-09-07" })),
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/accounts");
+  const total = page.getByLabel("Saldo total en cuentas");
+  await expect(total).toContainText("300,00");
+  await expect(total).not.toContainText("los saldos individuales proceden de fechas o métodos distintos");
 });

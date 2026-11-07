@@ -12,9 +12,9 @@ export function assertMoneyCents(value: number): asserts value is MoneyCents {
 export function parseSpanishMoneyToCents(rawValue: string): MoneyCents {
   const normalized = rawValue
     .trim()
-    .replace(/\u00a0/g, " ")
-    .replace(/\s*€\s*$/, "")
-    .replace(/\s+/g, "");
+    // Remove only an optional EUR suffix; never erase spaces *inside* digits.
+    // A pasted "1 2,34" must fail, rather than silently become "12,34".
+    .replace(/\s*€\s*$/, "");
 
   const match = SPANISH_MONEY_PATTERN.exec(normalized);
 
@@ -59,7 +59,7 @@ export function formatMoneyInputCents(cents: MoneyCents, grouped = false): strin
 // Accept a plain decimal dot for existing forms, while a dot followed by
 // three digits continues to mean Spanish thousands grouping.
 export function parseMoneyInputToCents(value: string): MoneyCents {
-  const compact = value.trim().replace(/\s/g, "");
+  const compact = value.trim(); // Internal whitespace is never a safe numeric separator.
   const normalized = /^[+-]?\d+\.\d{1,2}$/.test(compact)
     ? compact.replace(".", ",")
     : compact;

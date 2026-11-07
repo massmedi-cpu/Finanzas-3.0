@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeNextPath } from "../../../../src/infrastructure/auth/access-control";
+import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../../../src/infrastructure/http/limited-json-request";
 import {
   revokeAuthSession,
   setSessionCookies,
@@ -34,7 +35,20 @@ function unavailable() {
 }
 
 export async function POST(request: NextRequest) {
-  const body: unknown = await request.json().catch(() => null);
+  // The public login endpoint must not buffer unbounded JSON before validating
+  // credentials. The same 8 KiB cap applies with or without Content-Length.
+  let body: unknown;
+  try {
+    body = await readLimitedJsonRequest(request, 8 * 1024);
+  } catch (error) {
+    if (error instanceof LimitedJsonRequestError && error.reason === "too_large") {
+      return NextResponse.json(
+        { error: "invalid_request", code: "login_body_too_large" },
+        { status: 413, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    return invalidCredentials();
+  }
   if (!body || typeof body !== "object" || Array.isArray(body)) return invalidCredentials();
 
   const row = body as Record<string, unknown>;

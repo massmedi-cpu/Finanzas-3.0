@@ -3,7 +3,10 @@ if (process.env.GITHUB_ACTIONS !== 'true' || !process.env.AUD_ISOLATED_DIR) thro
 const localOrigin = new URL(process.env.SUPABASE_URL).origin;
 if (new URL(localOrigin).hostname !== '127.0.0.1') throw Error('cloud_runtime_forbidden');
 const canonicalOrigin = 'https://btzukbfesxdratqnxuoj.supabase.co';
-const gatewayUrl = canonicalOrigin + '/functions/v1/financial-app-db-gateway';
+const gatewayUrls = new Set([
+  canonicalOrigin + '/functions/v1/financial-app-db-gateway',
+  canonicalOrigin + '/functions/v1/financial-app-db-gateway-candidate-619',
+]);
 const originalFetch = globalThis.fetch;
 function rewriteStorage(value) {
   if (typeof value === 'string' && value.startsWith(localOrigin + '/storage/v1/')) return canonicalOrigin + value.slice(localOrigin.length);
@@ -14,7 +17,7 @@ function rewriteStorage(value) {
 globalThis.fetch = async function isolatedFetch(input, init) {
   const url = new URL(input instanceof Request ? input.url : String(input));
   let destination = url;
-  const gateway = url.href === gatewayUrl;
+  const gateway = gatewayUrls.has(url.href);
   if (gateway) destination = new URL('http://127.0.0.1:54331');
   else if (url.origin === canonicalOrigin && url.pathname.startsWith('/storage/v1/')) destination = new URL(url.pathname + url.search, localOrigin);
   else if (!['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)) throw Error('AUD_EXTERNAL_NETWORK_FORBIDDEN');

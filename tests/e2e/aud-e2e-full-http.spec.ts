@@ -347,7 +347,12 @@ test('real authenticated preferences, keyboard navigation, privacy, PWA and offl
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto('/');
   const more = page.getByRole('navigation', { name: 'Navegación móvil' }).getByRole('button', { name: 'Más', exact: true });
-  await more.focus(); await page.keyboard.press('Enter');
+  // An SSR control must be hydrated before keyboard activation; disabled
+  // initially to avoid a silently ignored first Enter on a real device.
+  await expect(more).toBeEnabled();
+  await more.focus(); await expect(more).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: 'Cerrar más secciones' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('navigation', { name: 'Más secciones' }).getByRole('link').first()).toBeFocused();

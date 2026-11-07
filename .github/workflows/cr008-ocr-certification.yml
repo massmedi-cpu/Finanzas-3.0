@@ -15,6 +15,7 @@ on:
       - 'src/domain/document-ocr-financial-interpretation.ts'
       - 'src/domain/ocr-rows.ts'
       - 'src/domain/receipt-money.ts'
+      - 'scripts/test-ocr-amount-label-selection.mjs'
       - 'src/infrastructure/ocr/**'
       - 'tests/e2e/document-ocr-*.spec.ts'
       - 'playwright.ocr.config.ts'
@@ -51,6 +52,9 @@ jobs:
 
       - name: Build production bundle
         run: npm run build
+
+      - name: Verify financial OCR amount and VAT table interpretation
+        run: node scripts/test-ocr-amount-label-selection.mjs
 
       - name: Run complete OCR regression pack
         run: npx playwright test --config=playwright.ocr.config.ts

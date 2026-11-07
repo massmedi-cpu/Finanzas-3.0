@@ -6,7 +6,7 @@ import type {
   DocumentOcrProviderOutput,
 } from "../../application/document-ocr-service";
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
-import { isReceiptMoney, receiptMoneyKey } from "../../domain/receipt-money";
+import { isReceiptMoney, isReceiptNumericLike, receiptMoneyKey } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 import { ReceiptCellRecoveryImageOcrProvider } from "./receipt-cell-recovery-provider";
 import { deriveNumericColumnBands } from "./receipt-row-refining-provider";
@@ -109,8 +109,7 @@ function isInteger(text: string) {
 }
 
 function isNumericLike(word: OcrWord) {
-  const token = cleanToken(word.text);
-  return /\d/.test(token) && /^[\d,./:-]+$/.test(token);
+  return isReceiptNumericLike(word.text);
 }
 
 function alphaChars(text: string) {

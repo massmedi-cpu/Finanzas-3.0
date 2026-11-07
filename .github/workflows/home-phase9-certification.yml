@@ -6,10 +6,13 @@ on:
       - "app/page.tsx"
       - "app/inicio-overview.tsx"
       - "app/home-smart-brief.tsx"
+      - "app/home-evolution.tsx"
       - "app/api/dashboard/**"
       - "src/application/dashboard/**"
       - "src/application/analysis/**"
       - "scripts/verify-home-phase9-10.0.77.mjs"
+      - "tests/unit/home-balance-series.test.mjs"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
       - "package.json"
       - ".github/workflows/home-phase9-certification.yml"
 
@@ -40,6 +43,9 @@ jobs:
 
       - name: Home Phase 9 contract
         run: npm run verify:home-phase9
+
+      - name: Verify missing monthly balances and exact snapshot cutoffs
+        run: node --test tests/unit/home-balance-series.test.mjs
 
       - name: Typecheck
         run: npm run typecheck

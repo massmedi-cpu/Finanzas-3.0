@@ -40,28 +40,6 @@ type BalancesResponse = {
   accounts: AccountBalance[];
 };
 
-type ReconciliationEvent = {
-  bankDate: string;
-  periodStartDate: string;
-  bankBalanceCents: number;
-  sourceRowKey: string;
-  deltaCents: number;
-  cumulativeDeltaCents: number;
-};
-
-type ReconciliationResponse = {
-  contractVersion: 1;
-  accountId: string;
-  asOfDate: string | null;
-  balanceSource: BalanceSource;
-  bankBalanceDate: string | null;
-  reconstructionDeltaCents: number | null;
-  unanchoredMovementCents: number | null;
-  anchorDays: number;
-  varianceDays: number;
-  events: ReconciliationEvent[];
-};
-
 type MonthlyRow = {
   monthStart: string;
   rows: number;
@@ -200,6 +178,83 @@ async function readJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+const DATE_ISO = /^\d{4}-\d{2}-\d{2}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function safeCents(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function safeBankDate(value: unknown): value is string | null {
+  if (value === null) return true;
+  if (typeof value !== "string" || !DATE_ISO.test(value)) return false;
+  const date = new Date(`${value}T12:00:00Z`);
+  // Date.parse silently normalizes invalid dates such as 30 February.
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
+// HTTP 200, a partial account list or a null balance is NOT a verified zero.
+function verifiedBalances(value: unknown): value is BalancesResponse {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const payload = value as Partial<BalancesResponse>;
+  if (!Array.isArray(payload.accounts) || !safeCents(payload.activeBalanceCents)
+    || !safeCents(payload.totalBalanceCents) || !safeBankDate(payload.asOfDate)
+    || typeof payload.includeArchived !== "boolean") return false;
+  const ids = new Set<string>();
+  let activeTotal = 0;
+  for (const account of payload.accounts) {
+    if (account === null || typeof account !== "object" || !UUID.test(account.id)
+      || ids.has(account.id) || typeof account.name !== "string" || !account.name.trim()
+      || account.currency !== "EUR" || (account.lifecycle !== "active" && account.lifecycle !== "archived")
+      || (account.balanceSource !== "bank_explicit" && account.balanceSource !== "reconstructed")
+      || !safeCents(account.balanceCents) || !safeBankDate(account.explicitBalanceDate)
+      || !(account.reconstructionDeltaCents === null || safeCents(account.reconstructionDeltaCents))) return false;
+    if (account.balanceSource === "bank_explicit"
+      && (!safeCents(account.explicitBalanceCents)
+        || account.explicitBalanceCents !== account.balanceCents
+        || account.explicitBalanceDate === null)) return false;
+    ids.add(account.id);
+    if (account.lifecycle === "active") activeTotal += account.balanceCents;
+  }
+  return Number.isSafeInteger(activeTotal) && activeTotal === payload.activeBalanceCents;
+}
+
+function verifiedSnapshot(value: unknown, accountId: string): value is FinancialSnapshot {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const snapshot = value as Partial<FinancialSnapshot>;
+  const period = snapshot.period;
+  const monthly = snapshot.monthly;
+  if (!period || !monthly || snapshot.contractVersion !== 1
+    || snapshot.principles?.bankSource !== "read_only"
+    || period.accountId !== accountId || monthly.accountId !== accountId
+    || !safeBankDate(period.dateFrom) || !safeBankDate(period.dateTo)
+    || (period.dateFrom && period.dateTo && period.dateFrom > period.dateTo)
+    || !Array.isArray(monthly.rows) || !period.transfers) return false;
+  if (![period.incomeCents, period.expenseCents, period.operatingNetCents, period.transfers.grossCents]
+    .every(safeCents)) return false;
+  return monthly.rows.every((row) => row && safeBankDate(row.monthStart) && row.monthStart !== null
+    && safeCents(row.incomeCents) && safeCents(row.expenseCents) && safeCents(row.operatingNetCents));
+}
+
+function verifiedRecentMovements(value: unknown, accountId: string): value is TransactionsResponse {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const page = value as Partial<TransactionsResponse>;
+  if (!Array.isArray(page.rows) || !Number.isSafeInteger(page.totalCount) || page.totalCount! < 0
+    || page.totalCount! < page.rows.length || (page.totalCount! > 0 && page.rows.length === 0)
+    || typeof page.hasMore !== "boolean"
+    || (!page.hasMore && page.totalCount! > page.rows.length)
+    || (page.hasMore && (!page.nextCursor
+      || !safeBankDate(page.nextCursor.bankDate) || page.nextCursor.bankDate === null
+      || typeof page.nextCursor.id !== "string" || !UUID.test(page.nextCursor.id)))) return false;
+  return page.rows.every((row) =>
+    row && typeof row.id === "string" && UUID.test(row.id)
+    && safeBankDate(row.bankDate) && row.bankDate !== null && safeCents(row.amountCents)
+    && row.account?.id === accountId
+    && typeof row.concept?.effective === "string"
+    && (row.category?.effectiveName === null || typeof row.category?.effectiveName === "string")
+    && Object.prototype.hasOwnProperty.call(KIND_LABELS, row.kind?.effective));
+}
+
 function yearStart(asOfDate: string | null) {
   return asOfDate ? `${asOfDate.slice(0, 4)}-01-01` : null;
 }
@@ -223,12 +278,10 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [transactions, setTransactions] = useState<TransactionsResponse | null>(null);
   const [loadingBalances, setLoadingBalances] = useState(true);
+  const [retryBalances, setRetryBalances] = useState(0);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailAccountId, setDetailAccountId] = useState<string | null>(null);
   const [error, setError] = useState<string>("");
-  const [showReconciliation, setShowReconciliation] = useState(false);
-  const [reconciliation, setReconciliation] = useState<ReconciliationResponse | null>(null);
-  const [reconciliationError, setReconciliationError] = useState("");
-  const [loadingReconciliation, setLoadingReconciliation] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -238,6 +291,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     readJson<BalancesResponse>(`/api/financial?mode=balances${suffix}`)
       .then((next) => {
         if (cancelled) return;
+        if (!verifiedBalances(next)) throw new Error("account_balances_unverified");
         setBalances(next);
         setSelectedId((current) => {
           if (current && next.accounts.some((account) => account.id === current)) return current;
@@ -245,13 +299,13 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
         });
       })
       .catch(() => {
-        if (!cancelled) setError("No se ha podido cargar la vista de cuentas.");
+        if (!cancelled) { setBalances(null); setSelectedId(""); setError("No se han podido verificar las cuentas ni sus saldos."); }
       })
       .finally(() => {
         if (!cancelled) setLoadingBalances(false);
       });
     return () => { cancelled = true; };
-  }, [showArchived]);
+  }, [showArchived, retryBalances]);
 
   const selectedAccount = useMemo(
     () => balances?.accounts.find((account) => account.id === selectedId) ?? null,
@@ -262,10 +316,15 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     if (!selectedAccount || !balances) {
       setSnapshot(null);
       setTransactions(null);
+      setDetailAccountId(null);
       return;
     }
 
     let cancelled = false;
+    // Un cambio de cuenta invalida inmediatamente los datos derivados anteriores.
+    setDetailAccountId(null);
+    setSnapshot(null);
+    setTransactions(null);
     setLoadingDetail(true);
     setError("");
     const from = yearStart(balances.asOfDate);
@@ -281,11 +340,30 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     ])
       .then(([nextSnapshot, nextTransactions]) => {
         if (cancelled) return;
+        if (nextSnapshot?.period?.accountId !== selectedAccount.id
+          || nextSnapshot?.monthly?.accountId !== selectedAccount.id
+          || nextTransactions?.rows?.some((row) => row?.account?.id !== selectedAccount.id)) {
+          throw new Error("account_response_scope_mismatch");
+        }
+        if (!verifiedSnapshot(nextSnapshot, selectedAccount.id)
+          || !verifiedRecentMovements(nextTransactions, selectedAccount.id)) {
+          throw new Error("account_detail_unverified");
+        }
         setSnapshot(nextSnapshot);
         setTransactions(nextTransactions);
+        setDetailAccountId(selectedAccount.id);
       })
-      .catch(() => {
-        if (!cancelled) setError("No se ha podido cargar el detalle de la cuenta seleccionada.");
+      .catch((caught) => {
+        if (!cancelled) {
+          setSnapshot(null);
+          setTransactions(null);
+          setDetailAccountId(null);
+          setError(caught instanceof Error && caught.message === "account_response_scope_mismatch"
+            ? "El detalle recibido no corresponde a la cuenta elegida. No se muestran cifras ajenas; vuelve a intentarlo."
+            : caught instanceof Error && caught.message === "account_detail_unverified"
+              ? "El detalle bancario está incompleto o contiene importes incoherentes. No se muestran cifras sin verificar."
+              : "No se ha podido cargar el detalle de la cuenta seleccionada.");
+        }
       })
       .finally(() => {
         if (!cancelled) setLoadingDetail(false);
@@ -294,28 +372,18 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
     return () => { cancelled = true; };
   }, [selectedAccount, balances]);
 
-  useEffect(() => {
-    if (!showReconciliation || !selectedAccount || !balances) return;
-    let cancelled = false;
-    setReconciliation(null);
-    setReconciliationError("");
-    setLoadingReconciliation(true);
-    const dateQuery = balances.asOfDate ? `&dateTo=${encodeURIComponent(balances.asOfDate)}` : "";
-    readJson<ReconciliationResponse>(
-      `/api/financial?mode=reconciliation&accountId=${encodeURIComponent(selectedAccount.id)}${dateQuery}`,
-    ).then((result) => {
-      if (!cancelled) setReconciliation(result);
-    }).catch(() => {
-      if (!cancelled) setReconciliationError("No se ha podido consultar el desglose. Inténtalo de nuevo.");
-    }).finally(() => {
-      if (!cancelled) setLoadingReconciliation(false);
-    });
-    return () => { cancelled = true; };
-  }, [showReconciliation, selectedAccount, balances]);
-
-  const activeCount = balances?.accounts.filter((account) => account.lifecycle === "active").length ?? 0;
+  const activeCount = balances?.accounts.filter((account) => account.lifecycle === "active").length ?? null;
   const scale = monthlyScale(snapshot?.monthly.rows ?? []);
   const balanceDate = balances?.asOfDate ?? null;
+  const activeAccounts = balances?.accounts.filter((account) => account.lifecycle === "active") ?? [];
+  const distinctBalanceReferences = new Set(activeAccounts.map((account) =>
+    account.balanceSource === "bank_explicit" && account.explicitBalanceDate
+      ? `bank:${account.explicitBalanceDate}`
+      : `reconstructed:${account.id}`,
+  ));
+  const mixedBalanceReferences = distinctBalanceReferences.size > 1;
+  const visibleSnapshot = detailAccountId === selectedAccount?.id ? snapshot : null;
+  const visibleTransactions = detailAccountId === selectedAccount?.id ? transactions : null;
 
   return (
     <main className={styles.shell}>
@@ -327,20 +395,25 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
           <p className={styles.heroText}>
             Consulta el saldo de cada cuenta, su actividad mensual y sus últimos movimientos sin modificar la fuente bancaria.
           </p>
-          <div className={styles.principles} aria-label="Principios de la vista de cuentas">
+          <div className={styles.principles} role="group" aria-label="Principios de la vista de cuentas">
             <span>Fuente bancaria · solo lectura</span>
             <span>Transferencias fuera del ahorro</span>
             <span>EUR · es-ES</span>
           </div>
         </div>
-        <div className={styles.totalCard} aria-label="Saldo total en cuentas">
+        <div className={styles.totalCard} role="group" aria-label="Saldo total en cuentas">
           <span>Saldo total en cuentas</span>
           <strong>{balances ? formatMoney(balances.activeBalanceCents) : "—"}</strong>
-          <small>{activeCount} {activeCount === 1 ? "cuenta activa" : "cuentas activas"} · datos hasta {formatDate(balanceDate)}</small>
+          <small>{balances ? `${activeCount} ${activeCount === 1 ? "cuenta activa" : "cuentas activas"}${balanceDate ? ` · datos hasta ${formatDate(balanceDate)}` : " · fecha bancaria no disponible"}` : "Estado sin verificar · saldo y fecha desconocidos"}</small>
+          {mixedBalanceReferences ? (
+            <small className={styles.balanceDateNotice}>
+              Aviso: los saldos individuales proceden de fechas o métodos distintos. Consulta cada cuenta; el total no es un saldo bancario simultáneo confirmado.
+            </small>
+          ) : null}
         </div>
       </header>
 
-      {error ? <div className={styles.alert} role="alert">{error}</div> : null}
+      {error ? <div className={styles.alert} role="alert"><span>{error}</span>{!balances && !loadingBalances ? <button className="secondary-button" type="button" onClick={() => setRetryBalances((value) => value + 1)}>Reintentar lectura</button> : null}</div> : null}
 
       <section className={styles.workspace} aria-label="Cuentas y detalle financiero">
         <aside className={styles.accountsPanel}>
@@ -375,8 +448,6 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                   aria-pressed={selected}
                   onClick={() => {
                     setSelectedId(account.id);
-                    setShowReconciliation(false);
-                    setReconciliation(null);
                   }}
                 >
                   <span className={styles.accountIcon} aria-hidden="true">{account.type === "savings" ? "◇" : "○"}</span>
@@ -419,81 +490,28 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                   </p>
                 </div>
                 <div className={styles.currentBalance}>
-                  <span>Saldo actual</span>
+                  <span>{selectedAccount.balanceSource === "bank_explicit" ? "Último saldo bancario conocido" : "Saldo reconstruido"}</span>
                   <strong>{formatMoney(selectedAccount.balanceCents)}</strong>
+                  {selectedAccount.balanceSource === "bank_explicit" ? <small>Fecha: {formatDate(selectedAccount.explicitBalanceDate)}</small> : null}
                 </div>
               </div>
 
               {selectedAccount.reconstructionDeltaCents !== null && selectedAccount.reconstructionDeltaCents !== 0 ? (
-                <div className={styles.integrityNotice}>
+                <div className={styles.integrityNotice} role="status">
                   <strong>Saldo bancario prioritario.</strong>{" "}
                   La reconstrucción por movimientos difiere en {formatMoney(Math.abs(selectedAccount.reconstructionDeltaCents))}; se muestra el saldo explícito del banco como fuente de verdad.
-                  <button
-                    type="button"
-                    className={styles.reconciliationToggle}
-                    aria-expanded={showReconciliation}
-                    onClick={() => setShowReconciliation((value) => !value)}
-                  >
-                    {showReconciliation ? "Ocultar detalle" : "Examinar diferencia"}
-                  </button>
                 </div>
-              ) : null}
-
-              {showReconciliation && selectedAccount.reconstructionDeltaCents !== 0 ? (
-                <section className={styles.reconciliationPanel} aria-label="Desglose de la diferencia de saldo">
-                  <div className={styles.reconciliationHeading}>
-                    <div>
-                      <p className={styles.sectionEyebrow}>TRAZABILIDAD BANCARIA</p>
-                      <h3>Dónde cambia la diferencia</h3>
-                    </div>
-                    {reconciliation ? <span>{reconciliation.varianceDays} días con cambios · {reconciliation.anchorDays} días con saldo bancario</span> : null}
-                  </div>
-                  <p>Comparamos el saldo bancario al cierre de cada día con la suma de movimientos y el saldo inicial. Un cambio señala un punto para revisar; por sí solo no prueba que falte un movimiento.</p>
-                  {loadingReconciliation ? <p role="status">Consultando saldos bancarios…</p> : null}
-                  {reconciliationError ? <p role="alert">{reconciliationError}</p> : null}
-                  {reconciliation && reconciliation.events.length === 0 ? <p>Los días con saldo bancario no muestran cambios en la diferencia acumulada.</p> : null}
-                  {reconciliation?.unanchoredMovementCents ? (
-                    <p className={styles.reconciliationFootnote}>
-                      Desde el último saldo bancario hay movimientos por {formatMoney(reconciliation.unanchoredMovementCents)} sin un saldo bancario posterior en estos datos.
-                    </p>
-                  ) : null}
-                  {reconciliation?.events.length ? (
-                    <div className={styles.reconciliationEvents}>
-                      {reconciliation.events.map((event) => (
-                        <article key={event.bankDate} className={styles.reconciliationEvent}>
-                          <div>
-                            <strong>{formatDate(event.bankDate)}</strong>
-                            <span>Desde {formatDate(event.periodStartDate)} · saldo bancario {formatMoney(event.bankBalanceCents)}</span>
-                          </div>
-                          <div className={styles.reconciliationEventValue}>
-                            <strong>{event.deltaCents > 0 ? "+" : ""}{formatMoney(event.deltaCents)}</strong>
-                            <span>Diferencia acumulada {formatMoney(event.cumulativeDeltaCents)}</span>
-                          </div>
-                          <Link
-                            prefetch={false}
-                            href={`/transactions?accountId=${encodeURIComponent(selectedAccount.id)}&dateFrom=${event.periodStartDate}&dateTo=${event.bankDate}`}
-                          >
-                            Ver movimientos<span className={styles.visuallyHidden}> del {formatDate(event.periodStartDate)} al {formatDate(event.bankDate)}</span>
-                          </Link>
-                        </article>
-                      ))}
-                    </div>
-                  ) : null}
-                  {reconciliation && reconciliation.varianceDays > reconciliation.events.length ? (
-                    <p className={styles.reconciliationFootnote}>Se muestran los {reconciliation.events.length} cambios de mayor importe.</p>
-                  ) : null}
-                </section>
               ) : null}
 
               {loadingDetail ? <div className={styles.loading}>Actualizando detalle…</div> : null}
 
-              {snapshot ? (
+              {visibleSnapshot ? (
                 <>
-                  <div className={styles.metrics} aria-label="Resumen del periodo de la cuenta">
-                    <article><span>Ingresos</span><strong>{formatMoney(snapshot.period.incomeCents)}</strong></article>
-                    <article><span>Gastos</span><strong>{formatMoney(snapshot.period.expenseCents)}</strong></article>
-                    <article><span>Balance neto</span><strong>{formatMoney(snapshot.period.operatingNetCents)}</strong></article>
-                    <article><span>Transferencias</span><strong>{formatMoney(snapshot.period.transfers.grossCents)}</strong><small>No computan como ahorro</small></article>
+                  <div className={styles.metrics} role="group" aria-label="Resumen del periodo de la cuenta">
+                    <article><span>Ingresos</span><strong>{formatMoney(visibleSnapshot.period.incomeCents)}</strong></article>
+                    <article><span>Gastos</span><strong>{formatMoney(visibleSnapshot.period.expenseCents)}</strong></article>
+                    <article><span>Balance neto</span><strong>{formatMoney(visibleSnapshot.period.operatingNetCents)}</strong></article>
+                    <article><span>Transferencias</span><strong>{formatMoney(visibleSnapshot.period.transfers.grossCents)}</strong><small>No computan como ahorro</small></article>
                   </div>
 
                   <section className={styles.evolutionSection} aria-labelledby="account-evolution-title">
@@ -502,10 +520,10 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                         <p className={styles.sectionEyebrow}>EVOLUCIÓN</p>
                         <h3 id="account-evolution-title">Actividad mensual</h3>
                       </div>
-                      <span>{formatDate(snapshot.period.dateFrom)} — {formatDate(snapshot.period.dateTo)}</span>
+                      <span>{formatDate(visibleSnapshot.period.dateFrom)} — {formatDate(visibleSnapshot.period.dateTo)}</span>
                     </div>
 
-                    <div className={styles.legend} aria-label="Leyenda y escala de la actividad mensual">
+                    <div className={styles.legend} role="group" aria-label="Leyenda y escala de la actividad mensual">
                       <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos</span>
                       <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
                       <span><i className={styles.netDot} aria-hidden="true" />Neto positivo (+)</span>
@@ -514,7 +532,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                     </div>
 
                     <div className={styles.monthlyChart} role="list" aria-label="Ingresos, gastos y balance neto por mes">
-                      {snapshot.monthly.rows.map((row) => (
+                      {visibleSnapshot.monthly.rows.map((row) => (
                         <div
                           className={styles.monthRow}
                           role="listitem"
@@ -550,11 +568,11 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                   <Link prefetch={false} className={styles.secondaryLink} href={`/transactions?accountId=${encodeURIComponent(selectedAccount.id)}`}>Abrir Movimientos</Link>
                 </div>
 
-                {transactions && transactions.rows.length === 0 ? (
+                {visibleTransactions && visibleTransactions.rows.length === 0 ? (
                   <p className={styles.emptyMovements}>No hay movimientos en el periodo.</p>
                 ) : null}
                 <div className={styles.movementList}>
-                  {transactions?.rows.map((transaction) => (
+                  {visibleTransactions?.rows.map((transaction) => (
                     <article className={styles.movementRow} key={transaction.id}>
                       <div className={styles.movementDate}>{formatDate(transaction.bankDate)}</div>
                       <div className={styles.movementMain}>
@@ -568,8 +586,8 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                     </article>
                   ))}
                 </div>
-                {transactions && transactions.totalCount > transactions.rows.length ? (
-                  <p className={styles.moreHint}>Mostrando {transactions.rows.length} de {transactions.totalCount} movimientos de la cuenta en el periodo.</p>
+                {visibleTransactions && visibleTransactions.totalCount > visibleTransactions.rows.length ? (
+                  <p className={styles.moreHint}>Mostrando {visibleTransactions.rows.length} de {visibleTransactions.totalCount} movimientos de la cuenta en el periodo.</p>
                 ) : null}
               </section>
             </>

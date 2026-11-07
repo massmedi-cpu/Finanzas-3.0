@@ -5,6 +5,7 @@ import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
 } from "../../src/application/analysis/analysis-engine";
+import { analysisHistoryCoverage } from "../../src/application/analysis/analysis-history-coverage";
 
 function gatewayWithHistory(): AnalysisGatewaySnapshot {
   const history = Array.from({ length: 6 }, (_, index) => {
@@ -97,6 +98,35 @@ test("QA-06 · la tasa de ahorro usa ventanas agregadas y un mes sin ingresos no
     sampleMonths: 6,
   });
   expect(snapshot.trends.expense.sampleMonths).toBe(6);
+});
+
+test("REC-ANALYSIS-056 · las ventanas históricas exigen meses continuos y cobertura de sus fechas exactas", () => {
+  const snapshot = buildAnalysisSnapshot({
+    range: "1m", month: "2026-07", accountId: null,
+    dateFrom: "2026-07-01", dateTo: "2026-07-15",
+    previousDateFrom: "2026-06-01", previousDateTo: "2026-06-15",
+    partial: true, partialMonthStart: "2026-07-01", gateway: gatewayWithHistory(),
+  });
+  const sync = {
+    status: "success", finishedAt: "2026-07-15T10:00:00Z", rowsSeen: 24,
+    rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+  };
+  const source = { available: true, earliestMovementDate: "2026-01-01", latestMovementDate: "2026-07-15", sync };
+  // May has real observed transactions but zero income: a genuine zero is valid.
+  expect(analysisHistoryCoverage(snapshot, 3, source)).toBe("covered");
+  expect(analysisHistoryCoverage(snapshot, 6, source)).toBe("covered");
+  expect(analysisHistoryCoverage(snapshot, 3, { ...source, available: false })).toBe("unverified");
+  expect(analysisHistoryCoverage(snapshot, 3, { ...source, sync: null })).toBe("unverified");
+  expect(analysisHistoryCoverage(snapshot, 3, { ...source, sync: { ...sync, rowsMissing: 1 } })).toBe("unverified");
+  expect(analysisHistoryCoverage(snapshot, 3, { ...source, latestMovementDate: "2026-05-31" })).toBe("unverified");
+  expect(analysisHistoryCoverage(snapshot, 3, { ...source, earliestMovementDate: "2026-04-01" })).toBe("covered");
+  expect(analysisHistoryCoverage(snapshot, 6, { ...source, earliestMovementDate: "2026-04-01" })).toBe("unverified");
+  expect(analysisHistoryCoverage({ ...snapshot, history: snapshot.history.slice(0, 2) }, 3, source)).toBe("insufficient");
+  const missingMonth = { ...snapshot, history: snapshot.history.filter((row) => row.monthStart !== "2026-05-01") };
+  expect(analysisHistoryCoverage(missingMonth, 3, source)).toBe("unverified");
+  const duplicatedMonth = structuredClone(snapshot);
+  duplicatedMonth.history[4].monthStart = duplicatedMonth.history[3].monthStart;
+  expect(analysisHistoryCoverage(duplicatedMonth, 3, source)).toBe("unverified");
 });
 
 test("Análisis · la comparación visual no fabrica barra para un valor de cero", () => {

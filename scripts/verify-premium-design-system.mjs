@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -10,7 +10,7 @@ const navigation = read("app/navigation-items.ts");
 const guardedStyles = new Map([
   ["app/globals.css", globals],
   ["app/app-shell.module.css", read("app/app-shell.module.css")],
-  ["app/net-worth/net-worth.module.css", read("app/net-worth/net-worth.module.css")],
+  ["app/forecast/forecast-horizon-panel.module.css", read("app/forecast/forecast-horizon-panel.module.css")],
   ["app/configuration/source/source-overview.module.css", read("app/configuration/source/source-overview.module.css")],
   ["app/configuration/source/source.module.css", read("app/configuration/source/source.module.css")],
 ]);
@@ -24,7 +24,7 @@ const helperMatch = globals.match(/--font-helper:\s*([0-9.]+)rem\s*;/);
 assert(helperMatch, "Falta el token global --font-helper.");
 
 const helperRem = helperMatch ? Number(helperMatch[1]) : 0;
-assert(helperRem >= 0.8125, `--font-helper no puede ser inferior a 0.8125rem; actual=${helperRem}rem.`);
+assert(helperRem >= 0.875, `--font-helper no puede ser inferior a 0.875rem; actual=${helperRem}rem.`);
 assert(globals.includes("--font-family-ui:"), "Falta el token --font-family-ui.");
 assert(globals.includes("font-family: var(--font-family-ui);"), "body debe consumir --font-family-ui.");
 assert(!/--font-family-ui:[^;]*\bInter\b/i.test(globals), "La familia UI no debe prometer Inter si no se carga de forma explícita.");
@@ -51,14 +51,15 @@ assert(
   "La navegación principal debe impedir reducciones por debajo de --font-helper.",
 );
 
-const netWorthStyles = guardedStyles.get("app/net-worth/net-worth.module.css") ?? "";
-const netWorthEyebrow = netWorthStyles.match(/\.eyebrow\s*\{[^}]*\}/m)?.[0] ?? "";
-assert(netWorthEyebrow.includes("font-size: var(--font-helper)"), "El kicker de Patrimonio debe usar --font-helper.");
+const forecastStyles = guardedStyles.get("app/forecast/forecast-horizon-panel.module.css") ?? "";
+const forecastEyebrow = forecastStyles.match(/\.eyebrow\s*\{[^}]*\}/m)?.[0] ?? "";
+assert(forecastEyebrow.includes("font-size: var(--font-helper)"), "El kicker de horizontes debe usar --font-helper.");
 
-assert(navigation.includes('{ href: "/net-worth", label: "Patrimonio"'), "Patrimonio debe seguir presente en la navegación principal.");
+assert(!navigation.includes("/net-worth"), "PRE-019: Patrimonio permanece fuera de la navegación.");
+assert(!existsSync(resolve(root, "app/net-worth/page.tsx")), "PRE-019: no debe reaparecer la ruta patrimonial excluida.");
 
 const prefetchBlock = appShell.match(/const HIGH_VALUE_PREFETCH_ROUTES = \[[\s\S]*?\] as const;/)?.[0] ?? "";
-assert(prefetchBlock.includes('"/net-worth"'), "Patrimonio debe estar en HIGH_VALUE_PREFETCH_ROUTES.");
+assert(!prefetchBlock.includes('"/net-worth"'), "PRE-019: no se debe precargar una ruta patrimonial excluida.");
 
 if (failures.length) {
   console.error("Premium design system guard: FAILED");
@@ -71,4 +72,4 @@ console.log(`- helper mínimo: ${helperRem}rem`);
 console.log("- fuente UI explícita: system-ui");
 console.log(`- módulos tipográficos protegidos: ${guardedStyles.size}`);
 console.log("- navegación principal protegida contra reducción tipográfica");
-console.log("- Patrimonio integrado en navegación, precarga y mínimo tipográfico");
+console.log("- Previsión protegida tipográficamente; Patrimonio excluido conforme a PRE-019");

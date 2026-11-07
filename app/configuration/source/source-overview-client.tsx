@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
+import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, isVerifiedSourceSyncStatus, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
+import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
+import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
 
 type GoogleConnection = {
@@ -28,6 +31,8 @@ type RuntimeHealth = {
 };
 
 type SyncRun = {
+  id: string;
+  sourceRevision: string | null;
   status: string;
   startedAt: string;
   finishedAt: string | null;
@@ -93,24 +98,35 @@ function incidentSummary(value: SyncRun | SyncResult | null) {
 }
 
 function actionError(code: string | undefined) {
+  if (code === "google_source_preflight_changed") return "La fuente ha cambiado desde la comprobación previa. Vuelve a comprobarla antes de importar. No se ha guardado ningún cambio.";
+  if (code === "google_source_preflight_required") return "Vuelve a comprobar la fuente antes de importar movimientos.";
+  if (code === "source_preflight_invalid") return "La validación previa no devolvió resultados completos. No se ha iniciado la importación.";
+  if (code === "google_source_existing_rows_changed") return "Se han detectado cambios en movimientos que ya estaban guardados. La importación se ha bloqueado para proteger el histórico: no se ha reimportado, modificado ni borrado ningún movimiento. Comprueba la fuente original antes de volver a intentarlo.";
+  if (code === "source_postflight_invalid_record" || code === "source_postflight_unavailable") return "No se ha podido verificar íntegramente el histórico guardado. No se ha iniciado la importación.";
+  if (code === "google_source_sync_unconfirmed") return "No se puede confirmar la actualización con la respuesta recibida. Consulta el estado antes de repetirla.";
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a conectar la fuente.";
   if (code === "source_runtime_incompatible") return "La actualización está temporalmente bloqueada para proteger tus datos.";
   if (code === "google_source_changed_during_read") return "La fuente cambió mientras se estaba leyendo. Vuelve a intentarlo.";
   if (code === "google_source_historical_regression") return "La fuente ha cambiado de forma incompatible con el histórico validado. No se ha guardado ningún cambio.";
   if (code === "google_source_contract_invalid") return "La fuente no tiene el formato esperado. No se ha importado ningún movimiento.";
-  return "No se ha podido completar la actualización. Tus datos existentes siguen intactos.";
+  // A gateway timeout/503 can happen after the database committed the batch.
+  // An unconfirmed HTTP response does not prove that its transaction rolled back.
+  return "No se ha podido confirmar el resultado de la actualización. Comprueba el último estado de la fuente antes de repetirla.";
 }
 
 export default function SourceOverviewClient() {
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
+  const [syncStateVerified, setSyncStateVerified] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
+    setPreflight(null);
     setLoading(true);
     setError(null);
     try {
@@ -121,18 +137,51 @@ export default function SourceOverviewClient() {
       ]);
       const googlePayload = await readJson<GoogleStatus>(googleResponse);
       const runtimePayload = await readJson<RuntimeHealth>(runtimeResponse);
-      const syncPayload = syncResponse.ok ? await readJson<SyncStatus>(syncResponse) : EMPTY_SYNC_STATUS;
+      const rawSync = syncResponse.ok ? await readJson<unknown>(syncResponse) : null;
+      const syncValid = isVerifiedSourceSyncStatus(rawSync);
+      const syncPayload = syncValid ? rawSync as SyncStatus : EMPTY_SYNC_STATUS;
 
-      setGoogle(googlePayload);
+      // An expired session must never leave previously authenticated source
+      // metadata or actions visible while the next request is denied.
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401 || r.status === 403)) {
+        setGoogle(null);
+        setRuntime(null);
+        setSyncStatus(EMPTY_SYNC_STATUS);
+        setSyncStateVerified(false);
+        setNotice(null);
+        setError([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)
+          ? "Inicia sesión para consultar la fuente bancaria."
+          : "La sesión actual no tiene acceso a esta fuente bancaria.");
+        return null;
+      }
+
+      setGoogle(googleResponse.ok ? googlePayload : null);
       setRuntime(runtimePayload);
       setSyncStatus(syncPayload);
+      setSyncStateVerified(syncValid);
 
-      if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
+      if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 401)) {
+        setError("Inicia sesión para consultar la fuente bancaria.");
+      } else if ([googleResponse, runtimeResponse, syncResponse].some((r) => r.status === 403)) {
+        setError("La sesión actual no tiene acceso a esta fuente bancaria.");
+      } else if (!googleResponse.ok) setError("No se ha podido comprobar la conexión con Google.");
       else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido comprobar si la actualización está disponible.");
-      } else if (!syncResponse.ok) setError("No se ha podido consultar la última actualización.");
+      } else if (!syncResponse.ok || !syncValid) setError("No se ha podido verificar el estado de la última sincronización.");
+      // Return the exact data from this GET, not React state from a previous
+      // render. An unavailable status cannot confirm the preceding POST.
+      return googleResponse.ok && runtimeResponse.ok && syncResponse.ok
+        && syncValid ? syncPayload : null;
     } catch {
+      // Network failures do not prove that a former connection is still
+      // usable; fail closed and remove stale bank metadata and success notices.
+      setGoogle(null);
+      setRuntime(null);
+      setSyncStatus(EMPTY_SYNC_STATUS);
+      setSyncStateVerified(false);
+      setNotice(null);
       setError("No se ha podido leer el estado de la fuente bancaria.");
+      return null;
     } finally {
       setLoading(false);
     }
@@ -142,30 +191,51 @@ export default function SourceOverviewClient() {
     void load();
   }, [load]);
 
+  const sourceVerified = google !== null && !loading;
   const connected = Boolean(google?.configured && google.connection?.connected);
   const runtimeReady = runtime?.compatible === true;
-  const firstImport = connected && syncStatus.cursors.length === 0;
+  const firstImport = connected && syncStateVerified && syncStatus.cursors.length === 0;
   const run = syncStatus.run;
   const incidents = useMemo(() => incidentSummary(run), [run]);
-  const hasProblem = run?.status === "failed" || (run?.rowsFailed ?? 0) > 0 || Boolean(incidents);
+  const hasProblem = run?.status === "failed" || run?.status === "partial"
+    || (run?.rowsFailed ?? 0) > 0 || Boolean(incidents);
+  const staleSuccess = run?.status === "success" && !hasProblem
+    && !hasRecentSourceSyncEvidence(run);
+
+  async function checkWithoutImporting() {
+    if (!connected || !runtimeReady || busy) return;
+    setBusy(true);
+    setPreflight(null);
+    setNotice(null);
+    setError(null);
+    try {
+      const payload = await readOfficialSourcePreflight();
+      setPreflight(payload);
+    } catch (cause) {
+      setError(cause instanceof SourceSyncClientError ? actionError(cause.code) : cause instanceof Error ? cause.message : "No se ha podido comprobar la fuente.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function updateFromGoogle() {
-    if (!connected || !runtimeReady || busy) return;
+    if (!connected || !runtimeReady || !syncStateVerified || busy) return;
     setBusy(true);
     setError(null);
     setNotice(null);
+    setPreflight(null);
+    let syncWasRequested = false;
     try {
-      if (firstImport) {
-        const preflightResponse = await fetch("/api/source/google/preflight", { method: "POST" });
-        const preflightPayload = await readJson<{ error?: string }>(preflightResponse);
-        if (!preflightResponse.ok) throw new Error(actionError(preflightPayload.error));
-      }
-
-      const response = await fetch("/api/source/google/sync", { method: "POST", cache: "no-store" });
-      const payload = await readJson<SyncResult>(response);
-      if (!response.ok) throw new Error(actionError(payload.error));
+      const payload = await synchronizeOfficialSource();
+      syncWasRequested = true;
 
       const changed = Math.max(0, payload.rowsInserted ?? 0) + Math.max(0, payload.rowsRevised ?? 0);
+      const persisted = await load();
+      if (!hasPersistedSourceSyncReceipt(persisted?.run, payload)) {
+        setNotice(null);
+        setError("El servidor confirmó la solicitud, pero no se pudo verificar el mismo lote en el historial persistido. Puede haberse guardado: comprueba el estado antes de repetir la operación.");
+        return;
+      }
       const warning = incidentSummary(payload);
       setNotice({
         tone: warning ? "warning" : "success",
@@ -175,23 +245,31 @@ export default function SourceOverviewClient() {
             ? `Actualización completada: ${changed} ${changed === 1 ? "cambio incorporado" : "cambios incorporados"}.`
             : "Actualización completada. No hay cambios nuevos.",
       });
-      await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se ha podido completar la actualización.");
+      // Only a status GET may follow an ambiguous mutation response. Never
+      // automatically repeat the POST: a first attempt could have committed.
+      if (syncWasRequested || (cause instanceof SourceSyncClientError && cause.syncRequested)) await load();
+      setError(cause instanceof SourceSyncClientError ? actionError(cause.code) : cause instanceof Error ? cause.message : "No se ha podido confirmar el resultado de la actualización. Consulta el estado antes de repetirla.");
     } finally {
       setBusy(false);
     }
   }
 
-  const stateLabel = !connected
-    ? "Sin conectar"
+  const stateLabel = !sourceVerified
+    ? "Sin verificar"
+    : !connected
+      ? "Sin conectar"
     : !runtimeReady
       ? "Requiere atención"
-      : hasProblem
+      : !syncStateVerified
+        ? "Sin verificar"
+        : hasProblem
         ? "Requiere revisión"
-        : run?.status === "success"
-          ? "Al día"
-          : "Preparada";
+        : run?.status === "started"
+          ? "Actualizando"
+          : run?.status === "success"
+            ? staleSuccess ? "Pendiente de comprobar" : "Comprobación reciente"
+            : "Preparada";
 
   return (
     <main className="configuration-shell">
@@ -202,14 +280,19 @@ export default function SourceOverviewClient() {
           <h1>Fuente bancaria</h1>
           <p className="hero-copy">Conecta y actualiza tus movimientos sin modificar el archivo original de Google.</p>
         </div>
-        <div className="configuration-summary" aria-label="Resumen de la fuente bancaria">
-          <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Última actualización</span></div>
+        <div className="configuration-summary" role="group" aria-label="Resumen de la fuente bancaria">
+          <div><strong>{!sourceVerified ? "—" : connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
+          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Último intento</span></div>
           <div><strong>{stateLabel}</strong><span>Estado</span></div>
         </div>
       </header>
 
-      {error && <div className="config-message error" role="alert">{error}</div>}
+      {error && <div className="config-message error" role="alert">
+        {error}
+        {error === "Inicia sesión para consultar la fuente bancaria." && (
+          <> <Link prefetch={false} href="/login?next=%2Fconfiguration%2Fsource">Iniciar sesión</Link></>
+        )}
+      </div>}
       {notice && <div className={`config-message ${notice.tone}`} role="status">{notice.message}</div>}
 
       {loading ? (
@@ -220,7 +303,7 @@ export default function SourceOverviewClient() {
             <div className="panel-heading">
               <div>
                 <p className="panel-kicker">ESTADO</p>
-                <h2 id="source-overview-heading">{connected ? "Google conectado" : "Conecta tu fuente bancaria"}</h2>
+                <h2 id="source-overview-heading">{!sourceVerified ? "Estado de Google sin verificar" : connected ? "Google conectado" : "Conecta tu fuente bancaria"}</h2>
               </div>
               <span className="status-chip">Solo lectura</span>
             </div>
@@ -228,19 +311,21 @@ export default function SourceOverviewClient() {
             <dl className={styles.statusGrid}>
               <div>
                 <dt>Archivo</dt>
-                <dd>{google?.connection?.sourceFileName ?? "Sin fuente conectada"}</dd>
+                <dd>{google?.connection?.sourceFileName ?? (sourceVerified ? "Sin fuente conectada" : "No verificado")}</dd>
               </div>
               <div>
                 <dt>Cuenta</dt>
-                <dd>{google?.connection?.accountEmail ?? "Sin cuenta conectada"}</dd>
+                <dd>{google?.connection?.accountEmail ?? (sourceVerified ? "Sin cuenta conectada" : "No verificado")}</dd>
               </div>
               <div>
                 <dt>Último resultado</dt>
-                <dd>{run?.status === "success" ? "Completado" : run?.status === "failed" ? "Fallido" : "Sin actualizaciones"}</dd>
+                <dd>{!sourceVerified ? "No verificado" : run?.status === "success" ? hasProblem ? "Completada con avisos" : staleSuccess ? "Pendiente de comprobar" : "Completada" : run?.status === "failed" ? "Fallida" : run?.status === "partial" ? "Parcial" : run?.status === "started" ? "En curso" : run ? "En revisión" : syncStateVerified ? "Sin actualizaciones" : "No verificado"}</dd>
               </div>
               <div>
-                <dt>Cambios de la última actualización</dt>
-                <dd>{run ? `${Math.max(0, run.rowsInserted) + Math.max(0, run.rowsRevised)} incorporados` : "Aún no disponible"}</dd>
+                <dt>Cambios confirmados en el último intento</dt>
+                <dd>{run?.status === "success"
+                  ? `${Math.max(0, run.rowsInserted) + Math.max(0, run.rowsRevised)} incorporados${hasProblem ? " · con avisos" : ""}`
+                  : run ? "No confirmados" : "Aún no disponible"}</dd>
               </div>
             </dl>
 
@@ -255,6 +340,13 @@ export default function SourceOverviewClient() {
               </div>
             )}
 
+            {staleSuccess && (
+              <div className={styles.warning} role="status">
+                <strong>Comprueba la actualización</strong>
+                <p>La última sincronización correcta tiene más de 48 horas o una fecha futura. No demuestra que los movimientos de Google estén actualizados.</p>
+              </div>
+            )}
+
             {firstImport && (
               <div className={styles.firstImport} role="note">
                 <strong>Primera actualización protegida</strong>
@@ -263,10 +355,15 @@ export default function SourceOverviewClient() {
             )}
 
             <div className={styles.actions}>
+              {connected && runtimeReady && (
+                <button className="secondary-button" type="button" disabled={busy} onClick={() => void checkWithoutImporting()}>
+                  Comprobar sin importar
+                </button>
+              )}
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
-                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || busy} onClick={() => void updateFromGoogle()}>
+                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || !syncStateVerified || busy} onClick={() => void updateFromGoogle()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
@@ -275,6 +372,8 @@ export default function SourceOverviewClient() {
               </button>
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
+            {preflight && <SourcePreflightReport summary={preflight} />}
+
           </section>
 
           <aside className={`config-panel ${styles.guarantees}`} aria-labelledby="source-guarantees-heading">

@@ -18,6 +18,8 @@ type Props = {
   formatMoney: (cents: number) => string;
   limit?: number;
   renderLabel?: (row: ContributionPoint) => ReactNode;
+  comparisonReliable?: boolean;
+  currentObserved?: boolean;
 };
 
 type ViewMode = "change" | "compare";
@@ -27,7 +29,10 @@ function comparisonBarWidth(value: number, maximum: number) {
   return Math.max(2, Math.round((value / maximum) * 100));
 }
 
-export function ContributionChart({ rows, formatMoney, limit = 6, renderLabel }: Props) {
+export function ContributionChart({
+  rows, formatMoney, limit = 6, renderLabel,
+  comparisonReliable = true, currentObserved = true,
+}: Props) {
   const [view, setView] = useState<ViewMode>("change");
   const visible = useMemo(
     () => rows.filter((row) => row.deltaCents !== 0 || row.expenseCents > 0 || row.previousExpenseCents > 0).slice(0, limit),
@@ -35,6 +40,32 @@ export function ContributionChart({ rows, formatMoney, limit = 6, renderLabel }:
   );
   const changeMaximum = Math.max(1, ...visible.map((row) => Math.abs(row.deltaCents)));
   const compareMaximum = Math.max(1, ...visible.flatMap((row) => [row.expenseCents, row.previousExpenseCents]));
+
+  if (!comparisonReliable) {
+    if (!currentObserved) {
+      return <p className={styles.empty} role="status">Sin cobertura bancaria confirmada: no se pueden atribuir cambios ni mostrar gasto del periodo como dato conocido.</p>;
+    }
+    const observed = rows.filter((row) => row.expenseCents > 0)
+      .sort((a, b) => b.expenseCents - a.expenseCents || a.name.localeCompare(b.name, "es"))
+      .slice(0, limit);
+    if (observed.length === 0) {
+      return <p className={styles.empty}>No se han observado gastos en los datos disponibles. El periodo puede estar incompleto.</p>;
+    }
+    return (
+      <div className={styles.wrapper}>
+        <p className={styles.empty}>Importes observados del periodo; no se muestran variaciones hasta disponer de una comparación fiable.</p>
+        <div className={styles.chart} role="list" aria-label="Gastos observados por categoría, periodo incompleto">
+          {observed.map((row) => (
+            <div key={`${row.id ?? "none"}-${row.name}`} className={styles.observedRow} role="listitem" aria-label={`${row.name}: gasto observado ${formatMoney(row.expenseCents)}; periodo incompleto`}>
+              <strong>{renderLabel ? renderLabel(row) : row.name}</strong>
+              <span className={styles.observedAmount}>{formatMoney(row.expenseCents)}</span>
+              {row.href ? <Link href={row.href}>Ver movimientos</Link> : <span>Sin filtro disponible</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (visible.length === 0) {
     return <p className={styles.empty}>No hay variaciones relevantes entre los periodos comparables.</p>;

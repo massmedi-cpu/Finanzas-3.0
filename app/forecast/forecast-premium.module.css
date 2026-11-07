@@ -9,7 +9,7 @@
 }
 
 .root main > header h1 {
-  font-size: clamp(1.75rem, 3vw, 2.45rem);
+  font-size: var(--font-page-title);
   line-height: 1.03;
   letter-spacing: -0.03em;
 }
@@ -45,7 +45,7 @@
 }
 
 .root main h2 {
-  font-size: clamp(1.15rem, 1.6vw, 1.55rem);
+  font-size: var(--font-section-title);
   letter-spacing: -0.025em;
 }
 
@@ -79,7 +79,7 @@
   }
 
   .root main > header h1 {
-    font-size: clamp(1.7rem, 8vw, 2.05rem);
+    font-size: var(--font-page-title);
   }
 
   .root [aria-label="Periodo de previsión"] {

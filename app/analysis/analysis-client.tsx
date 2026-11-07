@@ -12,6 +12,8 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { analysisHistoryCoverage, type HistoryCoverage } from "../../src/application/analysis/analysis-history-coverage";
+import type { SourceSyncIncidentInput } from "../../src/application/source-sync-incidents";
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import {
   periodComparisonIsReliable,
@@ -29,6 +31,7 @@ import {
 } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+import { SpanishMonthInput } from "../../src/design/spanish-month-input";
 import { CategoryIdentity } from "../category-identity";
 import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
@@ -158,12 +161,14 @@ function monthHref(snapshot: AnalysisSnapshot, monthStart: string) {
   return `/transactions?${params.toString()}`;
 }
 
-function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps") {
+function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps", coverage: Record<3 | 6, HistoryCoverage>) {
   const value = (months: 3 | 6) => {
+    if (coverage[months] !== "covered") return null;
     const average = months === 3 ? snapshot.averages.last3Months : snapshot.averages.last6Months;
     if (!average) return null;
     const raw = average[metric];
-    return metric === "savingsRateBps" ? formatPercentBps(raw) : formatMoney(raw ?? 0);
+    if (metric === "savingsRateBps") return formatPercentBps(raw);
+    return raw === null ? null : formatMoney(raw);
   };
   const parts: string[] = [];
   const three = value(3);
@@ -173,12 +178,13 @@ function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "e
   return parts;
 }
 
-function HistoricalReference({ snapshot, metric }: {
+function HistoricalReference({ snapshot, metric, coverage }: {
   snapshot: AnalysisSnapshot;
   metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps";
+  coverage: Record<3 | 6, HistoryCoverage>;
 }) {
-  const parts = historicalMetric(snapshot, metric);
-  if (parts.length === 0) return <span>Histórico insuficiente</span>;
+  const parts = historicalMetric(snapshot, metric, coverage);
+  if (parts.length === 0) return <span>{coverage[3] === "unverified" || coverage[6] === "unverified" ? "Histórico sin cobertura verificada" : "Histórico insuficiente"}</span>;
   return <span>{metric === "savingsRateBps" ? "Tasa agregada" : "Media mensual"} · {parts.join(" · ")}</span>;
 }
 
@@ -232,14 +238,18 @@ function DriverRanking({
   expanded,
   onToggle,
   merchant = false,
+  allMovementsHref,
 }: {
   title: string;
   items: Array<AnalysisDriver | AnalysisMerchantDriver>;
   expanded: boolean;
   onToggle: () => void;
   merchant?: boolean;
+  allMovementsHref?: string;
 }) {
-  const visible = expanded ? items.slice(0, 15) : items.slice(0, 5);
+  // The collapsed preview is intentionally short, but "Ver todos" must not
+  // silently cap the real ranking at 15 items.
+  const visible = expanded ? items : items.slice(0, 5);
   const headingId = `${title.toLocaleLowerCase("es-ES").replaceAll(" ", "-")}-heading`;
   return (
     <section className={styles.ranking} aria-labelledby={headingId}>
@@ -276,14 +286,20 @@ function DriverRanking({
       )}
       {items.length > 5 && (
         <button className={styles.textButton} type="button" onClick={onToggle} aria-expanded={expanded}>
-          {expanded ? "Ver menos" : "Ver todos"}
+          {expanded ? "Ver menos" : merchant && items.length >= 30 ? "Ver todos los disponibles" : "Ver todos"}
         </button>
       )}
+      {merchant && items.length >= 30 && allMovementsHref ? (
+        <p className={styles.empty}>
+          Se muestran como máximo los 30 comercios principales. Puede haber más fuera de este ranking.{" "}
+          <Link prefetch={false} href={allMovementsHref}>Buscar otros en Movimientos</Link>
+        </p>
+      ) : null}
     </section>
   );
 }
 
-function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
+function QuickRead({ snapshot, comparisonReliable, currentObserved }: { snapshot: AnalysisSnapshot; comparisonReliable: boolean; currentObserved: boolean }) {
   const strongest = snapshot.changeDrivers[0] ?? null;
   const forecast = snapshot.forecast;
   const hasForecastItems = Boolean(forecast && forecast.summary.plannedItems > 0);
@@ -297,7 +313,21 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <span>LECTURA RÁPIDA</span>
         <strong>Lo importante del periodo</strong>
       </div>
-      {strongest ? (
+      {!comparisonReliable ? (
+        currentObserved ? (
+          <Link prefetch={false} className={styles.quickReadItem} href={periodHref(snapshot)}>
+            <span>Gasto observado</span>
+            <strong>{formatMoney(snapshot.current.expenseCents)}</strong>
+            <small>Datos incompletos · sin cambio comparable</small>
+          </Link>
+        ) : (
+          <div className={styles.quickReadItem}>
+            <span>Cambios</span>
+            <strong>Sin cobertura</strong>
+            <small>No se pueden identificar variaciones fiables</small>
+          </div>
+        )
+      ) : strongest ? (
         <Link prefetch={false} className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
           <span>Mayor cambio</span>
           <strong><CategoryIdentity categoryId={strongest.id} name={strongest.name} /></strong>
@@ -312,8 +342,8 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       )}
       <Link prefetch={false} className={styles.quickReadItem} href="#anomalies-heading">
         <span>Anomalías</span>
-        <strong>{formatInteger(anomalyCount)}</strong>
-        <small>{anomalyLabel}</small>
+        <strong>{currentObserved ? formatInteger(anomalyCount) : "Sin cobertura"}</strong>
+        <small>{!currentObserved ? "No se pueden evaluar anomalías" : !comparisonReliable ? "Según los movimientos disponibles" : anomalyLabel}</small>
       </Link>
       <Link prefetch={false} className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
@@ -322,10 +352,10 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link prefetch={false} className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
-        <strong>{merchantConcentration.available
+        <strong>{!currentObserved ? "Sin dato" : merchantConcentration.available
           ? formatPercentBps(merchantConcentration.valueBps)
           : merchantConcentration.label ?? "Sin gasto elegible"}</strong>
-        <small>{merchantConcentration.available
+        <small>{!currentObserved ? "No hay cobertura bancaria confirmada" : merchantConcentration.available
           ? `del gasto ${topConcentrationContext(merchantConcentration.count, "comercio", "comercios")}`
           : merchantConcentration.detail ?? "concentración no disponible"}</small>
       </Link>
@@ -345,11 +375,17 @@ function LoadingSkeleton() {
 
 export default function AnalysisClient({
   initialSnapshot,
+  sourceAvailable = false,
   latestMovementDate = null,
+  earliestMovementDate = null,
+  sourceSync = null,
   onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
+  sourceAvailable?: boolean;
   latestMovementDate?: string | null;
+  earliestMovementDate?: string | null;
+  sourceSync?: SourceSyncIncidentInput | null;
   onApplied?: (snapshot: AnalysisSnapshot) => void;
 }) {
   const requestRef = useRef<AbortController | null>(null);
@@ -377,9 +413,15 @@ export default function AnalysisClient({
     dateFrom: snapshot.selection.dateFrom,
     dateTo: snapshot.selection.dateTo,
     latestMovementDate,
+    earliestMovementDate,
+    sync: sourceSync,
   }) : null;
   const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
   const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
+  const historyCoverage: Record<3 | 6, HistoryCoverage> = snapshot ? {
+    3: analysisHistoryCoverage(snapshot, 3, { available: sourceAvailable, latestMovementDate, earliestMovementDate, sync: sourceSync }),
+    6: analysisHistoryCoverage(snapshot, 6, { available: sourceAvailable, latestMovementDate, earliestMovementDate, sync: sourceSync }),
+  } : { 3: "insufficient", 6: "insufficient" };
   const incompleteComparisonLabel = coverage?.state === "unknown"
     ? "Cobertura desconocida · comparación no disponible"
     : "Comparación incompleta";
@@ -463,7 +505,6 @@ export default function AnalysisClient({
 
   return (
     <>
-      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
       <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
       <header className={styles.header}>
         <div className={styles.headerTitle}>
@@ -476,7 +517,7 @@ export default function AnalysisClient({
         </div>
 
         <form className={styles.filters} onSubmit={refresh} aria-label="Filtros del análisis">
-          <div className={styles.rangeSelector} aria-label="Rango temporal">
+          <div className={styles.rangeSelector} role="group" aria-label="Rango temporal">
             {RANGE_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -491,7 +532,7 @@ export default function AnalysisClient({
           </div>
           <label>
             <span>Mes de referencia</span>
-            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} required />
+            <SpanishMonthInput label="Mes de referencia" value={month} onChange={(event) => setMonth(event.target.value)} required />
           </label>
           <label>
             <span>Cuenta</span>
@@ -539,9 +580,9 @@ export default function AnalysisClient({
                   ? "Comparación pendiente · ingresos aún no representativos"
                   : "Comparación no disponible"}
               trend={snapshot.trends.income}
-              historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" coverage={historyCoverage} />}
               tone="income"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Gastos"
@@ -552,9 +593,9 @@ export default function AnalysisClient({
                 ? `${formatPercentBps(expenseComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : expenseComparisonPresentation?.label ?? "Comparación no disponible"}
               trend={snapshot.trends.expense}
-              historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" coverage={historyCoverage} />}
               tone="expense"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Neto del periodo"
@@ -563,9 +604,9 @@ export default function AnalysisClient({
                 ? incompleteComparisonLabel
                 : `${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
               trend={snapshot.trends.net}
-              historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" coverage={historyCoverage} />}
               tone="net"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
             <Kpi
               label="Tasa de ahorro"
@@ -578,14 +619,14 @@ export default function AnalysisClient({
                   ? "Ingresos del mes aún no representativos"
                   : "Sin tasa disponible"}
               trend={snapshot.trends.savingsRate}
-              historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" coverage={historyCoverage} />}
               tone="rate"
-              coverageIncomplete={coverageIncomplete}
+              coverageIncomplete={coverageIncomplete || historyCoverage[6] === "unverified"}
             />
           </section>
 
-          <AnalysisAxioma53Summary snapshot={snapshot} />
-          <QuickRead snapshot={snapshot} />
+          <AnalysisAxioma53Summary snapshot={snapshot} coverage={coverage} />
+          <QuickRead snapshot={snapshot} comparisonReliable={!coverageIncomplete} currentObserved={coverageHasObservedData} />
 
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
@@ -600,6 +641,9 @@ export default function AnalysisClient({
               formatMoney={formatMoney}
               formatMonth={formatShortMonth}
               partialMonthStart={snapshot.selection.partialMonthStart}
+              latestMovementDate={latestMovementDate}
+              earliestMovementDate={earliestMovementDate}
+              sourceSync={sourceSync}
               hrefForMonth={(monthStart) => monthHref(snapshot, monthStart)}
             />
           </section>
@@ -607,15 +651,21 @@ export default function AnalysisClient({
           <section className={`${styles.section} ${styles.changeSection}`} aria-labelledby="change-heading">
             <div className={styles.sectionHeading}>
               <div>
-                <p>QUÉ HA CAMBIADO</p>
+                <p>{coverageIncomplete ? "GASTO OBSERVADO" : "QUÉ HA CAMBIADO"}</p>
                 <h2 id="change-heading">{changeHeadline}</h2>
-                <span>vs. {comparisonLabel(snapshot)}</span>
+                <span>{coverageIncomplete ? "Sin comparación fiable" : `vs. ${comparisonLabel(snapshot)}`}</span>
               </div>
               <span className={coverageIncomplete ? styles.neutralChip : expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
                 {coverageIncomplete ? "Comparación incompleta" : deltaText(expenseDirection)}
               </span>
             </div>
-            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />
+            <ContributionChart
+              rows={coverageIncomplete ? snapshot.categoryDrivers : snapshot.changeDrivers}
+              formatMoney={formatMoney}
+              renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />}
+              comparisonReliable={!coverageIncomplete}
+              currentObserved={coverageHasObservedData}
+            />
           </section>
 
           <div className={styles.twoColumn}>
@@ -671,7 +721,7 @@ export default function AnalysisClient({
               </div>
               {snapshot.fixedVariable.available ? (
                 <div className={styles.fixedVariable}>
-                  <div className={styles.fixedVariableBar} aria-label={`Gasto fijo ${formatPercentBps(snapshot.fixedVariable.fixedShareBps)}; el resto es variable`}>
+                  <div className={styles.fixedVariableBar} role="img" aria-label={`Gasto fijo ${formatPercentBps(snapshot.fixedVariable.fixedShareBps)}; el resto es variable`}>
                     <span style={{ width: `${Math.max(0, Math.min(100, (snapshot.fixedVariable.fixedShareBps ?? 0) / 100))}%` }} />
                   </div>
                   <dl>
@@ -700,10 +750,12 @@ export default function AnalysisClient({
                   <p>ANOMALÍAS</p>
                   <h2 id="anomalies-heading">Movimientos que merecen la pena revisar</h2>
                 </div>
-                <span>{formatInteger(snapshot.anomalies.length)}</span>
+                <span>{coverageHasObservedData ? formatInteger(snapshot.anomalies.length) : "—"}</span>
               </div>
-              {snapshot.anomalies.length === 0 ? (
-                <p className={styles.empty}>No se han detectado importes que superen de forma clara el comportamiento histórico disponible.</p>
+              {!coverageHasObservedData ? (
+                <p className={styles.empty}>No se pueden evaluar anomalías sin cobertura bancaria confirmada.</p>
+              ) : snapshot.anomalies.length === 0 ? (
+                <p className={styles.empty}>{coverageIncomplete ? "No se han detectado anomalías en los movimientos disponibles; faltan datos del periodo." : "No se han detectado importes que superen de forma clara el comportamiento histórico disponible."}</p>
               ) : (
                 <div className={styles.anomalyList}>
                   {snapshot.anomalies.map((item) => (
@@ -792,7 +844,7 @@ export default function AnalysisClient({
                 : merchantConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
             </div>
             <div className={styles.rankingsGrid}>
-              <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
+              <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant allMovementsHref={periodHref(snapshot)} expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
             <details className={styles.merchantConcentrationDisclosure}>
               <summary>Ver curva de concentración</summary>
@@ -809,6 +861,7 @@ export default function AnalysisClient({
         </>
       )}
       </main>
+      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
     </>
   );
 }

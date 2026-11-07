@@ -36,6 +36,7 @@ const snapshot = {
       excludedReason: "",
       reconciliationNote: "",
       projectionKey: null,
+      updatedAt: "2026-09-09T10:00:00.000Z",
       status: "planned",
       affectsProjection: true,
       projectionEffectCents: -7250,
@@ -103,7 +104,7 @@ test("Previsión conserva targets táctiles de al menos 44 px en 360, 430 y 480"
 
   for (const width of [360, 430, 480]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/forecast");
+    await page.goto("/forecast?dateFrom=2026-09-09&dateTo=2026-12-07");
     const undersized = await page.locator("main a[href], main button:not([disabled]), main input:not([disabled]), main select:not([disabled])").evaluateAll((elements) =>
       elements
         .filter((element) => {
@@ -122,11 +123,11 @@ test("Previsión mantiene metadata y etiquetas funcionales en al menos 14 px", a
   test.skip(testInfo.project.name !== "chromium-desktop", "la medición tipográfica se ejecuta una vez por run");
   await mockForecast(page);
   await page.setViewportSize({ width: 430, height: 900 });
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-09&dateTo=2026-12-07");
 
   const targets = [
     page.getByText("Manual · confianza Alta", { exact: true }),
-    page.getByText("1 previstos", { exact: true }),
+    page.getByText("1 previsto", { exact: true }),
     page.getByText("Concepto", { exact: true }),
     page.getByText("Saldo después:", { exact: false }),
   ];
@@ -140,7 +141,7 @@ test("Previsión mantiene metadata y etiquetas funcionales en al menos 14 px", a
 
 test("Previsión asocia errores de campo y mueve foco al control inválido", async ({ page }) => {
   await mockForecast(page);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-09&dateTo=2026-12-07");
 
   const concept = page.getByLabel("Concepto");
   const amount = page.getByLabel("Importe");
@@ -165,7 +166,7 @@ test("Previsión asocia errores de campo y mueve foco al control inválido", asy
 
 test("Previsión gestiona el foco al abrir y cerrar candidatos reales", async ({ page }) => {
   await mockForecast(page);
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-09-09&dateTo=2026-12-07");
 
   const trigger = page.getByRole("button", { name: "Buscar movimiento real" });
   await trigger.click();

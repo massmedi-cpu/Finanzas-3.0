@@ -91,6 +91,18 @@ function validateBatch(batch: any) {
   }
 }
 
+/**
+ * REC-SYNC-357: the official bank import may only add or skip identical rows.
+ * ingest_source_observation may internally append a revision before returning;
+ * throwing here, inside sql.begin, rolls back that revision AND all earlier
+ * inserts, mappings and cursors in this batch.
+ */
+export function requireAppendOnlySourceDisposition(action: unknown): "insert" | "skip" {
+  if (action === "insert" || action === "skip") return action;
+  if (action === "append_revision") throw new Error("source_existing_rows_changed");
+  throw new Error("source_ingestion_unknown_action");
+}
+
 function validateFailure(failure: any) {
   object(failure, "source_failure");
   text(failure.sourceFileId, "source_file_id");
@@ -160,6 +172,10 @@ export async function handleSourceSyncAction(input: {
 
     try {
       await sql.begin(async (tx: any) => {
+        // REC-SYNC-360: serialize ordinary imports with the stable replay path
+        // under the SAME transaction-scoped lock before the first DB write.
+        // A competing historical revision still fails closed under REC-SYNC-357.
+        await tx`select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(${'financial_app.source_sync:' + batch.sourceFileId}))`;
         const runRows = await tx`
           insert into financial_app.sync_runs (
             source_file_id,source_revision,status,rows_seen,schema_fingerprint
@@ -196,10 +212,9 @@ export async function handleSourceSyncAction(input: {
           const row = rows[0];
           if (!row?.transaction_id) throw new Error("source_ingestion_missing_transaction");
           touchedTransactionIds.push(row.transaction_id);
-          if (row.action === "insert") rowsInserted += 1;
-          else if (row.action === "append_revision") rowsRevised += 1;
-          else if (row.action === "skip") rowsSkipped += 1;
-          else throw new Error("source_ingestion_unknown_action");
+          const disposition = requireAppendOnlySourceDisposition(row.action);
+          if (disposition === "insert") rowsInserted += 1;
+          else rowsSkipped += 1;
         }
 
         const duplicateRows = touchedTransactionIds.length
@@ -292,10 +307,74 @@ export async function handleSourceSyncAction(input: {
           ${JSON.stringify({ rows: failedRows })}::jsonb
         )
       `;
-      return json({ error: "source_sync_failed", syncRunId }, 400);
+      // A concurrent historic change must never be committed by this batch.
+      // The entire sql.begin has rolled back; the failure receipt is audit-only.
+      const historicConflict = code === "source_existing_rows_changed";
+      return json(
+        { error: historicConflict ? "google_source_existing_rows_changed" : "source_sync_failed", syncRunId },
+        historicConflict ? 409 : 400,
+      );
     }
 
     return json(result);
+  }
+
+  if (action === "source.original_rows") {
+    // REC-SYNC-400: private, complete original-only snapshot for server-side
+    // append-only reconciliation. Never expose this action to preview, browser
+    // routes, CI logs, or unauthenticated clients. OIDC and user membership
+    // are both established upstream; bind by the resolved workspace UUID.
+    if (environment !== "production") {
+      return json({ error: "source_originals_production_only" }, 403);
+    }
+    text(payload.sourceFileId, "source_file_id");
+    const workspace = await sql`
+      select nullif(pg_catalog.current_setting('financial_app.workspace_id',true),'') as workspace_id
+    `;
+    if (!workspace[0]?.workspace_id) return json({ error: "workspace_context_required" }, 403);
+    const rows = await sql`
+      select source_file_id,source_sheet_id,source_row_key,source_row_identity,
+        source_fingerprint,account_external_key,bank_date::text as bank_date,
+        amount_cents::text as amount_cents,balance_after_cents::text as balance_after_cents,
+        source_payload,concept_original
+      from financial_app.transaction_source_records
+      where source_file_id=${payload.sourceFileId}
+        and workspace_id=${workspace[0].workspace_id}::uuid
+      order by source_sheet_id,source_row_key
+      limit 10001
+    `;
+    if (rows.length > 10000) {
+      return json({ error: "source_originals_limit_exceeded" }, 413);
+    }
+    return json({ rows });
+  }
+
+  if (action === "source.postflight_rows") {
+    // REC-POST-288: workspace membership, Vercel OIDC and tenant GUC are
+    // established upstream in index.ts. Read-only, bounded to one workbook,
+    // selected workspace and a single SQL statement/snapshot.
+    text(payload.sourceFileId, "source_file_id");
+    const workspaceId = await sql`
+      select nullif(pg_catalog.current_setting('financial_app.workspace_id',true),'') as workspace_id
+    `;
+    if (!workspaceId[0]?.workspace_id) return json({ error: "workspace_context_required" }, 403);
+    const rows = await sql`
+      select
+        source_file_id,source_sheet_id,source_row_key,source_fingerprint,account_external_key,
+        bank_date::text as bank_date,
+        amount_cents::text as amount_cents,
+        balance_after_cents::text as balance_after_cents
+      from financial_app.transaction_source_records
+      where source_file_id=${payload.sourceFileId}
+        and workspace_id=${workspaceId[0].workspace_id}::uuid
+      order by source_sheet_id,source_row_key
+      limit 10001
+    `;
+    if (rows.length > 10000) {
+      return json({ error: "source_postflight_limit_exceeded" }, 413);
+    }
+    // Full result or explicit refusal, never pagination masquerading as truth.
+    return json({ rows });
   }
 
   if (action === "source.status") {

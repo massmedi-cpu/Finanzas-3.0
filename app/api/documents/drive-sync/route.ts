@@ -1,3 +1,4 @@
+import { isDocumentDriveSyncDeferred } from "../../../../src/application/release-ocr-scope";
 import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
@@ -17,6 +18,19 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import { requireVerifiedSourceWorkspace } from "../../../../src/infrastructure/auth/source-metadata-access";
+import {
+  DocumentDriveInventoryError,
+  loadDocumentDriveInventory,
+  type DocumentDriveInventoryRow,
+  type DocumentDriveInventoryPage,
+} from "../../../../src/application/document-drive-inventory";
+import {
+  DocumentDriveFolderScopeError,
+  discoverAuthorizedDocumentFolders,
+  resolveAuthorizedDocumentFolders,
+} from "../../../../src/application/document-drive-folder-scope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,17 +40,8 @@ const PAGE_SIZE = 100;
 const MAX_IMPORTS_PER_RUN = 200;
 const DOWNLOAD_CONCURRENCY = 4;
 
-type ExistingDocument = {
-  sourceDriveFileId: string | null;
-  sourceModifiedAt: string | null;
-  mimeType: string;
-  sizeBytes: number | null;
-};
-
-type DocumentList = {
-  items: ExistingDocument[];
-  total: number;
-};
+type ExistingDocument = DocumentDriveInventoryRow;
+type DocumentList = DocumentDriveInventoryPage;
 
 type SyncCandidate = DiscoveredDriveDocument & {
   type: "ticket" | "invoice" | "other";
@@ -86,27 +91,16 @@ function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | und
 }
 
 async function existingDriveDocuments() {
-  const result = new Map<string, ExistingDocument>();
-  let offset = 0;
-  let total = 0;
-
-  do {
-    const page = await callPersistenceGateway<DocumentList>("document.list", {
+  return loadDocumentDriveInventory((offset, limit) =>
+    callPersistenceGateway<DocumentList>("document.list", {
       status: null,
       query: null,
-      limit: PAGE_SIZE,
+      limit,
       offset,
       scope: "all",
-    });
-    total = page.total;
-    for (const item of page.items) {
-      if (item.sourceDriveFileId) result.set(item.sourceDriveFileId, item);
-    }
-    offset += page.items.length;
-    if (page.items.length === 0) break;
-  } while (offset < total);
-
-  return result;
+    }),
+    PAGE_SIZE,
+  );
 }
 
 async function verifyCandidates(
@@ -127,12 +121,18 @@ async function verifyCandidates(
         const downloaded = await driveDownloader.download({
           fileId: candidate.fileId,
           expectedMimeType: candidate.mimeType,
+          expectedModifiedTime: candidate.modifiedTime,
+          expectedSizeBytes: candidate.sizeBytes,
         });
+        if (!downloaded.modifiedTime) {
+          throw new Error("drive_verified_modified_time_missing");
+        }
         verified.push({
           ...candidate,
           name: downloaded.fileName ?? candidate.name,
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
+          modifiedTime: downloaded.modifiedTime, // Verified server revision only.
         });
       } catch {
         failed += 1;
@@ -147,6 +147,18 @@ async function verifyCandidates(
 }
 
 function apiError(error: unknown) {
+  if (error instanceof DocumentDriveFolderScopeError) {
+    return Response.json(
+      { error: "drive_auto_detection_scope_incomplete", code: error.code },
+      { status: 503, headers: HEADERS },
+    );
+  }
+  if (error instanceof DocumentDriveInventoryError) {
+    return Response.json(
+      { error: "drive_auto_detection_persistence_failed", code: error.message },
+      { status: 503, headers: HEADERS },
+    );
+  }
   if (error instanceof GoogleDriveDocumentDiscoveryError) {
     const status = error.code === "google_drive_document_discovery_access_denied" ? 409 : 503;
     return Response.json(
@@ -161,8 +173,14 @@ function apiError(error: unknown) {
     );
   }
   if (error instanceof PersistenceGatewayError) {
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "drive_auto_detection_persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     return Response.json(
-      { error: "drive_auto_detection_persistence_failed", code: error.code ?? null },
+      { error: "drive_auto_detection_persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
@@ -174,11 +192,38 @@ function apiError(error: unknown) {
 }
 
 export async function POST() {
+  if (isDocumentDriveSyncDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
+  // The canonical gateway deliberately blocks Preview writes to production.
+  // Refuse before contacting Drive or the persistence gateway; reporting the
+  // barrier as an ordinary sync error would invite unsafe retries.
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" },
+      { status: 409, headers: HEADERS },
+    );
+  }
   try {
+    // A service account must never list or download private Drive documents
+    // on behalf of an anonymous or non-member browser, even if the final
+    // persistence gateway would reject the eventual write.
+    const accessDenied = await requireVerifiedSourceWorkspace();
+    if (accessDenied) return accessDenied;
+
     const readers = googleReaders();
-    const existingPromise = existingDriveDocuments();
-    const discoveredPromise = readers.discovery.listAuthorizedFolder(
+    const folderIds = resolveAuthorizedDocumentFolders(
+      process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS,
       FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+    );
+    const existingPromise = existingDriveDocuments();
+    const explicitFolderScope = Boolean(process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS?.trim());
+    const discoveredPromise = discoverAuthorizedDocumentFolders(
+      folderIds,
+      (folderId) => readers.discovery.listAuthorizedFolder(folderId),
+      explicitFolderScope
+        ? (folderId) => readers.discovery.listAuthorizedChildFolders(folderId)
+        : undefined,
     );
     const [existing, discovered] = await Promise.all([existingPromise, discoveredPromise]);
 
@@ -201,6 +246,9 @@ export async function POST() {
           modifiedTime: file.modifiedTime,
         })),
       });
+      if (!Number.isSafeInteger(result.imported) || result.imported !== verified.length) {
+        throw new Error("document_drive_import_count_mismatch");
+      }
       imported = result.imported;
     }
 
@@ -209,7 +257,8 @@ export async function POST() {
         contractVersion: 1,
         source: "google_drive",
         mode: "automatic_incremental_read_only",
-        folderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        folderId: folderIds.length === 1 ? folderIds[0] : null,
+        foldersScanned: folderIds.length,
         scanned: discovered.files.length,
         detectedChanges: changedFiles.length,
         imported,

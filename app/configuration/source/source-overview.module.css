@@ -94,13 +94,13 @@
   line-height: 1.5;
 }
 
-@media (max-width: 860px) {
+@container app-content (max-width: 70rem) {
   .grid {
     grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 560px) {
+@container app-content (max-width: 35rem) {
   .statusGrid {
     grid-template-columns: 1fr;
   }

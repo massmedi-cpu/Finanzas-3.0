@@ -1,6 +1,6 @@
 .explanation {
   margin-top: .75rem;
-  border-top: 1px solid rgba(137, 173, 255, .1);
+  border-top: 1px solid var(--color-border);
   color: var(--color-text-secondary);
 }
 
@@ -11,8 +11,8 @@
   gap: .45rem;
   cursor: pointer;
   list-style: none;
-  color: #a9c1ff;
-  font-size: .8rem;
+  color: var(--color-primary-bright);
+  font-size: var(--font-helper);
   font-weight: 750;
   user-select: none;
 }
@@ -24,13 +24,13 @@
   height: 1.25rem;
   display: inline-grid;
   place-items: center;
-  border: 1px solid rgba(137, 173, 255, .22);
+  border: 1px solid var(--color-border-strong);
   border-radius: 50%;
   font-size: .9rem;
   line-height: 1;
 }
 .explanation[open] summary::before { content: "−"; }
-.explanation summary:focus-visible { outline: 2px solid #8fb4ff; outline-offset: 2px; border-radius: .35rem; }
+.explanation summary:focus-visible { outline: 2px solid var(--color-primary-bright); outline-offset: 2px; border-radius: .35rem; }
 
 .body {
   padding: 0 0 .75rem;
@@ -48,12 +48,12 @@
   gap: .65rem;
   padding: .48rem .55rem;
   border-radius: .6rem;
-  background: rgba(137, 173, 255, .045);
+  background: var(--surface-interactive-soft);
 }
 
 .body dt {
-  color: #b7c9ed;
-  font-size: .75rem;
+  color: var(--color-text);
+  font-size: var(--font-helper);
   font-weight: 800;
 }
 
@@ -61,7 +61,7 @@
   min-width: 0;
   margin: 0;
   color: var(--color-text-secondary);
-  font-size: .78rem;
+  font-size: var(--font-helper);
   line-height: 1.4;
 }
 
@@ -78,20 +78,19 @@
   align-items: center;
   justify-content: center;
   padding: .5rem .7rem;
-  border: 1px solid rgba(77, 141, 255, .24);
+  border: 1px solid var(--border-primary-soft);
   border-radius: .65rem;
-  background: rgba(77, 141, 255, .07);
+  background: var(--surface-primary-subtle);
   color: var(--color-text);
-  font-size: .78rem;
+  font-size: var(--font-helper);
   font-weight: 720;
   text-decoration: none;
 }
 
 .links a:hover,
 .links a:focus-visible {
-  border-color: rgba(77, 141, 255, .48);
-  background: rgba(77, 141, 255, .13);
-  outline: none;
+  border-color: var(--border-primary-strong);
+  background: var(--surface-primary-soft);
 }
 
 @media (max-width: 36rem) {

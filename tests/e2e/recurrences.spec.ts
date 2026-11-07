@@ -112,7 +112,10 @@ async function mockRecurrenceApi(
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ id: confirmedRecurrenceId, status: body.status }),
+        body: JSON.stringify({
+          id: current.candidates.find((candidate) => candidate.candidateKey === body.candidateKey)?.existingRecurrenceId,
+          status: body.status,
+        }),
       });
       return;
     }
@@ -341,6 +344,8 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
   const incomeCard = history.locator("article").filter({ hasText: "ingreso periódico" });
   await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
   await expect(recurrenceStatus(page, "Recurrencia actualizada")).toContainText("Recurrencia actualizada con los movimientos actuales.");
+  // Refresh must preserve an already-expanded history, not hide actions.
+  await expect(history).toHaveAttribute("open", "");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: incomeCandidateKey,
@@ -352,6 +357,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
 
   await incomeCard.getByRole("button", { name: "Ignorar" }).click();
   await expect(recurrenceStatus(page, "Recurrencia ignorada")).toContainText("Recurrencia ignorada");
+  await expect(history).toHaveAttribute("open", "");
   expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: activeRecurrenceId,
@@ -550,4 +556,346 @@ test("AUD-E2E-REC-001 · todos los ciclos omitidos son visibles aun sin marca de
   const history = page.locator("details").filter({ hasText: /Históricos · 1 patrón/ });
   await history.locator("summary").click();
   await expect(history.getByText("3 ciclos no observados")).toBeVisible();
+});
+
+
+test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupera sin escritura", async ({ page }) => {
+  let reads = 0;
+  let recoveryReads = 0;
+  let recoveryRequested = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409, body: "unexpected_write" });
+    }
+    reads += 1;
+    if (recoveryRequested) recoveryReads += 1;
+    await route.fulfill({
+      status: recoveryRequested ? 200 : 503,
+      contentType: "application/json",
+      body: JSON.stringify(recoveryRequested ? baseSnapshot : { code: "source_unavailable" }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar el listado");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["—", "—", "—", "—"]);
+  await expect(page.getByText(/No se puede confirmar cuántos patrones existen/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmar recurrencia" })).toHaveCount(0);
+  recoveryRequested = true;
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("2");
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-003 · GET 200 con contrato corrupto no inventa ausencia; cero válido sí se representa", async ({ page }) => {
+  let reads = 0;
+  let validZeroRequested = false;
+  let invalidReads = 0;
+  await page.route("**/api/recurrences*", async (route) => {
+    reads += 1;
+    if (!validZeroRequested) invalidReads += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(validZeroRequested
+        ? { ...baseSnapshot, candidateCount: 0, candidates: [] }
+        : { ...baseSnapshot, candidateCount: 0 }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  validZeroRequested = true;
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Patrones recalculados" })).toContainText("Patrones recalculados");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["0", "0", "0", "0"]);
+  await expect(page.getByText(/No hay patrones con al menos 3 apariciones/)).toBeVisible();
+  expect(invalidReads).toBeGreaterThanOrEqual(1);
+  expect(reads).toBeGreaterThan(invalidReads);
+});
+
+test("REC-REC-004 · lectura de actualización fallida oculta candidatos obsoletos y permite recuperación", async ({ page }) => {
+  let reads = 0;
+  let failingRefresh = false;
+  let recoveredRefresh = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409 });
+    }
+    reads += 1;
+    await route.fulfill({
+      status: failingRefresh && !recoveredRefresh ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(failingRefresh && !recoveredRefresh ? { code: "source_unavailable" } : baseSnapshot),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  failingRefresh = true;
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  recoveredRefresh = true;
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  expect(writes).toEqual([]);
+  expect(reads).toBeGreaterThanOrEqual(3);
+});
+
+test("REC-REC-005 · POST incierto no afirma reversión ni repite la decisión automáticamente", async ({ page }) => {
+  const methods: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") return route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot),
+    });
+    methods.push(method);
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ code: "persistence_gateway_failed" }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  const card = page.locator("article").filter({ hasText: "supermercado mensual" });
+  await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("comprueba su estado antes de repetirla");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  expect(methods).toEqual(["POST"]);
+});
+
+test("REC-REC-006 · PATCH incierto no afirma que se haya archivado", async ({ page }) => {
+  const methods: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") return route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot),
+    });
+    methods.push(method);
+    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  expect(methods).toEqual(["PATCH"]);
+});
+
+
+for (const theme of ["light", "dark"] as const) {
+  test(`REC-REC-007 · el enlace para ver el impacto usa colores de éxito legibles en tema ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    const writes: Array<Record<string, unknown>> = [];
+    await mockRecurrenceApi(page, writes);
+    await page.goto(`/recurrences?source=forecast&forecastDateFrom=2026-09-07&forecastDateTo=2026-09-08&forecastAccountId=${forecastAccountId}`);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const card = page.locator("article").filter({ hasText: "supermercado mensual" });
+    await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
+    const link = page.getByRole("link", { name: "Actualizar y ver impacto en Previsión" });
+    await expect(link).toBeVisible();
+    const colors = await link.evaluate((node) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-success-soft)";
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        actual: getComputedStyle(node).color,
+        expected,
+        background: getComputedStyle(node).backgroundColor,
+      };
+    });
+    expect(colors.actual).toBe(colors.expected);
+    expect(colors.background).not.toBe("rgb(154, 235, 186)");
+    expect(writes).toHaveLength(1);
+  });
+}
+
+
+test("REC-REC-008 · los estados bancarios se presentan en español y las próximas fechas nunca retroceden", async ({ page }) => {
+  const writes: string[] = [];
+  let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409 });
+    }
+    reads += 1;
+    if (recoveryRequested) recoveryReads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(recoveryRequested
+        ? baseSnapshot
+        : { ...baseSnapshot, candidates: baseSnapshot.candidates.map((c, i) => i === 0 ? { ...c, nextEstimatedDate: "2026-09-06" } : c) }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  recoveryRequested = true;
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  await expect(history.getByText("Estado · Activa", { exact: true })).toBeVisible();
+  await expect(history.getByText("Estado · active", { exact: true })).toHaveCount(0);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-009 · los candidatos y sus decisiones no desbordan 320-1440 px en claro y oscuro", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockRecurrenceApi(page, writes);
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const width of [320, 360, 375, 390, 768, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const geometry = await page.evaluate(() => {
+        const tiny = [...document.querySelectorAll("main button")].filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && rect.height < 44;
+        }).length;
+        return { overflow: document.documentElement.scrollWidth > window.innerWidth + 1, tiny };
+      });
+      expect(geometry.overflow, `${theme} a ${width}px no debe tener desbordamiento horizontal`).toBe(false);
+      expect(geometry.tiny, `${theme} a ${width}px requiere objetivos táctiles de 44px`).toBe(0);
+    }
+  }
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-010 · POST 200 sin relectura verificada no anuncia confirmación", async ({ page }) => {
+  let postAccepted = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      return route.fulfill({
+        status: postAccepted ? 503 : 200,
+        contentType: "application/json",
+        body: JSON.stringify(postAccepted ? { code: "source_unavailable" } : baseSnapshot),
+      });
+    }
+    writes.push(method);
+    postAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: confirmedRecurrenceId, status: "active" }),
+    });
+  });
+
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await page.locator("article").filter({ hasText: "supermercado mensual" })
+    .getByRole("button", { name: "Confirmar recurrencia" }).click();
+
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual(["POST"]);
+});
+
+test("REC-REC-011 · PATCH 200 con relectura corrupta no anuncia archivo ni reutiliza candidatos", async ({ page }) => {
+  let patchAccepted = false;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(patchAccepted
+          ? { ...baseSnapshot, candidateCount: 0 }
+          : baseSnapshot),
+      });
+    }
+    writes.push(method);
+    patchAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: activeRecurrenceId, status: "archived" }),
+    });
+  });
+
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await expect(history.locator("summary")).toBeVisible();
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  await expect(page.getByText("ingreso periódico", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual(["PATCH"]);
+});
+
+test("REC-REC-012 · POST 200 y GET válido pero sin decisión persistida nunca anuncian éxito", async ({ page }) => {
+  let writeAccepted = false;
+  const mutations: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(baseSnapshot),
+      });
+    }
+    mutations.push(route.request().method());
+    writeAccepted = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: confirmedRecurrenceId, status: "active" }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await page.locator("article").filter({ hasText: "supermercado mensual" })
+    .getByRole("button", { name: "Confirmar recurrencia" }).click();
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  expect(writeAccepted).toBe(true);
+  expect(mutations).toEqual(["POST"]);
+});
+
+test("REC-REC-013 · PATCH 200 con estado bancario anterior no anuncia archivo sin verificar", async ({ page }) => {
+  const mutations: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(baseSnapshot),
+      });
+    }
+    mutations.push(route.request().method());
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ id: activeRecurrenceId, status: "archived" }),
+    });
+  });
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await expect(history.locator("summary")).toBeVisible();
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+  await expect(page.getByRole("main").getByRole("alert"))
+    .toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  expect(mutations).toEqual(["PATCH"]);
 });

@@ -17,5 +17,8 @@ export default async function BudgetsPage({
   searchParams: Promise<BudgetSearchParams>;
 }) {
   const params = await searchParams;
-  return <BudgetsClient initialMonth={requestedMonth(params.month)} />;
+  const month = requestedMonth(params.month);
+  // A client-side navigation to the same route with another ?month must not
+  // retain the previous month's edits or snapshot in an existing client tree.
+  return <BudgetsClient key={month ?? "current-month"} initialMonth={month} />;
 }

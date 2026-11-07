@@ -12,6 +12,7 @@ import {
   type ComparisonSelectionInput,
 } from "../../src/application/comparison/comparison-selection";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { logPersistenceGatewayFailure } from "../../src/infrastructure/persistence/gateway-observability";
 import ComparisonClient from "./comparison-client";
 import ComparisonLoadingFrame from "./comparison-loading-frame";
 
@@ -29,10 +30,7 @@ function safeSelection(requested: ComparisonSelectionInput) {
 
 function logInitialSnapshotError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
-    console.error("comparison-initial-snapshot", {
-      status: error.status,
-      code: error.code ?? null,
-    });
+    logPersistenceGatewayFailure("comparison-initial-snapshot", error);
     return;
   }
   console.error("comparison-initial-snapshot", error instanceof Error ? error.message : String(error));

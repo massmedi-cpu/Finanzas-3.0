@@ -26,10 +26,10 @@ export const DATA_TRUST_CAPABILITIES = [
   {
     id: "workspace-isolation",
     section: "protection",
-    title: "Aislamiento interno de datos",
+    title: "Acceso privado a mis datos",
     state: "verified",
     summary:
-      "Financial App mantiene una frontera técnica interna para aislar la persistencia y aplicar controles de acceso. Es una medida de seguridad, no una función multiusuario visible.",
+      "Cada petición al servidor exige acceso autorizado antes de consultar tus movimientos y documentos. La protección se aplica en el servidor, no solo en la pantalla.",
     evidence: [
       "supabase/migrations/20260909193000_pre001_workspace_isolation.sql",
       "scripts/pre001-cross-tenant-smoke.sql",
@@ -94,7 +94,7 @@ export const DATA_TRUST_CAPABILITIES = [
     title: "Diagnóstico técnico del servicio",
     state: "operator_only",
     summary:
-      "La operación dispone de comprobaciones autenticadas para persistencia, calidad de datos y runtime, además de logs de infraestructura para diagnóstico. Es una capacidad interna de operación, no un canal de soporte para terceros.",
+      "La operación dispone de comprobaciones autenticadas para persistencia, calidad de datos y runtime, además de registros técnicos para diagnóstico. Estas herramientas son internas.",
     evidence: [
       "app/api/health/foundations/route.ts",
       "app/api/health/persistence/route.ts",
@@ -106,7 +106,7 @@ export const DATA_TRUST_CAPABILITIES = [
 ] as const satisfies readonly DataTrustCapability[];
 
 export const DATA_TRUST_REVIEW = {
-  contractVersion: 5,
-  reviewedOn: "2026-09-11",
+  contractVersion: 6,
+  reviewedOn: "2026-10-22",
   scope: "Financial App · producto monousuario",
 } as const;

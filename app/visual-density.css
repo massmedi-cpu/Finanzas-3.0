@@ -16,13 +16,13 @@
 /* Keep the highest levels of the hierarchy compact on every route, even
    where a CSS module previously used an explicit clamp larger than tokens. */
 main h1 {
-  font-size: var(--font-page-title) !important;
+  font-size: var(--font-page-title);
   line-height: 1.08 !important;
   letter-spacing: -0.03em !important;
 }
 
 main h2 {
-  font-size: var(--font-section-title) !important;
+  font-size: var(--font-section-title);
   line-height: 1.2 !important;
   letter-spacing: -0.02em !important;
 }

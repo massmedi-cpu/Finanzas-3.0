@@ -3,6 +3,8 @@ import {
   callPersistenceGatewayBatch,
   type PersistenceGatewayOperation,
 } from "../../infrastructure/persistence/vercel-supabase-gateway";
+import { parseHomeBankFreshness, type HomeBankFreshness } from "../dashboard/home-bank-coverage";
+import { sourceConnectionFileId, syncSummary } from "../source-freshness-summary";
 import {
   assembleCashFlow,
   cashFlowMonth,
@@ -14,6 +16,17 @@ import {
 
 const PAGE_SIZE = 100;
 const MAX_DAILY_ROWS = 2000;
+
+function sourceBounds(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return { earliestMovementDate: null, latestMovementDate: null };
+  }
+  const row = value as Record<string, unknown>;
+  return {
+    earliestMovementDate: typeof row.earliestMovementDate === "string" ? row.earliestMovementDate : null,
+    latestMovementDate: typeof row.latestMovementDate === "string" ? row.latestMovementDate : null,
+  };
+}
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -40,6 +53,8 @@ export async function loadCashFlow(rawMonth: string | null | undefined): Promise
     { action: "transaction.query", payload: transactionPayload(dateFrom, dateTo) },
     { action: "forecast.snapshot", payload: { dateFrom, dateTo, accountId: null } },
     { action: "transaction.query", payload: { limit: 1 } },
+    { action: "transaction.date_bounds", payload: { accountId: null } },
+    { action: "source.google_connection_status" },
   ];
 
   let period: unknown = null;
@@ -47,9 +62,21 @@ export async function loadCashFlow(rawMonth: string | null | undefined): Promise
   let transactionState: "complete" | "incomplete" | "unavailable" = "unavailable";
   let transactions: CashFlowTransaction[] | null = null;
   let latestMovementDate: string | null = null;
+  let bankFreshness: HomeBankFreshness | null = null;
 
   try {
-    const [periodResult, transactionResult, forecastResult, latestTransactionResult] = await callPersistenceGatewayBatch(operations);
+    const [periodResult, transactionResult, forecastResult, latestTransactionResult, boundsResult, connectionResult] =
+      await callPersistenceGatewayBatch(operations);
+    const bounds = boundsResult?.status === "fulfilled"
+      ? sourceBounds(boundsResult.value) : sourceBounds(null);
+    const sourceFileId = connectionResult?.status === "fulfilled"
+      ? sourceConnectionFileId(connectionResult.value) : null;
+    // Start source.status while the pages are still being read. This avoids an
+    // extra sequential round trip for long months. Never infer success from
+    // dates alone or from an OIDC/connection error.
+    const syncPromise = sourceFileId
+      ? callPersistenceGateway("source.status", { sourceFileId }).catch(() => null)
+      : Promise.resolve(null);
     if (periodResult.status === "fulfilled") period = periodResult.value;
     if (forecastResult.status === "fulfilled") forecast = forecastResult.value;
     if (latestTransactionResult.status === "fulfilled" && isTransactionPage(latestTransactionResult.value)) {
@@ -94,12 +121,22 @@ export async function loadCashFlow(rawMonth: string | null | undefined): Promise
         if (transactionState === "complete") transactions = rows;
       }
     }
+    const sync = syncSummary(await syncPromise);
+    bankFreshness = parseHomeBankFreshness({
+      available: Boolean(bounds.latestMovementDate || sync),
+      earliestMovementDate: bounds.earliestMovementDate,
+      latestMovementDate: bounds.latestMovementDate,
+      sync,
+    });
   } catch {
     // El servidor local puede no disponer de identidad OIDC. No se muestran cifras de demostración.
   }
 
   return {
-    ...assembleCashFlow({ month, dateFrom, dateTo, period, forecast, transactions, transactionState, latestMovementDate }),
+    ...assembleCashFlow({
+      month, dateFrom, dateTo, period, forecast, transactions, transactionState,
+      latestMovementDate, bankFreshness,
+    }),
     invalidMonth: invalid,
   };
 }

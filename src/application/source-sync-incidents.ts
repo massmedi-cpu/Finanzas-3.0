@@ -1,5 +1,12 @@
 export type SourceSyncIncidentInput = {
+  id?: string | null;
+  sourceRevision?: string | null;
+  rowsInserted?: number | null;
+  rowsRevised?: number | null;
+  rowsSkipped?: number | null;
   status?: string | null;
+  finishedAt?: string | null;
+  rowsSeen?: number | null;
   rowsFailed?: number | null;
   rowsMissing?: number | null;
   duplicatesDetected?: number | null;
@@ -47,4 +54,84 @@ export function hasSourceSyncIncidents(
     || counts.missingRows > 0
     || counts.duplicates > 0
     || counts.additionalWarnings > 0;
+}
+
+// "success" without an actual end-time and complete integer counters is not
+// proof of a finished import, even if min/max movement dates exist.
+// This is deliberately separate from incident detection: a completed run
+// may still contain failures and must then be shown as partial/warning.
+export function hasCompletedSourceSyncEvidence(value: SourceSyncIncidentInput | null | undefined) {
+  if (value?.status !== "success") return false;
+  const ended = value.finishedAt;
+  return typeof ended === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(ended)
+    && Number.isFinite(Date.parse(ended))
+    && [value.rowsSeen, value.rowsFailed, value.rowsMissing, value.duplicatesDetected, value.warningsCount]
+      .every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
+}
+
+/** Validates only how recently a completed import checked its input; not bank freshness. */
+export function hasRecentSourceSyncEvidence(
+  value: SourceSyncIncidentInput | null | undefined,
+  nowMs: number = Date.now(),
+): boolean {
+  if (!hasCompletedSourceSyncEvidence(value) || !Number.isFinite(nowMs)) return false;
+  const elapsed = nowMs - Date.parse(value!.finishedAt!);
+  return elapsed >= 0 && elapsed <= 48 * 60 * 60 * 1000;
+}
+
+/**
+ * A successful POST receipt and an HTTP 200 GET are not, separately, proof
+ * that the *same* import was persisted. Confirm the exact run and its totals.
+ * This function only checks the persisted receipt, not that Google is fresh.
+ */
+export function hasPersistedSourceSyncReceipt(
+  run: SourceSyncIncidentInput | null | undefined,
+  receipt: {
+    syncRunId: string;
+    sourceRevision: string | null;
+    rowsSeen: number;
+    rowsInserted: number;
+    rowsRevised: number;
+    rowsSkipped: number;
+    rowsMissing: number;
+    duplicatesDetected: number;
+    warningsCount: number;
+  },
+) {
+  if (!run || !hasRecentSourceSyncEvidence(run)) return false;
+  return run.rowsFailed === 0 && !run.errorCode
+    && typeof run.id === "string" && run.id === receipt.syncRunId
+    && run.sourceRevision === receipt.sourceRevision
+    && run.rowsSeen === receipt.rowsSeen
+    && run.rowsInserted === receipt.rowsInserted
+    && run.rowsRevised === receipt.rowsRevised
+    && run.rowsSkipped === receipt.rowsSkipped
+    && run.rowsMissing === receipt.rowsMissing
+    && run.duplicatesDetected === receipt.duplicatesDetected
+    && run.warningsCount === receipt.warningsCount;
+}
+
+/**
+ * A malformed HTTP 200 status cannot be converted into "no sync has run".
+ * This is an untrusted JSON shape check, not evidence of bank freshness.
+ */
+export function isVerifiedSourceSyncStatus(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!Array.isArray(record.cursors) || !record.cursors.every((cursor) =>
+    cursor !== null && typeof cursor === "object" && !Array.isArray(cursor)
+    && typeof cursor.sourceSheetId === "string" && cursor.sourceSheetId.trim().length > 0)) return false;
+  if (record.run === null) return true;
+  if (!record.run || typeof record.run !== "object" || Array.isArray(record.run)) return false;
+  const run = record.run as Record<string, unknown>;
+  const counts = [
+    run.rowsSeen, run.rowsInserted, run.rowsRevised, run.rowsSkipped,
+    run.rowsFailed, run.rowsMissing, run.duplicatesDetected, run.warningsCount,
+  ];
+  return typeof run.id === "string" && run.id.trim().length > 0
+    && typeof run.status === "string" && run.status.trim().length > 0
+    && typeof run.startedAt === "string" && Number.isFinite(Date.parse(run.startedAt))
+    && (run.finishedAt === null || (typeof run.finishedAt === "string" && Number.isFinite(Date.parse(run.finishedAt))))
+    && counts.every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
 }

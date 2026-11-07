@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
+import { sourceConnectionFileId, syncSummary } from "../../src/application/source-freshness-summary";
 import { analysisSelectionFromSearchParams } from "../../src/application/analysis/analysis-query-state";
 
 const EMPTY_TREND = {
@@ -154,6 +155,49 @@ test("Análisis · el cliente acepta sólo snapshots completos, reconciliados y 
   })).toBe(false);
 });
 
+test("REC-SEC-ANA-001 · Análisis rechaza enlaces externos, parámetros ambiguos y destinos inseguros", () => {
+  const href = "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&merchantId=22222222-2222-4222-8222-222222222222";
+  const merchant = {
+    id: "22222222-2222-4222-8222-222222222222", name: "Comercio de prueba",
+    expenseCents: 1200, previousExpenseCents: 1000, deltaCents: 200,
+    changeBps: 2000, shareBps: 280, rows: 2, previousRows: 2,
+    averageCents: 600, habitualAverageCents: 500, habitualRows: 4,
+    habitualVariationBps: 2000, href,
+  };
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, merchantDrivers: [merchant] })).toBe(true);
+  expect(isAnalysisSnapshot({
+    ...VALID_SNAPSHOT,
+    categoryDrivers: [{ ...merchant, id: null, href:
+      "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&uncategorized=true" }],
+  })).toBe(true);
+
+  const unsafe = [
+    "javascript:alert(1)",
+    "https://example.org/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense",
+    "//example.org/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense",
+    `${href}&kind=expense`,
+    `${href}&redirect=https%3A%2F%2Fexample.org`,
+    `${href}#outside`,
+    href.replace("kind=expense", "kind=income"),
+    href.replace("2026-03-01", "2026-02-30"),
+    href.replace("2026-08-31", "2026-08-32"),
+    href.replace("dateFrom=2026-03-01", "dateFrom=2026-10-01"),
+    "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&uncategorized=false",
+    "/transactions?dateFrom=2026-03-01&dateTo=2026-08-31&kind=expense&merchantId=x&categoryId=y",
+  ];
+  for (const candidate of unsafe) {
+    expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, merchantDrivers: [{ ...merchant, href: candidate }] }), candidate).toBe(false);
+  }
+  const anomaly = {
+    transactionId: "tx-1", bankDate: "2026-08-10", amountCents: -2000,
+    merchantId: merchant.id, merchantName: merchant.name,
+    categoryId: null, categoryName: "Sin categoría", conceptNormalized: "Compra",
+    habitualCents: 1500, historyRows: 4, variationBps: 100, href,
+  };
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, anomalies: [anomaly] })).toBe(true);
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, anomalies: [{ ...anomaly, href: "javascript:alert(1)" }] })).toBe(false);
+});
+
 test("Análisis v5 · el shell compartido queda fuera de la espera del snapshot financiero", () => {
   const pageSource = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
   const layoutSource = readFileSync(resolve(process.cwd(), "app/layout.tsx"), "utf8");
@@ -182,12 +226,17 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
   const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/route.ts"), "utf8");
   const recoverySource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
 
+  const diagnosticSource = readFileSync(resolve(process.cwd(), "src/infrastructure/persistence/gateway-observability.ts"), "utf8");
   expect(pageSource).toContain("PersistenceGatewayError");
-  expect(pageSource).toContain("status: error.status");
-  expect(pageSource).toContain("code: error.code ?? null");
-  expect(routeSource).toContain("analysis-api-gateway");
-  expect(routeSource).toContain("status: error.status");
-  expect(routeSource).toContain("code: error.code ?? null");
+  expect(pageSource).toContain('logPersistenceGatewayFailure("analysis-initial-snapshot", error)');
+  expect(routeSource).toContain('logPersistenceGatewayFailure("analysis-api-gateway", error)');
+  // The shared logger retains redacted status/code regardless of severity.
+  // A 403 requiring workspace is expected; unexpected failures remain errors.
+  expect(diagnosticSource).toContain("status: error.status");
+  expect(diagnosticSource).toContain("code: error.code ?? null");
+  expect(diagnosticSource).toContain('error.status === 403 && error.code === "workspace_context_required"');
+  expect(diagnosticSource).toContain("console.info(scope, safe)");
+  expect(diagnosticSource).toContain("console.error(scope, safe)");
   expect(recoverySource).toContain("responseErrorCode");
   expect(recoverySource).toContain("analysis_contract_invalid");
   expect(recoverySource).not.toMatch(/!response\.ok \|\| !isAnalysisSnapshot\(payload\)/);
@@ -195,27 +244,38 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
 
 test("Análisis · la frescura de fuente admite sincronización parcial y conserva la fecha bancaria útil", () => {
   const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/source-freshness/route.ts"), "utf8");
+  const summarySource = readFileSync(resolve(process.cwd(), "src/application/source-freshness-summary.ts"), "utf8");
   const freshnessSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-source-freshness.tsx"), "utf8");
   const pageClientSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
   const loaderSource = readFileSync(resolve(process.cwd(), "src/application/analysis/analysis-loader.ts"), "utf8");
 
   expect(routeSource).toContain("callPersistenceGatewayBatch");
   expect(routeSource).toContain('action: "source.google_connection_status"');
-  expect(routeSource).toContain('action: "transaction.query", payload: { limit: 1 }');
+  // The scalable date-bounds query is the primary source; legacy query is a fallback.
+  // Both paths must honor account scope and preserve the observed bank date.
+  expect(routeSource).toContain('action: "transaction.date_bounds", payload: { accountId }');
+  expect(routeSource).toContain('callPersistenceGateway<unknown>("transaction.query", { limit: 1, accountId })');
+  expect(routeSource).toContain("earliestMovementDate = text(bounds?.earliestMovementDate)");
+  expect(routeSource).toContain("latestMovementDate = text(bounds?.latestMovementDate)");
+  expect(routeSource).toContain("latestMovementDate = transactionDate(legacy)");
   expect(routeSource).toContain('"source.status"');
-  expect(routeSource).toContain('status !== "partial"');
-  expect(routeSource).toContain("value >= 0");
+  expect(routeSource).toContain("sourceConnectionFileId(connectionResult.value)");
+  expect(routeSource).toContain("syncSummary(statusPayload)");
+  expect(summarySource).toContain('status !== "partial"');
+  expect(summarySource).toContain("value >= 0");
   expect(routeSource).toContain("available: Boolean(latestMovementDate)");
-  expect(routeSource).toContain("rowsFailed: integer(run.rows_failed)");
-  expect(routeSource).toContain("rowsMissing: integer(run.rows_missing)");
-  expect(routeSource).toContain("duplicatesDetected: integer(run.duplicates_detected)");
-  expect(routeSource).toContain("warningsCount: integer(run.warnings_count)");
+  expect(summarySource).toContain("rowsFailed: count(run.rows_failed)");
+  expect(summarySource).toContain("rowsMissing: count(run.rows_missing)");
+  expect(summarySource).toContain("duplicatesDetected: count(run.duplicates_detected)");
+  expect(summarySource).toContain("warningsCount: count(run.warnings_count)");
   expect(freshnessSource).toContain('type SyncStatus = "success" | "partial" | "failed" | "started"');
   expect(freshnessSource).toContain('value.sync.status === "partial"');
   expect(freshnessSource).toContain("Datos sincronizados parcialmente");
   expect(freshnessSource).toContain("Sincronización parcial");
   expect(freshnessSource).toContain("Último intento");
-  expect(freshnessSource).toContain('fetch("/api/analysis/source-freshness"');
+  expect(freshnessSource).toContain('params.set("accountId", accountId)');
+  expect(freshnessSource).toContain('? `/api/analysis/source-freshness?${params.toString()}`');
+  expect(freshnessSource).toContain('void fetch(url, {');
   expect(freshnessSource).toContain("function nullableFiniteNumber");
   expect(freshnessSource).toContain("Number.isFinite(value)");
   expect(freshnessSource).toContain("Number.isNaN(date.getTime())");
@@ -293,4 +353,21 @@ test("Análisis v5 · un ingreso residual o todavía inexistente no fabrica una 
       savingsRateBps: null,
     },
   })).toEqual(pending);
+});
+
+test("REC-AN-SOURCE-014 · shared sync parser retains partial and successful import evidence", () => {
+  expect(sourceConnectionFileId({ connection: { source_file_id: "synthetic-source" } })).toBe("synthetic-source");
+  expect(sourceConnectionFileId({ connection: { sourceFileId: "fallback-source" } })).toBe("fallback-source");
+  expect(sourceConnectionFileId({ connection: { source_file_id: null, sourceFileId: null } })).toBeNull();
+  expect(syncSummary({ run: {
+    status: "partial", finished_at: null, started_at: "2026-10-14T12:00:00.000Z",
+    rows_seen: 17, rows_failed: 2, rows_missing: 1,
+    duplicates_detected: 3, warnings_count: 4,
+  } })).toEqual({
+    status: "partial", finishedAt: null, startedAt: "2026-10-14T12:00:00.000Z",
+    rowsSeen: 17, rowsFailed: 2, rowsMissing: 1,
+    duplicatesDetected: 3, warningsCount: 4,
+  });
+  expect(syncSummary({ run: { status: "unsupported", rows_seen: 8 } })).toBeNull();
+  expect(syncSummary({ run: null })).toBeNull();
 });

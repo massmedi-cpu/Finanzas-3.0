@@ -72,6 +72,21 @@ async function mockDashboard(page: Page) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await fulfillJson(route, {
+        available: true,
+        earliestMovementDate: "2026-01-01",
+        latestMovementDate: "2026-09-11",
+        sync: {
+          status: "success", startedAt: "2026-09-11T08:00:00Z",
+          finishedAt: "2026-09-11T08:05:00Z",
+          rowsSeen: 100, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      });
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
       await fulfillJson(route, { run: null });
       return;
@@ -79,6 +94,23 @@ async function mockDashboard(page: Page) {
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical" || scope === "activity") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope,
+          asOfDate: "2026-09-11",
+          dataThroughDate: scope === "activity" ? "2026-09-11" : null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: scope === "critical" ? ["financial"] : ["transactions"],
+          failedSources: [],
+          data: {
+            financial: scope === "critical" ? financial : null,
+            monthly: null, budgets: null, forecast: null,
+            transactions: scope === "activity" ? transactions : null,
+          },
+        });
+        return;
+      }
       if (scope === "primary") {
         await fulfillJson(route, {
           contractVersion: 1,
@@ -143,4 +175,67 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
   ).toBe(true);
+});
+
+
+test("REC-UI-THEME-019 · Configuración mantiene profundidad y fondos diseñados en claro y oscuro", async ({ page }) => {
+  await page.route("**/api/**", async (route) => {
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: '{"error":"theme_visual_fixture_no_financial_data"}',
+    });
+  });
+  await page.goto("/configuration");
+  const hero = page.locator(".configuration-hero");
+  await expect(hero).toBeVisible();
+
+  // Compare both semantic CSS states in one browser task. A separate evaluate()
+  // per theme can race VisualPreferencesProvider's hydration and overwrite data-theme.
+  const computedThemes = await hero.evaluate((element) => {
+    const root = document.documentElement;
+    const originalTheme = root.getAttribute("data-theme");
+    try {
+      return (["dark", "light"] as const).map((theme) => {
+        root.setAttribute("data-theme", theme);
+        const style = getComputedStyle(element);
+        return {
+          theme,
+          background: style.backgroundImage,
+          shadow: style.boxShadow,
+          textColor: style.color,
+        };
+      });
+    } finally {
+      if (originalTheme === null) root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", originalTheme);
+    }
+  });
+  for (const computed of computedThemes) {
+    expect(computed.background, computed.theme).toContain("linear-gradient(");
+    expect(computed.shadow, computed.theme).not.toBe("none");
+    expect(computed.textColor, computed.theme).not.toBe("transparent");
+  }
+  // A fixed dark elevation on every background makes the light theme muddy.
+  expect(computedThemes[0].shadow).not.toBe(computedThemes[1].shadow);
+});
+
+
+test("REC-UI-CONTRAST-020 · alto contraste respeta fondo claro y oscuro sin texto desvaído", async ({ page }) => {
+  await page.emulateMedia({ contrast: "more" });
+  await page.goto("/configuration");
+  for (const [theme, expectedMuted] of [
+    ["light", "#30475f"],
+    ["dark", "#cbd6e9"],
+  ] as const) {
+    const tokens = await page.locator("html").evaluate((element, selected) => {
+      element.dataset.theme = selected;
+      const css = getComputedStyle(element);
+      return {
+        muted: css.getPropertyValue("--color-text-muted").trim(),
+        border: css.getPropertyValue("--color-border").trim(),
+      };
+    }, theme);
+    expect(tokens.muted, theme).toBe(expectedMuted);
+    expect(tokens.border, theme).not.toBe("");
+  }
 });

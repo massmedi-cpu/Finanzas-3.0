@@ -1,0 +1,254 @@
+// Offline Tesseract engine smoke: real raster pixels and bundled Spanish model.
+// This is one controlled synthetic image, NOT accuracy certification on real bills.
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
+import { createWorker, PSM } from "tesseract.js";
+import { pdfNativeTextNeedsVisualOcr, pdfVisualOcrImprovesNative } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
+
+// Arial may be absent on CI; silent system-font fallback changes the pixels
+// being recognised. Register a unique family from the locked Next dependency
+// and fail if it is unavailable instead of accepting a host-dependent font.
+const smokeFont = "FinancialOcrSmokeFixture";
+const fontPath = path.join(process.cwd(), "node_modules", "next", "dist", "compiled", "@vercel", "og", "Geist-Regular.ttf");
+assert.ok(GlobalFonts.registerFromPath(fontPath, smokeFont), "pinned synthetic OCR font must load");
+const fontHash = createHash("sha256").update(readFileSync(fontPath)).digest("hex");
+console.log("OCR_NATIVE_FIXTURE_FONT|sha256=" + fontHash + "|family=" + smokeFont);
+
+const canvas = createCanvas(1000, 220);
+const context = canvas.getContext("2d");
+context.fillStyle = "#ffffff";
+context.fillRect(0, 0, 1000, 220);
+context.fillStyle = "#000000";
+context.font = `62px "${smokeFont}"`;
+context.fillText("TOTAL 23,45", 45, 145);
+const png = canvas.toBuffer("image/png");
+assert.ok(png.byteLength > 1000, "synthetic receipt image created");
+
+// A scanned PDF contains pixels but NO native text. Embed the synthetic
+// raster as a JPEG XObject, rasterize it again using PDF.js and send that
+// resulting PNG through the same local Spanish Tesseract worker.
+function embedRasterInPdf(jpeg, width, height, selectableStamp = false, selectableFooter = null, selectableSideband = null) {
+  const imageCommands = "q\n" + width + " 0 0 " + height + " 0 0 cm\n/Im1 Do\nQ\n";
+  const stampCommands = selectableStamp ? "BT\n/F1 8 Tf\n" + (width - 25) + " " + (height - 20) + " Td\n(1) Tj\nET\n" : "";
+  // 3 Tr stores selectable text in the PDF but paints no pixels. This models
+  // real scanned invoices with a selectable metadata/footer layer over raster.
+  const footer = selectableFooter?.replace(/[\\()]/g, (character) => "\\" + character) ?? "";
+  const footerCommands = selectableFooter ? "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + footer + ") Tj\nET\n" : "";
+  const sideband = selectableSideband?.replace(/[\\()]/g, (character) => "\\" + character) ?? "";
+  // Invisible PDF text rotated 90° in the outer margin. The central
+  // invoice remains genuinely raster-only and must be read by Tesseract.
+  const sidebandCommands = selectableSideband ? "BT\n/F1 2 Tf\n3 Tr\n0 1 -1 0 16 10 Tm\n("
+    + sideband + ") Tj\nET\n" : "";
+  const commands = Buffer.from(imageCommands + stampCommands + footerCommands + sidebandCommands, "ascii");
+  const objects = [
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "ascii"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "ascii"),
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + width + " " + height
+      + "] /Resources << /XObject << /Im1 5 0 R >>"
+      + (selectableStamp || selectableFooter || selectableSideband ? " /Font << /F1 6 0 R >>" : "")
+      + " >> /Contents 4 0 R >>", "ascii"),
+    Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n", "ascii"), commands, Buffer.from("endstream", "ascii")]),
+    Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width " + width
+      + " /Height " + height + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
+      + jpeg.length + " >>\nstream\n", "ascii"), jpeg, Buffer.from("\nendstream", "ascii")]),
+  ];
+  if (selectableStamp || selectableFooter || selectableSideband) objects.push(Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "ascii"));
+  const buffers = [Buffer.from("%PDF-1.4\n", "ascii")];
+  const offsets = [0];
+  let position = buffers[0].length;
+  for (let i = 0; i < objects.length; i += 1) {
+    const segment = Buffer.concat([Buffer.from((i + 1) + " 0 obj\n", "ascii"), objects[i], Buffer.from("\nendobj\n", "ascii")]);
+    offsets.push(position);
+    buffers.push(segment);
+    position += segment.length;
+  }
+  let xref = "xref\n0 " + (objects.length + 1) + "\n0000000000 65535 f \n";
+  for (const offset of offsets.slice(1)) xref += String(offset).padStart(10, "0") + " 00000 n \n";
+  xref += "trailer\n<< /Size " + (objects.length + 1) + " /Root 1 0 R >>\nstartxref\n" + position + "\n%%EOF\n";
+  buffers.push(Buffer.from(xref, "ascii"));
+  return new Uint8Array(Buffer.concat(buffers));
+}
+
+async function rasterizePdfImage(pdfBytes, expectNativeStamp = false, expectedNativeFooter = null, expectedNativeSideband = null) {
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const task = pdfjs.getDocument({ data: pdfBytes, useSystemFonts: true });
+  try {
+    const pdf = await task.promise;
+    assert.equal(pdf.numPages, 1, "image-only PDF has exactly one page");
+    const page = await pdf.getPage(1);
+    try {
+      const native = await page.getTextContent();
+      const tokens = native.items.map((entry) => entry.str ?? "").filter(Boolean);
+      if (expectNativeStamp) {
+        assert.deepEqual(tokens, ["1"], "hybrid scanned page has one selectable stamp but no body text");
+        assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
+          text, confidence: 1, box: { x: 0.9, y: 0.1, width: 0.02, height: 0.02 },
+        }))), true, "sparse native stamp must not bypass the visual OCR path");
+      } else if (expectedNativeSideband) {
+        // The rotated baseline can extend beyond the PDF's page box. PDF.js
+        // may clip text at the page edge or return it in multiple spans:
+        // literal equality with the whole source string would assert an
+        // off-page tail, not whether meaningful sideways text was selected.
+        const selectable = tokens.join(" ").replace(/\s+/g, " ").trim();
+        assert.match(selectable, /DOCUMENTO\s+GENERADO/i,
+          "PDF.js must extract genuine visible-range text from the rotated legal stamp");
+        assert.doesNotMatch(selectable, /TOTAL\s+23[,.]45/i,
+          "the financial amount stays exclusively inside raster pixels");
+        assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
+          text, confidence: 1, box: { x: 0.015, y: 0.04, width: 0.02, height: 0.86 },
+        }))), true, "lateral native text does not count as invoice body coverage");
+      } else if (expectedNativeFooter) {
+        assert.ok(tokens.join(" ").includes(expectedNativeFooter),
+          "the synthetic footer is genuinely selectable in PDF.js");
+        assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
+          text, confidence: 1, box: { x: 0.01, y: 0.9, width: 0.75, height: 0.03 },
+        }))), true, "boilerplate must not hide the scanned financial raster");
+      } else {
+        assert.deepEqual(tokens, [], "image-only page cannot be mistaken for native text PDF");
+      }
+      const viewport = page.getViewport({ scale: 1 });
+      const target = pdf.canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      try {
+        await page.render({ canvas: target.canvas, canvasContext: target.context, viewport, canvasFactory: pdf.canvasFactory }).promise;
+        return Buffer.from(target.canvas.toBuffer("image/png"));
+      } finally {
+        pdf.canvasFactory.destroy?.(target);
+      }
+    } finally {
+      page.cleanup();
+    }
+  } finally {
+    await task.destroy();
+  }
+}
+
+const rasterJpeg = canvas.toBuffer("image/jpeg");
+const renderedScan = await rasterizePdfImage(embedRasterInPdf(rasterJpeg, 1000, 220));
+const renderedHybrid = await rasterizePdfImage(embedRasterInPdf(rasterJpeg, 1000, 220, true), true);
+const selectableFooter = "DOCUMENTO GENERADO AUTOMATICAMENTE POR SISTEMA DE GESTION. "
+  + "ESTE ARCHIVO CONSERVA UNA REFERENCIA LEGAL EN LA CAPA DE TEXTO. "
+  + "LAS CIFRAS DE LA FACTURA ESTAN SOLAMENTE EN LA IMAGEN ESCANEADA.";
+assert.ok(selectableFooter.length > 110 && selectableFooter.length < 260);
+const renderedFooterHybrid = await rasterizePdfImage(
+  embedRasterInPdf(rasterJpeg, 1000, 220, false, selectableFooter),
+  false, selectableFooter,
+);
+const verticalStamp = selectableFooter.repeat(2);
+const renderedVerticalHybrid = await rasterizePdfImage(
+  embedRasterInPdf(rasterJpeg, 1000, 220, false, null, verticalStamp),
+  false, null, verticalStamp,
+);
+assert.deepEqual([...renderedScan.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "scanned PDF rendered into PNG");
+
+const root = process.cwd();
+const workerOptions = {
+  workerPath: path.join(root, "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
+  corePath: path.join(root, "node_modules", "tesseract.js-core"),
+  langPath: path.join(root, "node_modules", "@tesseract.js-data", "spa", "4.0.0"),
+  cacheMethod: "none",
+};
+let worker;
+try {
+  worker = await createWorker("spa", 1, workerOptions);
+  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
+  // The same encoded image buffer must remain usable across successive
+  // worker.recognize calls. The production provider now copies incoming bytes
+  // once instead of allocating a full second copy on each OCR pass.
+  const reusablePng = Buffer.from(png);
+  const pristinePng = Buffer.from(reusablePng);
+  const response = await worker.recognize(reusablePng, { rotateRadians: 0 }, { text: true });
+  const text = String(response.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(text, /TOTAL/i, "real local Tesseract model detects total label");
+  assert.match(text, /23[,.]45/, "real OCR keeps euro decimal digits in source text");
+  const secondPass = await worker.recognize(reusablePng, { rotateRadians: 0 }, { text: true });
+  const secondText = String(secondPass.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(secondText, /TOTAL/i, "reusing a buffer keeps the financial label");
+  assert.match(secondText, /23[,.]45/, "reusing a buffer preserves the exact amount");
+  assert.deepEqual(reusablePng, pristinePng, "worker OCR must not mutate the input byte snapshot");
+  console.log("PASS · one reusable encoded image buffer survives multiple real Tesseract passes");
+  const pdfResult = await worker.recognize(renderedScan, { rotateRadians: 0 }, { text: true });
+  const scannedText = String(pdfResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(scannedText, /TOTAL/i, "Spanish OCR detects label through scanned PDF");
+  assert.match(scannedText, /23[,.]45/, "Spanish OCR retains financial decimals through JPEG/PDF/PNG pipeline");
+  console.log("PASS · image-only PDF rasterized and recognized via local Spanish Tesseract");
+  const hybridResult = await worker.recognize(renderedHybrid, { rotateRadians: 0 }, { text: true });
+  const hybridText = String(hybridResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(hybridText, /TOTAL/i, "hybrid PDF visual body retains its invoice label");
+  assert.match(hybridText, /23[,.]45/, "hybrid PDF visual body retains exact financial decimal");
+  console.log("PASS · sparse-native hybrid PDF was correctly flagged and its raster recognized");
+  const footerResult = await worker.recognize(renderedFooterHybrid, { rotateRadians: 0 }, { text: true });
+  const footerText = String(footerResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(footerText, /TOTAL/i, "hidden PDF footer cannot obscure original invoice pixels");
+  assert.match(footerText, /23[,.]45/, "hybrid PDF keeps exact invoice amount");
+  const nativeFooterWords = [{
+    text: selectableFooter, confidence: 1, box: { x: 0.01, y: 0.9, width: 0.75, height: 0.03 },
+  }];
+  const visualInvoiceWords = footerText.split(/\s+/).filter(Boolean).map((text) => ({
+    text, confidence: 0.9, box: { x: 0.1, y: 0.4, width: 0.12, height: 0.12 },
+  }));
+  assert.equal(pdfVisualOcrImprovesNative(nativeFooterWords, visualInvoiceWords), true,
+    "actual recovered PDF invoice total must win over longer selectable boilerplate");
+  console.log("PASS · long selectable PDF footer did not hide its raster invoice total");
+
+  const sidebandResult = await worker.recognize(renderedVerticalHybrid, { rotateRadians: 0 }, { text: true });
+  const sidebandText = String(sidebandResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(sidebandText, /TOTAL/i, "vertical selectable stamp cannot conceal visible TOTAL");
+  assert.match(sidebandText, /23[,.]45/, "Spanish Tesseract reads exact cents through sideways-stamp PDF");
+  console.log("PASS · rotated native legal stamp does not mask actual raster invoice OCR");
+
+  // Independent text/amount oracles for additional genuine Spanish-model
+  // recognitions. Different clear receipt headings and values exercise the
+  // raster -> Tesseract path, not a prefilled DocumentOcrResult mock.
+  // These remain SYNTHETIC examples, never the reserved human holdout set.
+  const financialRasterCases = [
+    { name: "small receipt", heading: "TOTAL", amount: "7,90", printed: "TICKET TOTAL 7,90" },
+    { name: "invoice amount", heading: "IMPORTE", amount: "89,10", printed: "FACTURA IMPORTE 89,10" },
+    { name: "larger receipt", heading: "TOTAL", amount: "124,90", printed: "TOTAL 124,90 EUR" },
+  ];
+  let financialRasterPassed = 0;
+  for (const specimen of financialRasterCases) {
+    const variant = createCanvas(1200, 240);
+    const brush = variant.getContext("2d");
+    brush.fillStyle = "#ffffff";
+    brush.fillRect(0, 0, 1200, 240);
+    brush.fillStyle = "#000000";
+    brush.font = `56px "${smokeFont}"`;
+    assert.ok(brush.measureText(specimen.printed).width < 1200 - 76,
+      "synthetic financial text must fit inside the raster: " + specimen.name);
+    brush.fillText(specimen.printed, 38, 148);
+    const bytes = variant.toBuffer("image/png");
+    const imageHash = createHash("sha256").update(bytes).digest("hex");
+    console.log("OCR_NATIVE_FIXTURE_IMAGE|case=" + specimen.name + "|sha256=" + imageHash);
+    const ocr = await worker.recognize(bytes, { rotateRadians: 0 }, { text: true });
+    const recognized = String(ocr.data?.text ?? "").replace(/\s+/g, " ").trim();
+    try {
+      assert.match(recognized, new RegExp(specimen.heading, "i"),
+        "real Spanish OCR should find the heading: " + specimen.name);
+      assert.ok(recognized.includes(specimen.amount)
+        || recognized.includes(specimen.amount.replace(",", ".")),
+      "real Spanish OCR should retain the exact financial cents: " + specimen.name);
+    } catch (error) {
+      // These bytes/text are generated above, never a user's document. The
+      // existing recovery artifact retains the actual failed raster/oracle.
+      const directory = path.join("recovery-evidence", "ocr-native");
+      const basename = specimen.name.replaceAll(" ", "-");
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(path.join(directory, basename + ".png"), bytes);
+      writeFileSync(path.join(directory, basename + ".json"), JSON.stringify({
+        synthetic: true, ...specimen, recognized, imageHash, fontHash,
+      }, null, 2) + "\n");
+      console.error("OCR_NATIVE_SYNTHETIC_FAILURE|case=" + specimen.name + "|recognized=" + JSON.stringify(recognized));
+      throw error;
+    }
+    financialRasterPassed += 1;
+  }
+  assert.equal(financialRasterPassed, financialRasterCases.length);
+  console.log("OCR_NATIVE_FINANCIAL_VARIANTS|passed=" + financialRasterPassed
+    + "|total=" + financialRasterCases.length + "|synthetic=true|holdout_access=false");
+
+} finally {
+  await worker?.terminate();
+}

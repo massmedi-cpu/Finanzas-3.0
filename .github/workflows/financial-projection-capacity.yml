@@ -1,0 +1,59 @@
+name: Financial projection 10k-50k lab
+
+on:
+  pull_request:
+    branches:
+      - chat/twenty-one-routes-responsive-shell-20261010
+      - chat/integrated-b-e-c-visual-20261010
+      - chat/eleven-width-currency-layout-gate-20261010
+      - chat/finance-50k-projection-capacity-20261010
+      - chat/financial-api-server-timing-20261010
+      - chat/financial-ambiguous-params-integrity-20261010
+      - chat/analysis-freshness-account-scope-guard-20261010
+      - chat/financial-error-timing-diagnostics-20261010
+    paths:
+      - 'src/domain/effective-transaction.ts'
+      - 'src/domain/models.ts'
+      - 'tests/e2e/financial-projection-capacity.spec.ts'
+      - 'tests/e2e/financial-api-server-timing.spec.ts'
+      - 'tests/e2e/financial-account-scope-query-integrity.spec.ts'
+      - 'app/api/analysis/route.ts'
+      - 'app/api/compare/route.ts'
+      - 'app/api/analysis/source-freshness/route.ts'
+      - 'app/api/financial/route.ts'
+      - 'playwright.capacity.config.ts'
+      - '.github/workflows/financial-projection-capacity.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finance-capacity-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  projection-lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies (no browser, DB or network under test)
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify 10k and 50k synthetic financial projection integrity; record laboratory distribution
+        run: npx playwright test --config=playwright.capacity.config.ts
+      - name: Preserve synthetic timing samples for audit
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finance-projection-lab-${{ github.event.pull_request.head.sha }}
+          path: test-results/
+          retention-days: 14
+      # This is a CPU-only domain projection benchmark. NEVER interpret the
+      # result as real persistence, API, LCP/INP/CLS or end-to-end AP-6 success.

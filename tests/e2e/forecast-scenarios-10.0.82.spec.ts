@@ -104,7 +104,7 @@ test("Previsión muestra y persiste escenarios editables sin escrituras financie
     });
   });
 
-  await page.goto("/forecast");
+  await page.goto("/forecast?dateFrom=2026-10-07&dateTo=2026-11-06");
 
   const scenarios = page.getByTestId("forecast-scenarios");
   await expect(scenarios.getByRole("heading", { name: "¿Qué pasaría si cambian tus ingresos o gastos?" })).toBeVisible();

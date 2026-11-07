@@ -113,8 +113,20 @@ test("AUD-E2E-NAV-001 · Gastos conserva fecha, comercio y búsqueda hasta limpi
   }).toEqual(["2026-09-25", "2026-09-25", MERCHANT_ID, "Mercadona", "expense"]);
   await expect(nav.getByRole("link", { name: "Gastos", exact: true })).toHaveAttribute("aria-current", "page");
   await expect.poll(() => seen.some((url) => url.searchParams.get("merchantId") === MERCHANT_ID && url.searchParams.get("kind") === "expense")).toBe(true);
+  // «Todos» resets only the quick preset while keeping owner-selected context.
   await nav.getByRole("link", { name: "Todos", exact: true }).click();
+  await expect.poll(() => {
+    const params = new URL(page.url()).searchParams;
+    return ["dateFrom", "dateTo", "merchantId", "q", "kind"].map((k) => params.get(k));
+  }).toEqual(["2026-09-25", "2026-09-25", MERCHANT_ID, "Mercadona", null]);
+  await expect(nav.getByRole("link", { name: "Todos", exact: true })).toHaveAttribute("aria-current", "page");
+  // «Limpiar» is the explicit action that clears search, dates and merchant.
+  await page.getByRole("button", { name: "Limpiar", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions$/);
+  await expect(page.getByLabel("Buscar", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Hasta", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("combobox", { name: "Comercio" })).toHaveValue("");
 });
 
 

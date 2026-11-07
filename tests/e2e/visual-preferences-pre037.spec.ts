@@ -98,7 +98,16 @@ test("PRE-037 · Apariencia supera matriz responsive y cambio de orientación", 
     await page.setViewportSize(viewport);
     await page.goto("/configuration/appearance");
     await expect(page.getByRole("heading", { name: "Apariencia y accesibilidad" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Apariencia" })).toBeVisible();
+    const settingsNav = page.getByRole("navigation", { name: "Áreas de configuración" });
+    const menu = settingsNav.locator("details");
+    if (await menu.isVisible()) {
+      await expect(menu.locator("summary")).toContainText("Apariencia");
+      await menu.locator("summary").click();
+      await expect(menu).toHaveAttribute("open", "");
+      await expect(menu.getByRole("link", { name: "Apariencia" })).toHaveAttribute("aria-current", "page");
+    } else {
+      await expect(settingsNav.getByRole("link", { name: "Apariencia" })).toBeVisible();
+    }
     await assertNoGlobalOverflow(page);
   }
 

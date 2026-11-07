@@ -35,7 +35,7 @@ function asRecord(value: unknown, field = "body"): Record<string, unknown> {
 function assertExactKeys(record: Record<string, unknown>, allowed: ReadonlyArray<string>, field: string) {
   const allowedKeys = new Set(allowed);
   const unexpected = Object.keys(record).filter((key) => !allowedKeys.has(key));
-  if (unexpected.length > 0) fail("unexpected_field", `${field} contiene campos no admitidos: ${unexpected.join(", ")}.`);
+  if (unexpected.length > 0) fail("unexpected_field", `${field} contiene campos no admitidos.`);
 }
 function requiredString(value: unknown, field: string): string {
   if (typeof value !== "string" || !value.trim()) fail("invalid_string", `${field} debe ser un texto no vacío.`);
@@ -146,6 +146,6 @@ export function parseConfigurationApiCommand(value: unknown): ConfigurationApiCo
         targetCategoryId: entityId(body.targetCategoryId, "targetCategoryId"),
       };
     default:
-      fail("unsupported_operation", `Operación no admitida: ${operation}.`);
+      fail("unsupported_operation", "Operación no admitida.");
   }
 }

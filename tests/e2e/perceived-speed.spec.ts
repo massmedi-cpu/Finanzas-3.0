@@ -22,10 +22,11 @@ test("Las transiciones de ruta ofrecen feedback inmediato, discreto y accesible"
 test("Inicio prioriza información útil antes de las fuentes secundarias", () => {
   const overview = source("app/inicio-overview.tsx");
 
-  expect(overview).toContain('await loadScope("critical", ["financial"])');
-  expect(overview).toContain('loadScope("activity", ["transactions"])');
-  expect(overview).toContain("setPrimaryLoading(false)");
-  expect(overview).toContain('loadScope("secondary", ["monthly", "budgets", "forecast"])');
+  expect(overview).toContain('await loadScope("critical", ["financial"], generation)');
+  expect(overview).toContain('loadScope("activity", ["transactions"], generation)');
+  expect(overview).toContain("if (isFresh(generation)) setPrimaryLoading(false)");
+  expect(overview).toContain("await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise, bankFreshnessPromise])");
+  expect(overview).toContain('loadScope("secondary", ["monthly", "budgets", "forecast"], generation)');
   expect(overview).toContain('readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000)');
   expect(overview).toContain('`/api/dashboard?scope=${scope}`');
   expect(overview).toContain("5_000");

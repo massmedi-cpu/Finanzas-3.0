@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
+import { hasRecentSourceSyncEvidence, hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
+import { isDocumentsDeferred, isReleaseHrefAvailable } from "../../src/application/release-document-scope";
 import styles from "./review.module.css";
 
 type SignalItem = {
@@ -22,6 +23,8 @@ type GoogleStatus = { configured?: boolean; connection?: { connected?: boolean }
 type SyncStatus = {
   run?: {
     status?: string;
+    finishedAt?: string | null;
+    rowsSeen?: number;
     rowsFailed?: number;
     rowsMissing?: number;
     duplicatesDetected?: number;
@@ -83,6 +86,18 @@ function valueOf<T>(result: PromiseSettledResult<T>) {
   return result.status === "fulfilled" ? result.value : null;
 }
 
+// A successful HTTP response is not evidence of a valid financial count.
+function verifiedCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+function verifiedEntries(value: unknown): Array<Record<string, unknown>> | null {
+  return Array.isArray(value) && value.every((item) =>
+    item !== null && typeof item === "object" && !Array.isArray(item))
+    ? value as Array<Record<string, unknown>>
+    : null;
+}
+
 export default function ReviewClient() {
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState<ReviewCounts>(EMPTY_COUNTS);
@@ -99,7 +114,7 @@ export default function ReviewClient() {
         readJson<TransactionCount>("/api/transactions?signMismatch=true&limit=1", controller.signal),
         readJson<TransactionCount>("/api/transactions?duplicateState=suspected&limit=1", controller.signal),
         readJson<RecurrenceSnapshot>("/api/recurrences?minOccurrences=3", controller.signal),
-        readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
+        isDocumentsDeferred() ? Promise.resolve(null) : readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
         readJson<BudgetSnapshot>(`/api/budgets?month=${month}`, controller.signal),
         readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${dateTo}`, controller.signal),
         readJson<GoogleStatus>("/api/source/google/status", controller.signal),
@@ -118,30 +133,34 @@ export default function ReviewClient() {
       const sourceStatus = valueOf(results[7]);
       const syncStatus = valueOf(results[8]);
 
-      const sourceCount = sourceStatus === null || syncStatus === null
+      // A configured connection and an HTTP 200 are not proof that a source
+      // import finished. Only a recently completed run with full evidence may be
+      // marked clear; an old success is NOT proof of current source coverage.
+      const sourceCount = sourceStatus === null
         ? null
-        : (
-            sourceStatus.configured !== true ||
-            sourceStatus.connection?.connected !== true ||
-            hasSourceSyncIncidents(syncStatus.run)
-          )
+        : sourceStatus.configured === false || sourceStatus.connection === null
+          || sourceStatus.connection?.connected === false
           ? 1
-          : 0;
+          : sourceStatus.configured !== true || sourceStatus.connection?.connected !== true || syncStatus === null
+            ? null
+            : hasSourceSyncIncidents(syncStatus.run)
+              ? 1
+              : hasRecentSourceSyncEvidence(syncStatus.run)
+                ? 0
+                : null;
+
+      const recurrentItems = verifiedEntries(recurrences?.candidates);
+      const budgetItems = verifiedEntries(budgets?.categories);
+      const forecastItems = verifiedEntries(forecast?.items);
 
       setCounts({
-        transactions: reviewTransactions && Number.isInteger(reviewTransactions.totalCount) ? reviewTransactions.totalCount! : null,
-        signMismatches: signMismatches && Number.isInteger(signMismatches.totalCount) ? signMismatches.totalCount! : null,
-        duplicates: suspectedDuplicates && Number.isInteger(suspectedDuplicates.totalCount) ? suspectedDuplicates.totalCount! : null,
-        recurrences: recurrences?.candidates
-          ? recurrences.candidates.filter((candidate) => candidate.existingStatus == null).length
-          : null,
-        documents: documents && Number.isInteger(documents.total) ? documents.total! : null,
-        budgets: budgets?.categories
-          ? budgets.categories.filter((category) => category.status === "over").length
-          : null,
-        forecast: forecast?.items
-          ? forecast.items.filter((item) => item.status === "planned" && item.confidence === "low").length
-          : null,
+        transactions: verifiedCount(reviewTransactions?.totalCount),
+        signMismatches: verifiedCount(signMismatches?.totalCount),
+        duplicates: verifiedCount(suspectedDuplicates?.totalCount),
+        recurrences: recurrentItems ? recurrentItems.filter((candidate) => candidate.existingStatus == null).length : null,
+        documents: verifiedCount(documents?.total),
+        budgets: budgetItems ? budgetItems.filter((category) => category.status === "over").length : null,
+        forecast: forecastItems ? forecastItems.filter((item) => item.status === "planned" && item.confidence === "low").length : null,
         source: sourceCount,
       });
       setLoading(false);
@@ -201,12 +220,16 @@ export default function ReviewClient() {
       count: counts.source,
       description: "Conexión, avisos o incidencias de la fuente bancaria.",
     },
-  ], [counts]);
+  ].filter((item) => isReleaseHrefAvailable(item.href)), [counts]);
 
   const actionItems = useMemo(() => items.filter((item) => typeof item.count === "number" && item.count > 0), [items]);
   const clearItems = useMemo(() => items.filter((item) => item.count === 0), [items]);
   const unavailableItems = useMemo(() => loading ? [] : items.filter((item) => item.count === null), [items, loading]);
   const actionableCount = actionItems.reduce((sum, item) => sum + (item.count ?? 0), 0);
+  // FA-UI-034: an unverified source is not proof that nothing needs attention.
+  // When no actions can be confirmed, show missing checks before the zero.
+  const prioritizeUnverified = !loading && actionableCount === 0 && unavailableItems.length > 0;
+  const headlineCount = prioritizeUnverified ? unavailableItems.length : actionableCount;
 
   return (
     <main className={styles.shell}>
@@ -216,8 +239,17 @@ export default function ReviewClient() {
           <h1>Para revisar</h1>
         </div>
         <div className={styles.heroStatus} aria-live="polite">
-          <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
-          <span>{loading ? "Comprobando" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          <strong>{loading ? "…" : formatInteger(headlineCount)}</strong>
+          <span>{loading ? "Comprobando" : prioritizeUnverified
+            ? unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"
+            : unavailableItems.length > 0
+              ? actionableCount === 1 ? "acción pendiente confirmada" : "acciones pendientes confirmadas"
+              : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+          {!loading && unavailableItems.length > 0 && (
+            <span role="status">{prioritizeUnverified
+              ? "No se han confirmado acciones; la revisión está incompleta"
+              : `${formatInteger(unavailableItems.length)} ${unavailableItems.length === 1 ? "comprobación sin verificar" : "comprobaciones sin verificar"}`}</span>
+          )}
         </div>
       </header>
 
@@ -243,24 +275,24 @@ export default function ReviewClient() {
                       <h3>{item.name}</h3>
                       <p>{item.description}</p>
                     </div>
-                    <Link prefetch={false} className={styles.action} href={item.href}>Revisar</Link>
+                    <Link prefetch={false} className={styles.action} href={item.href} aria-label={`Revisar: ${item.name}`}>Revisar</Link>
                   </article>
                 ))}
               </div>
             ) : (
               <div className={styles.allClear} role="status">
-                <strong>No hay acciones confirmadas pendientes</strong>
-                <span>Las fuentes disponibles no han detectado nada que requiera intervención.</span>
+                <strong>{unavailableItems.length > 0 ? "Revisión incompleta" : "No hay acciones pendientes"}</strong>
+                <span>{unavailableItems.length > 0 ? "Hay comprobaciones sin verificar. No es posible confirmar que todo esté en orden." : "Todas las fuentes revisadas han confirmado que no hay acciones pendientes."}</span>
               </div>
             )}
           </section>
 
           {clearItems.length > 0 && (
-            <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
+            <section className={`${styles.compactPanel} ${unavailableItems.length > 0 ? styles.partialClear : ""}`} aria-labelledby="review-clear-heading">
               <div className={styles.compactHeading}>
                 <div>
                   <p className={styles.kicker}>SIN INCIDENCIAS</p>
-                  <h2 id="review-clear-heading">Todo en orden</h2>
+                  <h2 id="review-clear-heading">{unavailableItems.length > 0 ? "Sin incidencias en áreas verificadas" : "Todo en orden"}</h2>
                 </div>
                 <strong>{formatInteger(clearItems.length)}</strong>
               </div>
@@ -283,7 +315,7 @@ export default function ReviewClient() {
                 {unavailableItems.map((item) => (
                   <li key={item.name}>
                     <span>{item.name}</span>
-                    <Link prefetch={false} href={item.href}>Abrir sección</Link>
+                    <Link prefetch={false} href={item.href} aria-label={`Abrir sección: ${item.name}`}>Abrir sección</Link>
                   </li>
                 ))}
               </ul>

@@ -98,6 +98,121 @@ begin
   if (select count(*) from financial_app.document_ocr_runs)<>0 then raise exception 'DOC designation ran OCR'; end if;
 end;
 $$;
+-- REC-AP1-260: exercise the candidate immutable-original trigger with
+-- synthetic documents on the disposable PostgreSQL service. Never run this
+-- fixture against a live financial database; the enclosing BEGIN/ROLLBACK
+-- and the workflow's localhost PostgreSQL gate must remain in place.
+do $aud_private_original$
+declare
+  v_private_id uuid;
+  v_drive_id uuid;
+  v_before jsonb;
+  v_after jsonb;
+  v_statement text;
+  v_expected text;
+  v_blocked boolean;
+begin
+  insert into financial_app.documents
+    (type,status,original_file_name,mime_type,storage_provider,storage_key,
+     source_drive_file_id,size_bytes,notes)
+  values ('invoice','pending_review','AUD-private-original.pdf','application/pdf',
+          'supabase','aud-private-original-immutable',null,2048,'Synthetic original')
+  returning id into v_private_id;
+
+  select id into strict v_drive_id from aud_doc_ids where key='ordinary';
+
+  -- A forged re-upload, legacy upsert, or retry must never replace the
+  -- source identifier or re-label private bytes. Test every guarded field.
+  for v_statement,v_expected in
+    select test.sql,test.expected from (values
+      ('update financial_app.documents set storage_provider = ''google_drive'' where id=$1',
+        'document_original_storage_identity_immutable'),
+      ('update financial_app.documents set storage_key = ''aud-replaced'' where id=$1',
+        'document_original_storage_identity_immutable'),
+      ('update financial_app.documents set original_file_name = ''changed.pdf'' where id=$1',
+        'document_private_original_immutable'),
+      ('update financial_app.documents set mime_type = ''image/png'' where id=$1',
+        'document_private_original_immutable'),
+      ('update financial_app.documents set size_bytes = 4096 where id=$1',
+        'document_private_original_immutable'),
+      -- REC-AP1-339: source ID is now a provider-agnostic identity field,
+      -- rejected by the first (storage identity) guard for Supabase too.
+      ('update financial_app.documents set source_drive_file_id = ''untrusted-id'' where id=$1',
+        'document_original_storage_identity_immutable')
+    ) as test(sql,expected)
+  loop
+    v_blocked := false;
+    begin
+      execute v_statement using v_private_id;
+    exception when check_violation then
+      if sqlerrm <> v_expected then raise; end if;
+      v_blocked := true;
+    end;
+    if not v_blocked then
+      raise exception 'AUD_AP1_private_original_mutation_accepted';
+    end if;
+  end loop;
+
+  -- Google Drive originals have the same immutable provider/storage key.
+  v_blocked := false;
+  begin
+    update financial_app.documents set storage_key='aud-replaced-drive'
+    where id=v_drive_id;
+  exception when check_violation then
+    if sqlerrm <> 'document_original_storage_identity_immutable' then raise; end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'AUD_AP1_drive_original_mutation_accepted';
+  end if;
+
+  -- REC-AP1-339: retain existing Drive storage_key while attempting to
+  -- substitute its authoritative source ID. This must also fail.
+  v_blocked := false;
+  begin
+    update financial_app.documents set source_drive_file_id='aud-forged-drive-id'
+    where id=v_drive_id;
+  exception when check_violation then
+    if sqlerrm <> 'document_original_storage_identity_immutable' then raise; end if;
+    v_blocked := true;
+  end;
+  if not v_blocked then
+    raise exception 'AUD_AP1_drive_source_id_mutation_accepted';
+  end if;
+  if not exists (select 1 from financial_app.documents
+      where id=v_drive_id and storage_key='aud-doc-ordinary'
+        and source_drive_file_id='aud-ordinary') then
+    raise exception 'AUD_AP1_drive_original_changed_after_denied_update';
+  end if;
+
+  select jsonb_build_object(
+    'storage_provider',storage_provider,'storage_key',storage_key,
+    'original_file_name',original_file_name,'mime_type',mime_type,
+    'size_bytes',size_bytes,'source_drive_file_id',source_drive_file_id)
+    into v_before
+  from financial_app.documents where id=v_private_id;
+
+  -- Owner-editable fields must remain mutable after the guard is installed.
+  update financial_app.documents
+     set notes='AUD synthetic updated notes',status='archived'
+   where id=v_private_id;
+
+  select jsonb_build_object(
+    'storage_provider',storage_provider,'storage_key',storage_key,
+    'original_file_name',original_file_name,'mime_type',mime_type,
+    'size_bytes',size_bytes,'source_drive_file_id',source_drive_file_id)
+    into v_after
+  from financial_app.documents where id=v_private_id;
+
+  if v_before is distinct from v_after
+    or not exists (select 1 from financial_app.documents
+       where id=v_private_id and status='archived'
+         and notes='AUD synthetic updated notes') then
+    raise exception 'AUD_AP1_legitimate_metadata_edit_or_original_preservation_failed';
+  end if;
+end;
+$aud_private_original$;
+
 reset role;
 do $$
 begin

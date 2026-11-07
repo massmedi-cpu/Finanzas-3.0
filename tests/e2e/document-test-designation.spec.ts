@@ -139,3 +139,59 @@ test("DOC-002 API rejects absent acknowledgement, invalid scope and nonboolean d
   expect((await request.get("/api/documents?scope=automatic" )).status()).toBe(400);
   expect((await request.get("/api/documents?unassociated=maybe" )).status()).toBe(400);
 });
+
+
+test("REC-DOC-135 · owner designation cannot claim archive synchronization after 503 list readback", async ({ page }) => {
+  const { writes } = await documents(page);
+  let failedListReads = 0;
+  await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("scope") === "tests"
+      && writes.some(write => write.action === "test_designation")) {
+      failedListReads++;
+      await route.fulfill({ status: 503, json: { error: "document_service_unavailable" } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /F11_DRIVE_LIVE_OCR_TEST/ }).click();
+  await page.getByText("Cambiar tratamiento documental", { exact: true }).click();
+  await page.getByLabel("Motivo de la revisión").fill("He revisado esta prueba y su procedencia");
+  await page.getByRole("checkbox", { name: /He revisado este documento/ }).check();
+  await page.getByRole("button", { name: "Designar como Prueba" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("La operación puede haberse aplicado");
+  await expect(page.getByText("Documento designado como Prueba. Puedes encontrarlo en Pruebas y revertir el cambio.")).toHaveCount(0);
+  await expect(page.getByLabel("Vista documental")).toHaveValue("ordinary");
+  await expect(page.getByTestId("documents-list-error")).toBeVisible();
+  expect(failedListReads).toBeGreaterThan(0);
+  expect(writes.filter(write => write.action === "test_designation")).toHaveLength(1);
+});
+
+test("REC-DOC-136 · owner designation blocks stale detail after invalid readback without repeating write", async ({ page }) => {
+  const { writes } = await documents(page);
+  let failedDetailReads = 0;
+  await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === fixtureId
+      && writes.some(write => write.action === "test_designation")) {
+      failedDetailReads++;
+      await route.fulfill({ status: 200, json: { contractVersion: 3,
+        document: { ...base, id: fixtureId, originalFileName: "F11_DRIVE_LIVE_OCR_TEST.png",
+          mimeType: "text/html" }, associations: [], principles } });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /F11_DRIVE_LIVE_OCR_TEST/ }).click();
+  await page.getByText("Cambiar tratamiento documental", { exact: true }).click();
+  await page.getByLabel("Motivo de la revisión").fill("Prueba revisada por propietario");
+  await page.getByRole("checkbox", { name: /He revisado este documento/ }).check();
+  await page.getByRole("button", { name: "Designar como Prueba" }).click();
+  await expect(page.getByTestId("documents-detail-error")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toHaveCount(0);
+  await expect(page.getByLabel("Vista documental")).toHaveValue("ordinary");
+  expect(failedDetailReads).toBeGreaterThan(0);
+  expect(writes.filter(write => write.action === "test_designation")).toHaveLength(1);
+});
