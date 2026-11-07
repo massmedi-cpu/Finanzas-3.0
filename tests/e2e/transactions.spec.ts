@@ -911,7 +911,7 @@ test("REC-TXN-009 · reparto con PUT confirmado pero relectura fallida bloquea o
 
   const unverified = page.getByTestId("transactions-write-unverified");
   await expect(unverified).toBeVisible();
-  await expect(unverified).toContainText("Puede haberse guardado");
+  await expect(unverified).toContainText("Las escrituras están bloqueadas hasta volver a leer los movimientos");
   await expect(page.getByText("Reparto guardado y aplicado a la analítica personal.")).toHaveCount(0);
   expect(writes).toBe(1);
 
