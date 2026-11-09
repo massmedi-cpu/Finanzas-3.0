@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createCanvas } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
+import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
 import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-financial-interpretation";
@@ -77,12 +78,24 @@ test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable tot
   test.setTimeout(120_000);
   const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3));
   const before = Buffer.from(bytes);
+  const realImageOcr = new TesseractImageOcrProvider();
+  let visualEvidence: unknown = null;
+  const provider = new PdfTextOcrProvider({
+    extract: async (input) => {
+      const visual = await realImageOcr.extract(input);
+      visualEvidence = {
+        warnings: visual.warnings,
+        words: visual.pages[0]?.words.map(({ text, confidence }) => ({ text, confidence })),
+      };
+      return visual;
+    },
+  });
   const result = await runDocumentOcr({
     documentId: "93000000-0000-4000-8000-000000000325",
     bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
-    provider: new PdfTextOcrProvider(),
+    provider,
   });
-  expect(result.source, `REC-OCR-325 synthetic diagnostic: ${JSON.stringify({ warnings: result.warnings, extractor: result.extractor, plainText: result.plainText, totalCents: interpretDocumentOcrFinancially(result).totalCents.value })}`).toBe("pdf_ocr");
+  expect(result.source, `REC-OCR-325 synthetic diagnostic: ${JSON.stringify({ warnings: result.warnings, extractor: result.extractor, plainText: result.plainText, totalCents: interpretDocumentOcrFinancially(result).totalCents.value, visualEvidence })}`).toBe("pdf_ocr");
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
   expect(result.plainText).toMatch(/23[,.]45/);
   expect(interpretDocumentOcrFinancially(result).totalCents.value).toBe(2345);
