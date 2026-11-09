@@ -353,6 +353,9 @@
   .pagination button { width: 100%; }
 }
 
+/* FA-UI-010: search long merchant dictionaries without changing the selected ID. */
+.merchantFilter { display: grid; min-width: 0; gap: .4rem; }
+
 /* AUD-E2E-MOV-001 · una sola búsqueda con filtros avanzados plegables. */
 .filters {
   grid-template-columns: minmax(0, 1fr);
