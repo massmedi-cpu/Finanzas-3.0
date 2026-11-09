@@ -56,5 +56,8 @@ jobs:
       - name: Verify financial OCR amount and VAT table interpretation
         run: node scripts/test-ocr-amount-label-selection.mjs
 
+      - name: Install Chromium for real hybrid PDF OCR regression
+        run: npx playwright install --with-deps chromium
+
       - name: Run complete OCR regression pack
         run: npx playwright test --config=playwright.ocr.config.ts
