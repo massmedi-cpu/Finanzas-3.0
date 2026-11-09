@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCanvas } from "@napi-rs/canvas";
+import { createCanvas, loadImage } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
@@ -97,8 +97,29 @@ test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable tot
   let visualEvidence: unknown = null;
   const provider = new PdfTextOcrProvider({
     extract: async (input) => {
+      // Non-sensitive fixture only: diagnose whether PDF.js actually paints
+      // the rasterized invoice before changing Tesseract's selection rules.
+      const img = await loadImage(Buffer.from(input.bytes));
+      const raster = createCanvas(img.width, img.height);
+      const context = raster.getContext("2d");
+      context.drawImage(img, 0, 0);
+      const rgba = context.getImageData(0, 0, img.width, img.height).data;
+      let darkSamples = 0;
+      let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
+      for (let y = 0; y < img.height; y += 8) {
+        for (let x = 0; x < img.width; x += 8) {
+          const p = (y * img.width + x) * 4;
+          if (rgba[p] + rgba[p + 1] + rgba[p + 2] >= 480) continue;
+          darkSamples++;
+          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+      }
+      const pixels = { width: img.width, height: img.height, darkSamples,
+        bounds: darkSamples ? [minX, minY, maxX, maxY] : null };
       const visual = await realImageOcr.extract(input);
       visualEvidence = {
+        pixels,
         warnings: visual.warnings,
         words: visual.pages[0]?.words.map(({ text, confidence }) => ({ text, confidence })),
       };
