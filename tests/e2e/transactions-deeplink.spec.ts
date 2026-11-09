@@ -141,17 +141,19 @@ test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores
   await expect(more).toHaveAttribute("aria-expanded", "false");
   const queryCount = seen.length;
   await more.click();
-  await expect(page.getByLabel("Comercio")).toBeVisible();
-  await page.getByLabel("Comercio").selectOption(MERCHANT_ID);
+  // The accessible merchant searchbox also contains “Comercio” in its name.
+  // Select the exact merchant combobox, not a substring-ambiguous label.
+  await expect(page.getByTestId("merchant-filter")).toBeVisible();
+  await page.getByTestId("merchant-filter").selectOption(MERCHANT_ID);
   await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("button", { name: /Ocultar filtros avanzados/ }).click();
   // Comercio es un filtro principal y permanece visible; lo que se pliega
   // es el panel avanzado, sin descartar los borradores.
   await expect(page.locator("#movement-advanced-filters")).toBeHidden();
-  await expect(page.getByLabel("Comercio")).toBeVisible();
+  await expect(page.getByTestId("merchant-filter")).toBeVisible();
   expect(seen.length).toBe(queryCount);
   await page.getByRole("button", { name: /Más filtros/ }).click();
-  await expect(page.getByLabel("Comercio")).toHaveValue(MERCHANT_ID);
+  await expect(page.getByTestId("merchant-filter")).toHaveValue(MERCHANT_ID);
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect.poll(() => seen.some((url) =>
     url.searchParams.get("merchantId") === MERCHANT_ID
