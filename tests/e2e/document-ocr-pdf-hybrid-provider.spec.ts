@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCanvas, loadImage } from "@napi-rs/canvas";
+import { createCanvas } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
 import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
@@ -14,35 +14,20 @@ function hybridPdf(
   selectableText = footer,
   headerText: string | null = null,
   lateralText: string | null = null,
-  pageHeight = 220,
 ): Uint8Array {
-  const canvas = createCanvas(1000, pageHeight);
+  const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, 1000, pageHeight);
+  context.fillRect(0, 0, 1000, 220);
   context.fillStyle = "#000000";
   context.font = "bold 62px Arial";
-  if (pageHeight > 220) {
-    // A realistic, upright invoice page makes the live Spanish Tesseract
-    // regression exercise readable financial pixels, not a 1000×220 banner.
-    // This remains synthetic: no real receipts, amounts or accounts are read.
-    context.font = "bold 56px Arial";
-    context.fillText("FACTURA", 75, 140);
-    context.font = "36px Arial";
-    context.fillText("Resumen de compra", 75, 280);
-    context.fillText("Articulos y servicios", 75, 420);
-    context.fillText("Importe final de la factura", 75, 750);
-    context.font = "bold 68px Arial";
-    context.fillText("TOTAL A PAGAR 23,45 EUR", 75, 875);
-  } else {
-    context.fillText("TOTAL 23,45", 45, 145);
-  }
+  context.fillText("TOTAL 23,45", 45, 145);
   const jpeg = canvas.toBuffer("image/jpeg");
 
   // 3 Tr: selectable, invisible PDF text. Visible financial content stays in
   // the JPEG XObject. This test never loads real invoices or credentials.
   const commands = Buffer.from(
-    "q\n1000 0 0 " + pageHeight + " 0 0 cm\n/Im1 Do\nQ\n"
+    "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
       + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n"
       + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : "")
       // A 90° selectable legal strip, not visible on the raster invoice.
@@ -52,12 +37,12 @@ function hybridPdf(
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 " + pageHeight + "]"
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 220]"
       + " /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >>"
       + " /Contents 4 0 R >>"),
     Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n"),commands,Buffer.from("\nendstream")]),
     Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width 1000"
-      + " /Height " + pageHeight + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
+      + " /Height 220 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
       + " /DCTDecode /Length " + jpeg.length + " >>\nstream\n"),jpeg,Buffer.from("\nendstream")]),
     Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
   ];
@@ -89,37 +74,45 @@ function visualResult(confidence: number): Awaited<ReturnType<DocumentOcrProvide
   };
 }
 
-test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable total beneath a page subtotal overlay", async () => {
+test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable total beneath a page subtotal overlay", async ({ page }) => {
   test.setTimeout(120_000);
-  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3), null, null, 1400);
+  // Chromium produces a standards-compliant PDF from a real raster image
+  // while preserving a separate, selectable but visually white page subtotal.
+  // This reproduces a hybrid scanned invoice without a hand-assembled XObject
+  // that some PDF renderers silently leave blank.
+  await page.setViewportSize({ width: 900, height: 1000 });
+  await page.setContent(`
+    <!doctype html><html lang="es"><body style="margin:0;background:#fff;color:#000;font-family:Arial,sans-serif">
+      <main style="box-sizing:border-box;width:800px;padding:52px;background:#fff">
+        <h1 style="font-size:48px;margin:0 0 50px">FACTURA</h1>
+        <p style="font-size:34px;margin:0 0 25px">Resumen de compra</p>
+        <p style="font-size:34px;margin:0 0 45px">Articulos y servicios</p>
+        <strong style="display:block;font-size:40px;border-top:4px solid #000;padding-top:26px">TOTAL A PAGAR 23,45 EUR</strong>
+      </main>
+    </body></html>
+  `);
+  const raster = await page.locator("main").screenshot({ type: "png" });
+  const dataUrl = `data:image/png;base64,${Buffer.from(raster).toString("base64")}`;
+  const selectableFooter = "TOTAL PAGINA 12,10 EUR. " + footer.repeat(3);
+  await page.setContent(`
+    <!doctype html><html lang="es"><head><style>
+      @page { size: A4; margin: 0 }
+      html,body { margin:0; padding:0; background:#fff; font-family:Arial,sans-serif }
+    </style></head><body>
+      <img src="${dataUrl}" alt="" style="display:block;width:186mm;margin:12mm auto 0" />
+      <p style="position:absolute;left:12mm;top:240mm;width:185mm;color:#fff;font-size:7px;line-height:9px">
+        ${selectableFooter}
+      </p>
+    </body></html>
+  `);
+  const bytes = new Uint8Array(await page.pdf({ format: "A4", preferCSSPageSize: true, printBackground: true }));
   const before = Buffer.from(bytes);
   const realImageOcr = new TesseractImageOcrProvider();
   let visualEvidence: unknown = null;
   const provider = new PdfTextOcrProvider({
     extract: async (input) => {
-      // Non-sensitive fixture only: diagnose whether PDF.js actually paints
-      // the rasterized invoice before changing Tesseract's selection rules.
-      const img = await loadImage(Buffer.from(input.bytes));
-      const raster = createCanvas(img.width, img.height);
-      const context = raster.getContext("2d");
-      context.drawImage(img, 0, 0);
-      const rgba = context.getImageData(0, 0, img.width, img.height).data;
-      let darkSamples = 0;
-      let minX = img.width, maxX = 0, minY = img.height, maxY = 0;
-      for (let y = 0; y < img.height; y += 8) {
-        for (let x = 0; x < img.width; x += 8) {
-          const p = (y * img.width + x) * 4;
-          if (rgba[p] + rgba[p + 1] + rgba[p + 2] >= 480) continue;
-          darkSamples++;
-          minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-        }
-      }
-      const pixels = { width: img.width, height: img.height, darkSamples,
-        bounds: darkSamples ? [minX, minY, maxX, maxY] : null };
       const visual = await realImageOcr.extract(input);
       visualEvidence = {
-        pixels,
         warnings: visual.warnings,
         words: visual.pages[0]?.words.map(({ text, confidence }) => ({ text, confidence })),
       };
