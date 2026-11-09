@@ -352,6 +352,11 @@ function categorySelectionFor(categories: Facets["categories"], categoryId: stri
     : { root: category.id, leaf: "" };
 }
 
+function merchantSearchKey(value: string) {
+  // Match accents and case in long, bank-originated merchant names without rewriting them.
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+}
+
 function activeSubcategories(categories: Facets["categories"], rootId: string) {
   if (!rootId || rootId === NONE) return [];
   return categories
@@ -423,6 +428,13 @@ export default function TransactionsClient() {
   const [facetsError, setFacetsError] = useState<string | null>(null);
   const [facetsRetry, setFacetsRetry] = useState(0);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [merchantNameQuery, setMerchantNameQuery] = useState("");
+  const visibleFilterMerchants = useMemo(() => {
+    const query = merchantSearchKey(merchantNameQuery);
+    return facets.merchants.filter((merchant) =>
+      !query || merchantSearchKey(merchant.name).includes(query) || merchant.id === draftFilters.merchantId
+    );
+  }, [facets.merchants, merchantNameQuery, draftFilters.merchantId]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
   const [rows, setRows] = useState<TransactionRow[]>([]);
@@ -1229,13 +1241,25 @@ async function saveEdit(row: TransactionRow) {
             {facets.categories.map((category) => <option key={category.id} value={category.id}>{category.name}{category.lifecycle === "archived" ? " · archivada" : ""}</option>)}
           </select>
         </label>
-        <label>
-          <span>Comercio</span>
-          <select value={draftFilters.merchantId} onChange={(event) => updateFilter("merchantId", event.target.value)}>
-            <option value="">Todos</option>
-            {facets.merchants.map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}{merchant.lifecycle === "archived" ? " · archivado" : ""}</option>)}
-          </select>
-        </label>
+        <div className={styles.merchantFilter}>
+          <label>
+            <span>Buscar comercio</span>
+            <input
+              type="search"
+              aria-label="Buscar comercio por nombre"
+              placeholder="Escribe parte del nombre"
+              value={merchantNameQuery}
+              onChange={(event) => setMerchantNameQuery(event.target.value.slice(0, 120))}
+            />
+          </label>
+          <label>
+            <span>Comercio</span>
+            <select data-testid="merchant-filter" value={draftFilters.merchantId} onChange={(event) => updateFilter("merchantId", event.target.value)}>
+              <option value="">Todos</option>
+              {visibleFilterMerchants.map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}{merchant.lifecycle === "archived" ? " · archivado" : ""}</option>)}
+            </select>
+          </label>
+        </div>
         <label>
           <span>Tipo</span>
           <select value={draftFilters.kind} onChange={(event) => updateFilter("kind", event.target.value)}>
