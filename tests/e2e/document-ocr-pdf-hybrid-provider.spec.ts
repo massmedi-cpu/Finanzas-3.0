@@ -13,12 +13,20 @@ function hybridPdf(
   selectableText = footer,
   headerText: string | null = null,
   lateralText: string | null = null,
+  rasterHeading: string | null = null,
 ): Uint8Array {
   const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, 1000, 220);
   context.fillStyle = "#000000";
+  // Optional visual invoice heading for the true Tesseract integration case:
+  // a more realistic two-line raster, while the selectable PDF layer remains
+  // deliberately misleading and non-payable.
+  if (rasterHeading) {
+    context.font = "bold 32px Arial";
+    context.fillText(rasterHeading, 45, 67);
+  }
   context.font = "bold 62px Arial";
   context.fillText("TOTAL 23,45", 45, 145);
   const jpeg = canvas.toBuffer("image/jpeg");
@@ -75,14 +83,19 @@ function visualResult(confidence: number): Awaited<ReturnType<DocumentOcrProvide
 
 test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable total beneath a page subtotal overlay", async () => {
   test.setTimeout(120_000);
-  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3));
+  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3), null, null, "FACTURA ESCANEADA");
   const before = Buffer.from(bytes);
   const result = await runDocumentOcr({
     documentId: "93000000-0000-4000-8000-000000000325",
     bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
     provider: new PdfTextOcrProvider(),
   });
-  expect(result.source).toBe("pdf_ocr");
+  // Keep real PDF.js + Spanish Tesseract mandatory; on a failed run, report
+  // only synthetic extraction evidence (never real account/document data).
+  expect(result.source, JSON.stringify({
+    source: result.source, warnings: result.warnings,
+    extractor: result.extractor, plainText: result.plainText.slice(0, 180),
+  })).toBe("pdf_ocr");
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
   expect(result.plainText).toMatch(/23[,.]45/);
   expect(interpretDocumentOcrFinancially(result).totalCents.value).toBe(2345);
