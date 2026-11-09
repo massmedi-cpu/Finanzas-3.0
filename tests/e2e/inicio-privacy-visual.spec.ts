@@ -283,6 +283,16 @@ test("Ocultar importes oculta también el signo visual del balance", async ({ pa
 
 test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y Saldo", async ({ page }) => {
   await mockInicio(page);
+  // Earlier bank balances can only be charted when the independent source
+  // confirms its historical start. Keep the global legacy fixture unknown.
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-06-01",
+      latestMovementDate: "2026-09-11",
+      sync: null,
+    });
+  });
   await page.goto("/");
 
   await page.getByRole("button", { name: "Ocultar importes" }).click();
