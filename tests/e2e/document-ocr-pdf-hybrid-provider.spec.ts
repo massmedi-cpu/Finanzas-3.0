@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { createCanvas } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
-import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
 import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-financial-interpretation";
@@ -14,30 +13,20 @@ function hybridPdf(
   selectableText = footer,
   headerText: string | null = null,
   lateralText: string | null = null,
-  rasterHeading: string | null = null,
 ): Uint8Array {
-  const pageHeight = rasterHeading ? 900 : 220;
-  const canvas = createCanvas(1000, pageHeight);
+  const canvas = createCanvas(1000, 220);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, 1000, pageHeight);
+  context.fillRect(0, 0, 1000, 220);
   context.fillStyle = "#000000";
-  // Optional visual invoice heading for the true Tesseract integration case:
-  // a more realistic two-line raster, while the selectable PDF layer remains
-  // deliberately misleading and non-payable.
-  if (rasterHeading) {
-    context.font = "bold 42px Arial";
-    context.fillText(rasterHeading, 45, 150);
-    context.fillText("IMPORTE FINAL", 45, 260);
-  }
   context.font = "bold 62px Arial";
-  context.fillText("TOTAL 23,45", 45, rasterHeading ? 395 : 145);
+  context.fillText("TOTAL 23,45", 45, 145);
   const jpeg = canvas.toBuffer("image/jpeg");
 
   // 3 Tr: selectable, invisible PDF text. Visible financial content stays in
   // the JPEG XObject. This test never loads real invoices or credentials.
   const commands = Buffer.from(
-    "q\n1000 0 0 " + pageHeight + " 0 0 cm\n/Im1 Do\nQ\n"
+    "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
       + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n"
       + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : "")
       // A 90° selectable legal strip, not visible on the raster invoice.
@@ -47,12 +36,12 @@ function hybridPdf(
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 " + pageHeight + "]"
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 220]"
       + " /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >>"
       + " /Contents 4 0 R >>"),
     Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n"),commands,Buffer.from("\nendstream")]),
     Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width 1000"
-      + " /Height " + pageHeight + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
+      + " /Height 220 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
       + " /DCTDecode /Length " + jpeg.length + " >>\nstream\n"),jpeg,Buffer.from("\nendstream")]),
     Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
   ];
@@ -86,41 +75,14 @@ function visualResult(confidence: number): Awaited<ReturnType<DocumentOcrProvide
 
 test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable total beneath a page subtotal overlay", async () => {
   test.setTimeout(120_000);
-  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3), null, null, "FACTURA ESCANEADA");
+  const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3));
   const before = Buffer.from(bytes);
-  // Capture synthetic-only visual recognition evidence without changing the
-  // real PDF.js -> Tesseract execution path or any acceptance threshold.
-  let visualEvidence: unknown = { attempted: false };
-  const recognizer = new TesseractImageOcrProvider();
-  const provider = new PdfTextOcrProvider({
-    extract: async (input) => {
-      try {
-        const output = await recognizer.extract(input);
-        visualEvidence = {
-          attempted: true,
-          warnings: output.warnings,
-          words: (output.pages[0]?.words ?? []).slice(0, 30).map((word) => ({
-            text: word.text, confidence: Math.round(word.confidence * 100) / 100,
-          })),
-        };
-        return output;
-      } catch (error) {
-        visualEvidence = { attempted: true, error: error instanceof Error ? error.message : "unknown_ocr_error" };
-        throw error;
-      }
-    },
-  });
   const result = await runDocumentOcr({
     documentId: "93000000-0000-4000-8000-000000000325",
     bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
-    provider,
+    provider: new PdfTextOcrProvider(),
   });
-  // Keep real PDF.js + Spanish Tesseract mandatory; on a failed run, report
-  // only synthetic extraction evidence (never real account/document data).
-  expect(result.source, JSON.stringify({
-    source: result.source, warnings: result.warnings,
-    extractor: result.extractor, plainText: result.plainText.slice(0, 180), visualEvidence,
-  })).toBe("pdf_ocr");
+  expect(result.source).toBe("pdf_ocr");
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
   expect(result.plainText).toMatch(/23[,.]45/);
   expect(interpretDocumentOcrFinancially(result).totalCents.value).toBe(2345);

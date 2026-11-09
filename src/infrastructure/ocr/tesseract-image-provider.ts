@@ -213,16 +213,6 @@ function wordStats(words: OcrWord[]) {
   };
 }
 
-// Tesseract auto-orientation can sometimes select four high-confidence
-// isolated digits over a lower-scored, correctly oriented invoice total.
-// This is only an evidence preference; it never reconstructs an amount from
-// separated digits, and the PDF recognizer still validates the actual total.
-function visiblePayableTotalEvidence(words: OcrWord[]) {
-  const text = words.map((word) => word.text).join(" ")
-    .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-  return /\b(?:total|importe total|a pagar)\s*[:-]?\s*(?:€\s*)?\d+[,.]\d{2}\b/.test(text);
-}
-
 function candidateScore(words: OcrWord[]) {
   const stats = wordStats(words);
   return stats.averageConfidence * 100 + Math.min(stats.chars, 500) * 0.12 + Math.min(words.length, 80) * 0.35;
@@ -656,39 +646,10 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
         try {
           const initial = await recognizeCandidate(worker, imageBuffer, metadata, 0, true);
           let best = initial;
-          // PDF.js page raster filenames are generated internally by our
-          // provider. Only poor real PDF OCR is granted an extra unrotated
-          // and sparse-text attempt; ordinary photo OCR is unchanged.
-          const fromPdfPage = /\.pdf\.page-\d+\.png$/i.test(input.originalFileName);
-          const isBetter = (next: RecognitionCandidate, previous: RecognitionCandidate) => {
-            if (fromPdfPage) {
-              const a = visiblePayableTotalEvidence(next.words);
-              const b = visiblePayableTotalEvidence(previous.words);
-              if (a !== b) return a;
-            }
-            return next.score > previous.score;
-          };
           if (ocrNeedsRotationFallback(initial.words, metadata)) {
-            if (fromPdfPage) {
-              // Automatic orientation is not proof that the page is upright.
-              const upright = await recognizeCandidate(worker, imageBuffer, metadata, 0, false);
-              if (isBetter(upright, best)) best = upright;
-              if (!visiblePayableTotalEvidence(best.words)) {
-                try {
-                  await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT });
-                  const sparse = await recognizeCandidate(worker, imageBuffer, metadata, 0, false);
-                  if (isBetter(sparse, best)) best = sparse;
-                } catch (error) {
-                  if (error instanceof OcrTimeoutError) throw error;
-                  // Keep previous evidence when an optional OCR attempt fails.
-                } finally {
-                  await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK });
-                }
-              }
-            }
             for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
               const candidate = await recognizeCandidate(worker, imageBuffer, metadata, rotationRadians, false);
-              if (isBetter(candidate, best)) best = candidate;
+              if (candidate.score > best.score) best = candidate;
             }
           }
           return await refineBackgroundContamination(worker, imageBuffer, metadata, best);
