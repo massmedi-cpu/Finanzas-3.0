@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { periodHasObservedData } from "../src/application/data-coverage";
-import { homeBalancePlotRows, isHomeBalanceSeries as isBalanceSeries, type HomeBalanceRow as BalanceRow, type HomeBalanceSeries as BalanceSeries, type HomeBalancePlotRow as BalancePlotRow } from "../src/application/dashboard/home-balance-series";
+import { homeBalancePlotRowsWithObservedCoverage, isHomeBalanceSeries as isBalanceSeries, type HomeBalanceRow as BalanceRow, type HomeBalanceSeries as BalanceSeries, type HomeBalancePlotRow as BalancePlotRow } from "../src/application/dashboard/home-balance-series";
 import { resolveHomeBankCoverage, type HomeBankFreshness } from "../src/application/dashboard/home-bank-coverage";
 import { FinancialBarChart, monthlyTransactionsHref, type FinancialBarPoint } from "../src/design/financial-bar-chart";
 import styles from "./inicio-overview.module.css";
@@ -208,7 +208,16 @@ export default function HomeEvolution({
     };
   }, [balanceCache?.key, balanceKey, balanceRetry, dateFrom, dateTo, mode]);
 
-  const balanceRows = useMemo(() => balances ? homeBalancePlotRows(balances) : [], [balances]);
+  // The financial SQL snapshot legitimately carries the last known amount
+  // forward. The chart must NOT mistake that for an observed bank balance in
+  // later months when the imported source has no confirmed coverage.
+  const balanceRows = useMemo(() => balances
+    ? homeBalancePlotRowsWithObservedCoverage(balances, (monthStart, asOfDate) =>
+        periodHasObservedData(resolveHomeBankCoverage({
+          dateFrom: monthStart, dateTo: asOfDate,
+          freshness: sourceFreshness, activityLatestDate,
+        })))
+    : [], [balances, sourceFreshness, activityLatestDate]);
   const reconstructedBalancePoints = useMemo(
     () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
     [balanceRows],
@@ -229,7 +238,7 @@ export default function HomeEvolution({
       const reconstruction = reconstructedBalancePoints > 0
         ? ` ${reconstructedBalancePoints} de ${balanceAvailablePoints} puntos disponibles incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos.`
         : " Los puntos disponibles usan la serie bancaria canónica.";
-      return `Cobertura parcial: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible. Los ${balanceMissingPoints} restantes aparecen como «Sin dato», no como 0 €.${reconstruction} No se reconstruye desde Cash Flow.`;
+      return `Cobertura parcial: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible. Los ${balanceMissingPoints} restantes aparecen como «Sin dato», no como 0 €. No repetimos saldos anteriores en meses sin cobertura bancaria confirmada.${reconstruction} No se reconstruye desde Cash Flow.`;
     }
     if (reconstructedBalancePoints > 0) {
       return `Cobertura mixta: ${reconstructedBalancePoints} de ${balanceRows.length} puntos incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos. No se reconstruye desde Cash Flow.`;
@@ -299,7 +308,9 @@ export default function HomeEvolution({
         </div>
       ) : null}
       {mode === "balance" && balances !== null && !balanceLoading && !balanceError && !balanceHasAccounts ? (
-        <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
+        <p className={styles.empty} role="status">{balances.rows.some((row) => row.accounts > 0)
+          ? "No hay saldos con cobertura bancaria confirmada para este periodo. No se muestra el último saldo como si fuera un dato nuevo."
+          : "No hay saldos bancarios disponibles para este periodo."}</p>
       ) : null}
       {mode === "balance" && !balanceLoading && !balanceError && balanceHasAccounts ? (
         <>
