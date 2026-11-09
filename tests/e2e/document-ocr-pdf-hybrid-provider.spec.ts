@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { createCanvas } from "@napi-rs/canvas";
 import { PdfTextOcrProvider } from "../../src/infrastructure/ocr/pdf-text-provider";
+import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 import type { DocumentOcrProvider } from "../../src/application/document-ocr-service";
 import { runDocumentOcr } from "../../src/application/document-ocr-service";
 import { interpretDocumentOcrFinancially } from "../../src/domain/document-ocr-financial-interpretation";
@@ -85,16 +86,38 @@ test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable tot
   test.setTimeout(120_000);
   const bytes = hybridPdf("TOTAL PAGINA 12,10 EUR. " + footer.repeat(3), null, null, "FACTURA ESCANEADA");
   const before = Buffer.from(bytes);
+  // Capture synthetic-only visual recognition evidence without changing the
+  // real PDF.js -> Tesseract execution path or any acceptance threshold.
+  let visualEvidence: unknown = { attempted: false };
+  const recognizer = new TesseractImageOcrProvider();
+  const provider = new PdfTextOcrProvider({
+    extract: async (input) => {
+      try {
+        const output = await recognizer.extract(input);
+        visualEvidence = {
+          attempted: true,
+          warnings: output.warnings,
+          words: (output.pages[0]?.words ?? []).slice(0, 30).map((word) => ({
+            text: word.text, confidence: Math.round(word.confidence * 100) / 100,
+          })),
+        };
+        return output;
+      } catch (error) {
+        visualEvidence = { attempted: true, error: error instanceof Error ? error.message : "unknown_ocr_error" };
+        throw error;
+      }
+    },
+  });
   const result = await runDocumentOcr({
     documentId: "93000000-0000-4000-8000-000000000325",
     bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
-    provider: new PdfTextOcrProvider(),
+    provider,
   });
   // Keep real PDF.js + Spanish Tesseract mandatory; on a failed run, report
   // only synthetic extraction evidence (never real account/document data).
   expect(result.source, JSON.stringify({
     source: result.source, warnings: result.warnings,
-    extractor: result.extractor, plainText: result.plainText.slice(0, 180),
+    extractor: result.extractor, plainText: result.plainText.slice(0, 180), visualEvidence,
   })).toBe("pdf_ocr");
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
   expect(result.plainText).toMatch(/23[,.]45/);
