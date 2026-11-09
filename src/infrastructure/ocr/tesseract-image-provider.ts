@@ -219,8 +219,8 @@ function wordStats(words: OcrWord[]) {
 // separated digits, and the PDF recognizer still validates the actual total.
 function visiblePayableTotalEvidence(words: OcrWord[]) {
   const text = words.map((word) => word.text).join(" ")
-    .normalize("NFD").replace(/\\p{Diacritic}/gu, "").toLowerCase();
-  return /\\b(?:total|importe total|a pagar)\\s*[:\\-]?\\s*(?:€\\s*)?\\d+[,.]\\d{2}\\b/.test(text);
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+  return /\b(?:total|importe total|a pagar)\s*[:-]?\s*(?:€\s*)?\d+[,.]\d{2}\b/.test(text);
 }
 
 function candidateScore(words: OcrWord[]) {
@@ -659,7 +659,7 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
           // PDF.js page raster filenames are generated internally by our
           // provider. Only poor real PDF OCR is granted an extra unrotated
           // and sparse-text attempt; ordinary photo OCR is unchanged.
-          const fromPdfPage = /\\.pdf\\.page-\\d+\\.png$/i.test(input.originalFileName);
+          const fromPdfPage = /\.pdf\.page-\d+\.png$/i.test(input.originalFileName);
           const isBetter = (next: RecognitionCandidate, previous: RecognitionCandidate) => {
             if (fromPdfPage) {
               const a = visiblePayableTotalEvidence(next.words);
