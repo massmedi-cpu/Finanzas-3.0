@@ -686,7 +686,8 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
   await expect(page.getByLabel("Lectura rápida")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
   await expect(page.getByText(/\+3,8 pp vs\. periodo anterior/)).toBeVisible();
-  await expect(page.getByText(/Totales reconciliados al céntimo/)).toBeVisible();
+  await expect(page.getByText("✓ Sumas internas comprobadas al céntimo")).toBeVisible();
+  await expect(page.getByText(/Totales reconciliados al céntimo/)).toHaveCount(0);
   const budget = page.locator('section[aria-labelledby="budget-heading"]');
   await expect(budget).toContainText("Referencia automática · media de 3 meses");
   const composition = page.locator('section[aria-labelledby="distribution-heading"]');
@@ -1145,4 +1146,16 @@ test("REC-COV-010 · volver a todas las cuentas no hereda la cuenta de la URL or
   await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
   await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m(?!.*accountId)/);
   await expect.poll(() => freshnessScopes.slice(requestsBeforeSwitch).includes(null)).toBe(true);
+});
+
+test("REC-UI-546 · Análisis no anuncia comprobación al céntimo si el cuadre interno no está verificado", async ({ page }) => {
+  const base = mockSnapshot();
+  const snapshot: AnalysisSnapshot = {
+    ...base,
+    quality: { ...base.quality, reconciled: false },
+  };
+  await loadMockAnalysis(page, snapshot);
+  await expect(page.getByText("Comprobación de sumas pendiente")).toBeVisible();
+  await expect(page.getByText("✓ Sumas internas comprobadas al céntimo")).toHaveCount(0);
+  await expect(page.getByText("Conciliación", { exact: true })).toHaveCount(0);
 });

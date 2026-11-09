@@ -854,7 +854,7 @@ export default function AnalysisClient({
           </section>
 
           <footer className={styles.qualityNote}>
-            <span>{snapshot.quality.reconciled ? "✓ Totales reconciliados al céntimo" : "Comprobación pendiente"}</span>
+            <span>{snapshot.quality.reconciled ? "✓ Sumas internas comprobadas al céntimo" : "Comprobación de sumas pendiente"}</span>
             <span>Fuente bancaria de solo lectura</span>
             <span>Anomalías deterministas, sin conclusiones generativas</span>
           </footer>
