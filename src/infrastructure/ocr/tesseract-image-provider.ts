@@ -215,7 +215,21 @@ function wordStats(words: OcrWord[]) {
 
 function candidateScore(words: OcrWord[]) {
   const stats = wordStats(words);
-  return stats.averageConfidence * 100 + Math.min(stats.chars, 500) * 0.12 + Math.min(words.length, 80) * 0.35;
+  const text = words.map((word) => word.text).join(" ")
+    .normalize("NFD").replace(/\\p{Diacritic}/gu, "").toLowerCase();
+  // Orientation fallback must not prefer four isolated high-confidence digits
+  // over an actual TOTAL label and monetary amount in the correctly oriented
+  // invoice. Tesseract confidence alone measures glyphs, not financial utility.
+  const financialLabel = /\\b(?:total|importe|pagar|factura|iva|igic|eur)\\b/.test(text);
+  const monetaryAmount = /\\d+[,.]\\d{2}\\b/.test(text);
+  const isolatedDigits = words.length > 0 && words.length <= 4
+    && words.every((word) => /^\\d$/.test(word.text.trim()));
+  return stats.averageConfidence * 100
+    + Math.min(stats.chars, 500) * 0.12
+    + Math.min(words.length, 80) * 0.35
+    + (financialLabel ? 18 : 0)
+    + (monetaryAmount ? 10 : 0)
+    - (isolatedDigits ? 30 : 0);
 }
 
 function textWeight(word: OcrWord) {
