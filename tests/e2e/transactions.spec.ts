@@ -723,6 +723,58 @@ test("REC-TXN-042 · revisión POST sin relectura no anuncia duplicado confirmad
   expect(writes).toBe(1);
 });
 
+for (const scenario of [
+  { method: "PATCH", label: "edición", success: "Movimiento actualizado" },
+  { method: "POST", label: "revisión", success: "Duplicado confirmado y auditado." },
+] as const) {
+  test(`REC-TXN-016 · ${scenario.label} no anuncia éxito mientras la lectura de confirmación está pendiente`, async ({ page }) => {
+    await mockTransactionApi(page);
+    let writes = 0;
+    let beginRead!: () => void;
+    let finishRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => { beginRead = resolve; });
+    const delayedRead = new Promise<void>((resolve) => { finishRead = resolve; });
+
+    await page.route("**/api/transactions**", async (route) => {
+      const request = route.request();
+      const mode = new URL(request.url()).searchParams.get("mode");
+      if (request.method() === scenario.method) {
+        writes += 1;
+        return route.fallback();
+      }
+      if (writes > 0 && request.method() === "GET" && mode === null) {
+        beginRead();
+        await delayedRead;
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/transactions");
+    await expect(page.getByTestId(`edit-${firstId}`)).toBeVisible();
+    if (scenario.method === "PATCH") {
+      await page.getByTestId(`edit-${firstId}`).click();
+      await page.getByTestId("edit-concept").fill("Compra comprobada tras lectura");
+      await page.getByTestId("save-edit").click();
+    } else {
+      await page.getByTestId(`review-duplicate-${firstId}`).click();
+      await page.getByTestId("duplicate-confirm").click();
+    }
+
+    await readStarted;
+    try {
+      // Give React time to commit while the server read is deliberately held.
+      // The old implementation flashed a success notification during this gap.
+      await page.waitForTimeout(200);
+      await expect(page.getByText(scenario.success, { exact: false })).toHaveCount(0);
+      expect(writes).toBe(1);
+    } finally {
+      finishRead();
+    }
+    await expect(page.getByText(scenario.success, { exact: false })).toBeVisible();
+    expect(writes).toBe(1);
+  });
+}
+
 test("REC-TXN-004 · PATCH con 503 bloquea escrituras hasta nueva lectura comprobable", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   let reads = 0;
