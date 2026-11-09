@@ -1155,7 +1155,9 @@ test("REC-UI-546 · Análisis no anuncia comprobación al céntimo si el cuadre 
     quality: { ...base.quality, reconciled: false },
   };
   await loadMockAnalysis(page, snapshot);
-  await expect(page.getByText("Comprobación de sumas pendiente")).toBeVisible();
+  // A snapshot that declares unverified arithmetic is invalid under the API
+  // contract. The UI fails closed instead of rendering an untrusted footer.
+  await expect(page.getByText(/No se pudo actualizar el análisis/)).toBeVisible();
   await expect(page.getByText("✓ Sumas internas comprobadas al céntimo")).toHaveCount(0);
   await expect(page.getByText("Conciliación", { exact: true })).toHaveCount(0);
 });

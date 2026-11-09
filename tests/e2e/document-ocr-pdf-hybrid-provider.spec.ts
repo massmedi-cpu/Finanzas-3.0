@@ -16,26 +16,28 @@ function hybridPdf(
   lateralText: string | null = null,
   rasterHeading: string | null = null,
 ): Uint8Array {
-  const canvas = createCanvas(1000, 220);
+  const pageHeight = rasterHeading ? 900 : 220;
+  const canvas = createCanvas(1000, pageHeight);
   const context = canvas.getContext("2d");
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, 1000, 220);
+  context.fillRect(0, 0, 1000, pageHeight);
   context.fillStyle = "#000000";
   // Optional visual invoice heading for the true Tesseract integration case:
   // a more realistic two-line raster, while the selectable PDF layer remains
   // deliberately misleading and non-payable.
   if (rasterHeading) {
-    context.font = "bold 32px Arial";
-    context.fillText(rasterHeading, 45, 67);
+    context.font = "bold 42px Arial";
+    context.fillText(rasterHeading, 45, 150);
+    context.fillText("IMPORTE FINAL", 45, 260);
   }
   context.font = "bold 62px Arial";
-  context.fillText("TOTAL 23,45", 45, 145);
+  context.fillText("TOTAL 23,45", 45, rasterHeading ? 395 : 145);
   const jpeg = canvas.toBuffer("image/jpeg");
 
   // 3 Tr: selectable, invisible PDF text. Visible financial content stays in
   // the JPEG XObject. This test never loads real invoices or credentials.
   const commands = Buffer.from(
-    "q\n1000 0 0 220 0 0 cm\n/Im1 Do\nQ\n"
+    "q\n1000 0 0 " + pageHeight + " 0 0 cm\n/Im1 Do\nQ\n"
       + "BT\n/F1 8 Tf\n3 Tr\n15 20 Td\n(" + selectableText + ") Tj\nET\n"
       + (headerText ? "BT\n/F1 8 Tf\n3 Tr\n15 195 Td\n(" + headerText + ") Tj\nET\n" : "")
       // A 90° selectable legal strip, not visible on the raster invoice.
@@ -45,12 +47,12 @@ function hybridPdf(
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 220]"
+    Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 1000 " + pageHeight + "]"
       + " /Resources << /XObject << /Im1 5 0 R >> /Font << /F1 6 0 R >> >>"
       + " /Contents 4 0 R >>"),
     Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n"),commands,Buffer.from("\nendstream")]),
     Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width 1000"
-      + " /Height 220 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
+      + " /Height " + pageHeight + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter"
       + " /DCTDecode /Length " + jpeg.length + " >>\nstream\n"),jpeg,Buffer.from("\nendstream")]),
     Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"),
   ];
