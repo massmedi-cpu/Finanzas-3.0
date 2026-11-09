@@ -82,7 +82,7 @@ test("REC-OCR-325 · actual PDF.js and Spanish Tesseract recover the payable tot
     bytes, mimeType: "application/pdf", originalFileName: "synthetic-page-subtotal-overlay.pdf",
     provider: new PdfTextOcrProvider(),
   });
-  expect(result.source).toBe("pdf_ocr");
+  expect(result.source, `REC-OCR-325 synthetic diagnostic: ${JSON.stringify({ warnings: result.warnings, extractor: result.extractor, plainText: result.plainText, totalCents: interpretDocumentOcrFinancially(result).totalCents.value })}`).toBe("pdf_ocr");
   expect(result.warnings).toContain("pdf_page_sparse_native_recovered:1");
   expect(result.plainText).toMatch(/23[,.]45/);
   expect(interpretDocumentOcrFinancially(result).totalCents.value).toBe(2345);
