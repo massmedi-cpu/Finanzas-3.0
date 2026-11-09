@@ -92,3 +92,26 @@ export function homeBalancePlotRows(series: HomeBalanceSeries): HomeBalancePlotR
   }
   return result;
 }
+
+/**
+ * A bank balance carried forward by the SQL snapshot is not evidence that a
+ * later month was observed. Keep the original bank result untouched, but hide
+ * unobserved points as missing (never as an invented zero or a flat balance).
+ * A partial month with actual banking evidence can remain visible; the caller
+ * determines observation from the independent source-freshness contract.
+ */
+export function homeBalancePlotRowsWithObservedCoverage(
+  series: HomeBalanceSeries,
+  observed: (monthStart: string, asOfDate: string) => boolean,
+): HomeBalancePlotRow[] {
+  return homeBalancePlotRows(series).map((row) => {
+    if (row.accounts === 0 || observed(row.monthStart, row.asOfDate)) return row;
+    return {
+      ...row,
+      balanceCents: null,
+      accounts: 0,
+      explicitBalanceAccounts: 0,
+      reconstructedBalanceAccounts: 0,
+    };
+  });
+}
