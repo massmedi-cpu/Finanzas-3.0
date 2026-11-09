@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { homeBalancePlotRows, isHomeBalanceSeries } from "../../src/application/dashboard/home-balance-series.ts";
+import { homeBalancePlotRows, homeBalancePlotRowsWithObservedCoverage, isHomeBalanceSeries } from "../../src/application/dashboard/home-balance-series.ts";
 
 function series() {
   return {
@@ -88,3 +88,22 @@ test("the contract still rejects wrong scope, duplicate months, unsafe money and
   for (const input of invalid) assert.equal(isHomeBalanceSeries(input, input.dateFrom, input.dateTo), false);
   assert.equal(isHomeBalanceSeries(series(), "2026-07-32", "2026-09-16"), false);
 });
+
+test("REC-HOME-BAL-017 · a carried-forward monthly balance must not be shown after source coverage ends", () => {
+  const input = series();
+  const unchanged = structuredClone(input);
+  const displayed = homeBalancePlotRowsWithObservedCoverage(input, (month) => month < "2026-09-01");
+  assert.deepEqual(displayed.map((row) => row.balanceCents), [0, -25000, null]);
+  assert.deepEqual(displayed.map((row) => row.accounts), [1, 1, 0]);
+  assert.equal(displayed[2].explicitBalanceAccounts, 0);
+  assert.equal(displayed[2].reconstructedBalanceAccounts, 0);
+  assert.deepEqual(input, unchanged, "never rewrite source balances or their evidence");
+});
+
+test("REC-HOME-BAL-017 · unavailable freshness is not a fabricated zero bank history", () => {
+  const displayed = homeBalancePlotRowsWithObservedCoverage(series(), () => false);
+  assert.equal(displayed.length, 3);
+  assert.ok(displayed.every((row) => row.balanceCents === null && row.accounts === 0));
+  assert.ok(displayed.every((row) => row.explicitBalanceAccounts === 0 && row.reconstructedBalanceAccounts === 0));
+});
+
