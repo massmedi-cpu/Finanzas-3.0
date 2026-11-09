@@ -63,9 +63,14 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
   const [persistenceUnavailable, setPersistenceUnavailable] = useState(false);
   const [automaticSyncWarning, setAutomaticSyncWarning] = useState<string | null>(null);
   const syncTriggered = useRef(false);
+  // A user enabling the preference must not start a bank import in that same visit.
+  // Only the value already stored when the provider mounts is eligible at startup.
+  const syncEnabledAtSessionOpen = useRef(false);
 
   useEffect(() => {
-    setPreferences(readStoredPreferences());
+    const initiallyStored = readStoredPreferences();
+    syncEnabledAtSessionOpen.current = initiallyStored.syncOnOpen;
+    setPreferences(initiallyStored);
     setReady(true);
   }, []);
 
@@ -101,7 +106,7 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
   }, [preferences.privacyOnBlur, ready]);
 
   useEffect(() => {
-    if (!ready || !preferences.syncOnOpen || syncTriggered.current) return;
+    if (!ready || !syncEnabledAtSessionOpen.current || !preferences.syncOnOpen || syncTriggered.current) return;
     // Sin marcador de sesión fiable, una recarga podría repetir una importación
     // cuyo resultado anterior todavía no se haya podido verificar.
     try {

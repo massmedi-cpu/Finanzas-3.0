@@ -78,3 +78,40 @@ test("FA-STORE-003 · failed automatic preflight does not claim a confirmed sync
   expect(imports).toBe(0);
   await expect(page.getByText("Última sincronización automática de esta sesión:", { exact: false })).toHaveCount(0);
 });
+
+test("FA-STORE-004 · enabling future automatic sync never imports immediately", async ({ page }) => {
+  let preflights = 0;
+  let imports = 0;
+  await page.route("**/api/source/google/**", async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (route.request().method() === "POST" && pathname.endsWith("/preflight")) preflights += 1;
+    if (route.request().method() === "POST" && pathname.endsWith("/sync")) imports += 1;
+    await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"isolated_test"}' });
+  });
+
+  await page.goto("/configuration/preferences");
+  const toggle = page.getByRole("checkbox", { name: "Intentar sincronizar una vez por sesión" });
+  await expect(toggle).not.toBeChecked();
+  await toggle.check();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByRole("status")).toContainText("próximas aperturas");
+
+  // Allow effects and potential network requests time to run before declaring zero writes.
+  await page.waitForTimeout(350);
+  expect(preflights, "Enabling a next-open preference must not start a source preflight now").toBe(0);
+  expect(imports, "Enabling a next-open preference must never start a bank import now").toBe(0);
+
+  await expect.poll(async () => page.evaluate((key) => {
+    const value = window.localStorage.getItem(key);
+    return value ? JSON.parse(value).syncOnOpen : null;
+  }, PREFERENCES_KEY)).toBe(true);
+
+  // Reopening with an already-enabled preference may preflight once, but a
+  // failed preflight must never issue POST /sync or claim a confirmed import.
+  await page.reload();
+  await expect(page.getByRole("alert").filter({
+    hasText: "No se ha podido confirmar la actualización automática",
+  })).toBeVisible();
+  expect(preflights).toBe(1);
+  expect(imports).toBe(0);
+});

@@ -56,7 +56,7 @@ export default function PreferencesClient() {
         <section className="config-panel">
           <p className="panel-kicker">Sincronización</p>
           <h2>Fuente bancaria al abrir</h2>
-          <label><input type="checkbox" checked={syncOnOpen} onChange={(event) => change(() => setSyncOnOpen(event.currentTarget.checked), event.currentTarget.checked ? "Sincronización automática al abrir activada." : "Sincronización automática al abrir desactivada.")} /> Intentar sincronizar una vez por sesión</label>
+          <label><input type="checkbox" checked={syncOnOpen} onChange={(event) => change(() => setSyncOnOpen(event.currentTarget.checked), event.currentTarget.checked ? "Sincronización automática preparada para próximas aperturas; no se ejecuta ahora." : "Sincronización automática al abrir desactivada.")} /> Intentar sincronizar una vez por sesión</label>
           <p>Actualiza los movimientos desde Google sin modificar el archivo original.</p>
           {lastAutomaticSyncAt ? <small>Última sincronización automática de esta sesión: {new Date(lastAutomaticSyncAt).toLocaleString("es-ES")}</small> : null}
         </section>
