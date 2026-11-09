@@ -51,6 +51,8 @@ test("REC-UI-624 · diagnóstico vuelve a Fuente bancaria por teclado y tacto en
       const back = page.getByRole("link", { name: "Volver a Fuente bancaria" });
       await expect(back).toHaveAttribute("href", "/configuration/source");
       await expect(back).toBeVisible();
+      // Never promise Drive grants are read-only: legacy sharing may grant write.
+      await expect(page.getByText("Financial App lee Google Sheets sin editar el archivo original.")).toBeVisible();
 
       // Keyboard activation covers focusable navigation, even in an API outage.
       await back.focus();

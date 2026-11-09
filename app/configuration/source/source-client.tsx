@@ -524,7 +524,7 @@ export default function SourceClient() {
               <div><p className="panel-kicker">GARANTÍAS</p><h2>Cómo protegemos la importación</h2></div>
             </div>
             <ul className={styles.guarantees}>
-              <li>Google solo concede permisos de lectura.</li>
+              <li>Financial App lee Google Sheets sin editar el archivo original.</li>
               <li>La fuente bancaria original no se modifica.</li>
               <li>Se comprueba la cuenta de Google autorizada antes de sincronizar.</li>
               <li>La primera importación se revisa antes de guardar datos.</li>
