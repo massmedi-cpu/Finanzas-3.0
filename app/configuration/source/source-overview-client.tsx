@@ -156,7 +156,7 @@ export default function SourceOverviewClient() {
       }
 
       setGoogle(googleResponse.ok ? googlePayload : null);
-      setRuntime(runtimePayload);
+      setRuntime(runtimeResponse.ok ? runtimePayload : null);
       setSyncStatus(syncPayload);
       setSyncStateVerified(syncValid);
 
@@ -193,7 +193,7 @@ export default function SourceOverviewClient() {
 
   const sourceVerified = google !== null && !loading;
   const connected = Boolean(google?.configured && google.connection?.connected);
-  const runtimeReady = runtime?.compatible === true;
+  const runtimeReady = runtime?.status === "ok" && runtime?.compatible === true;
   const firstImport = connected && syncStateVerified && syncStatus.cursors.length === 0;
   const run = syncStatus.run;
   const incidents = useMemo(() => incidentSummary(run), [run]);

@@ -879,3 +879,32 @@ test("REC-SYNC-356 · the UI and POST must reject older gateways without read-on
   expect(route.indexOf('assertSourceSyncRuntimeCapabilities(capabilities)'))
     .toBeLessThan(route.indexOf('await runtime.synchronization.synchronize(snapshot)'));
 });
+
+
+for (const sourcePage of ["/configuration/source", "/configuration/source/diagnostics"]) {
+  for (const badRuntime of [
+    { httpStatus: 503, runtimeStatus: "ok" },
+    { httpStatus: 200, runtimeStatus: "failed" },
+  ] as const) {
+    test(`REC-SYNC-626 · ${sourcePage} bloquea acciones cuando runtime ${badRuntime.httpStatus}/${badRuntime.runtimeStatus} finge compatible`, async ({ page }) => {
+      // Fully synthetic responses: never touch bank data or issue an import POST.
+      const observed = await mockConfirmedSource(page);
+      await page.route("**/api/health/source-runtime", (route) => route.fulfill({
+        status: badRuntime.httpStatus,
+        json: { status: badRuntime.runtimeStatus, compatible: true },
+      }));
+      await page.goto(sourcePage);
+
+      if (sourcePage.endsWith("/diagnostics")) {
+        await expect(page.getByRole("button", { name: "Validar fuente antes de importar" })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toHaveCount(0);
+      } else {
+        await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
+        await expect(page.getByRole("button", { name: "Comprobar sin importar" })).toHaveCount(0);
+      }
+      await page.getByRole("button", { name: "Comprobar estado" }).click();
+      expect(observed.syncBodies).toHaveLength(0);
+      expect(observed.sourceChecks()).toBe(0);
+    });
+  }
+}

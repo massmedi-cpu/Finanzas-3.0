@@ -237,7 +237,7 @@ export default function SourceClient() {
       }
 
       setGoogle(googleResponse.ok ? googlePayload : null);
-      setRuntime(runtimePayload);
+      setRuntime(runtimeResponse.ok ? runtimePayload : null);
       setSyncStatus(syncPayload);
       setSyncStateVerified(syncValid);
 
@@ -297,7 +297,7 @@ export default function SourceClient() {
   const connected = Boolean(google?.configured && google.connection?.connected);
   const serviceAccountMode = google?.authMode === "service-account";
   const managedConnection = google?.connection?.managed === true;
-  const runtimeReady = runtime?.compatible === true;
+  const runtimeReady = runtime?.status === "ok" && runtime?.compatible === true;
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && syncStateVerified && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
