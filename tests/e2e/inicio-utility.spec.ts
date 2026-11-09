@@ -314,6 +314,46 @@ test("Saldo de Inicio no presenta datos vacíos antes de consultar una serie ban
 });
 
 
+test("REC-HOME-BAL-017 · Inicio no prolonga el último saldo a meses sin movimientos confirmados", async ({ page }) => {
+  await mockInicio(page);
+  // The last bank movement in the synthetic fixture is 11 September, while
+  // the viewed timeline now includes October and November without coverage.
+  await page.clock.setFixedTime(new Date("2026-11-09T12:00:00+01:00"));
+  await page.route(/\/api\/financial(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") !== "balance_series") return route.fallback();
+    const dateTo = url.searchParams.get("dateTo")!;
+    const rows = ["2026-09-01", "2026-10-01", "2026-11-01"].map((monthStart) => {
+      const end = new Date(`${monthStart}T12:00:00Z`);
+      end.setUTCMonth(end.getUTCMonth() + 1, 0);
+      const close = end.toISOString().slice(0, 10);
+      return {
+        monthStart, asOfDate: close < dateTo ? close : dateTo,
+        balanceCents: 18813781, accounts: 2,
+        explicitBalanceAccounts: 2, reconstructedBalanceAccounts: 0,
+      };
+    });
+    await json(route, {
+      dateFrom: url.searchParams.get("dateFrom"), dateTo, accountId: null, rows,
+      principles: {
+        bankSource: "read_only", balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false, getHasSideEffects: false,
+      },
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("group", { name: "Vista de evolución financiera" })
+    .getByRole("button", { name: "Saldo", exact: true }).click();
+  const chart = page.getByRole("group", { name: /Saldo bancario agregado por mes/ });
+  await expect(chart).toBeVisible();
+  // September retains the bank snapshot; October/November may be returned as
+  // carried-forward values by SQL but must render as missing, never as flat bars.
+  await expect(chart.locator('[data-series-bar="true"]')).toHaveCount(1);
+  expect(await chart.locator('[data-series-missing="true"]').count()).toBeGreaterThanOrEqual(2);
+  await expect(chart.getByText("Sin dato").first()).toBeVisible();
+  await expect(page.getByText(/No repetimos saldos anteriores en meses sin cobertura bancaria confirmada/)).toBeVisible();
+});
+
 test("REC-HOME-BAL-002 · retry clears a stale balance error before any new bank evidence", async ({ page }) => {
   await mockInicio(page);
   let reads = 0;
