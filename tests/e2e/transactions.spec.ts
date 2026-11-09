@@ -142,7 +142,10 @@ async function mockTransactionApi(
         body: JSON.stringify({
           accounts: [{ id: accountId, name: "Cuenta corriente Openbank · 3967", lifecycle: "active", sort_order: 0 }],
           categories: [{ id: categoryId, name: "Alimentación", kind: "expense", lifecycle: "active", parent_category_id: null, sort_order: 0 }],
-          merchants: [{ id: merchantId, name: "Supermercado Demo", lifecycle: "active" }],
+          merchants: [
+            { id: merchantId, name: "Supermercado Demo", lifecycle: "active" },
+            { id: "30000000-0000-4000-8000-000000000112", name: "Café Índigo", lifecycle: "active" },
+          ],
           channels: ["Tarjeta"],
           reconciliationStates: ["Sí"],
           years: [2026],
@@ -366,6 +369,34 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await expect(summary.locator("div").nth(0).getByText("1", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(1).getByText("2", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(2).getByText("0", { exact: true })).toBeVisible();
+});
+
+test("Movimientos busca comercios por nombre y conserva el ID seleccionado aunque cambie la búsqueda", async ({ page }) => {
+  await mockTransactionApi(page);
+  await page.goto("/transactions");
+
+  const search = page.getByRole("searchbox", { name: "Buscar comercio por nombre" });
+  const filter = page.getByTestId("merchant-filter");
+  await expect(filter).toBeEnabled();
+  await expect(filter.locator("option")).toHaveCount(3);
+  await search.fill("CAFE");
+  await expect(filter.locator("option")).toHaveCount(2);
+  await expect(filter.locator("option", { hasText: "Café Índigo" })).toHaveCount(1);
+  await expect(filter.locator("option", { hasText: "Supermercado Demo" })).toHaveCount(0);
+
+  const cafeMerchantId = "30000000-0000-4000-8000-000000000112";
+  await filter.selectOption(cafeMerchantId);
+  await search.fill("nombre inexistente");
+  await expect(filter).toHaveValue(cafeMerchantId);
+  await expect(filter.locator(`option[value="${cafeMerchantId}"]`)).toHaveCount(1);
+  const requestPromise = page.waitForRequest((request) =>
+    request.method() === "GET"
+      && new URL(request.url()).pathname === "/api/transactions"
+      && new URL(request.url()).searchParams.get("merchantId") === cafeMerchantId
+  );
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await requestPromise;
+  await expect(page).toHaveURL(new RegExp(`merchantId=${cafeMerchantId}`));
 });
 
 test("Movimientos filtra sin categoría por el valor efectivo", async ({ page }) => {
