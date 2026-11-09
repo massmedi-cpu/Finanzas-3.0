@@ -663,8 +663,23 @@ test("QA-14 · privacidad oculta también proporciones y signo en Saldo y Flujo 
 });
 
 
+// Balance-specific fixtures need an observed historical start. The default
+// mockInicio deliberately has no earliest date to test fail-closed coverage;
+// do not weaken that default just to satisfy the chart regressions.
+async function mockKnownHistoricalBalanceCoverage(page: Page) {
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await json(route, {
+      available: true,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-16",
+      sync: null,
+    });
+  });
+}
+
 test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas", async ({ page }) => {
   await mockInicio(page);
+  await mockKnownHistoricalBalanceCoverage(page);
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
@@ -710,6 +725,7 @@ test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas
 
 test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({ page }) => {
   await mockInicio(page);
+  await mockKnownHistoricalBalanceCoverage(page);
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
@@ -767,6 +783,7 @@ test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({
 for (const missingMonth of ["2026-07-01", "2026-08-01", "2026-09-01"]) {
   test(`REC-REL-498 · Saldo muestra como Sin dato el mes omitido ${missingMonth}`, async ({ page }) => {
     await mockInicio(page);
+  await mockKnownHistoricalBalanceCoverage(page);
     const methods: string[] = [];
     await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
       methods.push(route.request().method());
@@ -799,6 +816,7 @@ for (const missingMonth of ["2026-07-01", "2026-08-01", "2026-09-01"]) {
 
 test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
   await mockInicio(page);
+  await mockKnownHistoricalBalanceCoverage(page);
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
