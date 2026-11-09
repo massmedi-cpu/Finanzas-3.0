@@ -958,9 +958,11 @@ export default function TransactionsClient() {
     try {
       const payload = await submitTransactionWrite("PATCH", { transactionIds: ids, patch });
       const changed = payload.result.changedTransactions as number;
-      setNotice(changed > 0
+      // A receipt can precede a failed or delayed independent list read.
+      // Do not show even a transient success until the new snapshot is verified.
+      const verifiedMessage = changed > 0
         ? `${message} · ${formatInteger(changed)} modificados.`
-        : "No hay modificaciones nuevas: los valores ya estaban guardados.");
+        : "No hay modificaciones nuevas: los valores ya estaban guardados.";
       setEditingId(null);
       setEditor(null);
       setSelectedIds([]);
@@ -972,6 +974,7 @@ export default function TransactionsClient() {
         setError("La edición recibió un recibo del servidor, pero el listado no se pudo volver a verificar. Comprueba los movimientos antes de repetirla.");
         return false;
       }
+      setNotice(verifiedMessage);
       return true;
     } catch (cause) {
       const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
@@ -1045,7 +1048,9 @@ export default function TransactionsClient() {
     try {
       const payload = await submitTransactionWrite("POST", command);
       const unchanged = command.action !== "duplicate-review" && payload.result.changed === false;
-      setNotice(unchanged ? "La transferencia ya estaba en ese estado. No se han realizado cambios." : message);
+      const verifiedMessage = unchanged
+        ? "La transferencia ya estaba en ese estado. No se han realizado cambios."
+        : message;
       closeReview();
       const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
       if (focusId) pendingFocusId.current = focusId;
@@ -1053,7 +1058,9 @@ export default function TransactionsClient() {
         setNotice(null);
         setWriteUnverified(true);
         setError("La revisión recibió un recibo del servidor, pero el listado no se pudo volver a verificar. Comprueba el movimiento antes de repetirla.");
+        return;
       }
+      setNotice(verifiedMessage);
     } catch (cause) {
       const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
       if (uncertain) {
