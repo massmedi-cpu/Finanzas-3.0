@@ -412,9 +412,9 @@ export default function SourceClient() {
     <main className="configuration-shell">
       <header className="configuration-hero">
         <div>
-          <a className="back-link" href="/configuration">← Configuración</a>
+          <a className="back-link" href="/configuration/source" aria-label="Volver a Fuente bancaria">← Fuente bancaria</a>
           <p className="eyebrow">FINANCIAL APP · FUENTE BANCARIA</p>
-          <h1>Fuente bancaria</h1>
+          <h1>Diagnóstico de la fuente bancaria</h1>
           <p className="hero-copy">
             Google Drive y Google Sheets se usan exclusivamente en lectura. La fuente original nunca se modifica;
             Financial App guarda sus revisiones, trazabilidad y cambios manuales en su propia base de datos.

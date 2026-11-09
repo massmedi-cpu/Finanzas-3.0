@@ -28,3 +28,36 @@ test("FA-UI-032: Preferencias stays on one line in compact mobile navigation", a
     }
   }
 });
+
+test("REC-UI-624 · diagnóstico vuelve a Fuente bancaria por teclado y tacto en móvil", async ({ page }) => {
+  // No real bank access. The breadcrumb remains usable even if all APIs fail.
+  await page.route("**/api/**", async (route) => {
+    if (new URL(route.request().url()).pathname === "/api/build") return route.continue();
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "isolated_navigation_smoke" }),
+    });
+  });
+
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [320, 360, 390]) {
+      await page.setViewportSize({ width, height: 667 });
+      await page.goto("/configuration/source/diagnostics");
+      await expect(page.getByRole("heading", {
+        name: "Diagnóstico de la fuente bancaria", exact: true,
+      })).toBeVisible();
+      const back = page.getByRole("link", { name: "Volver a Fuente bancaria" });
+      await expect(back).toHaveAttribute("href", "/configuration/source");
+      await expect(back).toBeVisible();
+
+      // Keyboard activation covers focusable navigation, even in an API outage.
+      await back.focus();
+      await expect(back).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(/\/configuration\/source(?:\?|$)/);
+      await expect(page.getByRole("heading", { name: "Fuente bancaria", exact: true })).toBeVisible();
+    }
+  }
+});
