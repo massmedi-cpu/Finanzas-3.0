@@ -1,3 +1,5 @@
+# REC-REL-637 (10/11/2026): after the UI regression assertion fix, relay
+# one current-HEAD backup request; older queued PR events must fail closed.
 # REC-REL-635 (10/11/2026): after authorized append-only 30 inserts, request
 # a new trusted encrypted backup including 3,218 persisted source records.
 # Verify its isolated restore and exact counts before any potential publication.
