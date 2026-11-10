@@ -35,6 +35,7 @@ const cases = [
     "REC-POST-285", "REC-POST-286", "REC-POST-287",
     "REC-POST-295", "REC-POST-296", "REC-POST-334", "REC-POST-335", "REC-POST-348", "REC-POST-350", "REC-POST-351", "REC-SYNC-354", "REC-SYNC-355",
   ]],
+  ["tests/e2e/source-preview-update-policy.spec.ts", ["REC-SYNC-640"]],
   ["tests/e2e/source-date-representation-audit.spec.ts", [
     "REC-SYNC-387", "REC-SYNC-388", "REC-SYNC-389", "REC-SYNC-390",
     "REC-SYNC-391", "REC-SYNC-392", "REC-SYNC-393", "REC-SYNC-394",
