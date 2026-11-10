@@ -200,6 +200,7 @@ jobs:
           tests/e2e/source-preflight-summary.spec.ts
           tests/e2e/source-postflight-reconciliation.spec.ts
           tests/e2e/source-postflight-boundary.spec.ts
+          tests/e2e/source-coverage-overview.spec.ts
           tests/e2e/aud-e2e-split-format.spec.ts
           tests/e2e/source-date-representation-audit.spec.ts
           tests/e2e/ocr-g5-private-runner-contract.spec.ts
