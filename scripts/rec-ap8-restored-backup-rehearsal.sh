@@ -57,7 +57,7 @@ GRANT EXECUTE ON FUNCTION financial_app.prevent_private_original_rewrite() TO fi
 POST_DDL_ACL
     readiness="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 \
       -f scripts/rec-ap8-readiness-readonly.sql 2>"$private_log")" || fail post_ddl_readiness_query
-    [[ "$readiness" == 'ready|{}|6|32|32|1|1|1|0|3188|3188|0|0' ]] || fail post_ddl_readiness_blocked
+    [[ "$readiness" == 'ready|{}|6|32|32|1|1|1|0|3218|3218|0|0' ]] || fail post_ddl_readiness_blocked
     ;;
   *) fail unknown_restored_baseline ;;
 esac
