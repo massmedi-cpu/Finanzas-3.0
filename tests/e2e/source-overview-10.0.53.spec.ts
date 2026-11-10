@@ -363,7 +363,7 @@ test("REC-SYNC-239 · preflight inválido bloquea sync con histórico existente"
 test("REC-UX-500 · una ejecución fallida nunca se presenta como cambios incorporados", async ({ page }) => {
   await mockSourceOverview(page, { runStatus: "failed" });
   await page.goto("/configuration/source");
-  await expect(page.getByText("Último intento", { exact: true })).toBeVisible();
+  await expect(page.getByText("Última ejecución registrada", { exact: true })).toBeVisible();
   await expect(page.getByText("Fallida", { exact: true })).toBeVisible();
   await expect(page.getByText("Cambios confirmados en el último intento")).toBeVisible();
   await expect(page.getByText("No confirmados", { exact: true })).toBeVisible();
