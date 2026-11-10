@@ -118,7 +118,7 @@ function actionError(code: string | undefined) {
   return "No se ha podido confirmar el resultado de la actualización. Comprueba el último estado de la fuente antes de repetirla.";
 }
 
-export default function SourceOverviewClient() {
+export default function SourceOverviewClient({ previewReadOnly = false }: { previewReadOnly?: boolean }) {
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
@@ -265,7 +265,7 @@ export default function SourceOverviewClient() {
   }
 
   async function updateFromGoogle() {
-    if (!connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage) return;
+    if (previewReadOnly || !connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage) return;
     setCoverage(null);
     setCoverageError(null);
     setBusy(true);
@@ -418,8 +418,8 @@ export default function SourceOverviewClient() {
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
-                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage} onClick={() => void updateFromGoogle()}>
-                  {busy ? "Actualizando…" : "Actualizar desde Google"}
+                <button className="primary-button" type="button" disabled={previewReadOnly || !connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage} onClick={() => void updateFromGoogle()}>
+                  {previewReadOnly ? "Actualización desactivada en pruebas" : busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
               <button className="secondary-button" type="button" disabled={busy || checkingCoverage} onClick={() => void load()}>
@@ -427,6 +427,7 @@ export default function SourceOverviewClient() {
               </button>
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
+            {previewReadOnly && <p className={styles.previewNotice} role="note">Esta versión de pruebas permite comprobar los movimientos, pero no actualizarlos. La fuente bancaria y la producción permanecen protegidas.</p>}
             {preflight && <SourcePreflightReport summary={preflight} />}
             {coverageError && <p className="config-message warning" role="alert">{coverageError}</p>}
             {coverage && (
