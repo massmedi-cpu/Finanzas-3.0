@@ -5,6 +5,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { readOfficialSourcePreflight, synchronizeOfficialSource, SourceSyncClientError } from "../../../src/application/source-sync-client";
 import { hasPersistedSourceSyncReceipt, hasRecentSourceSyncEvidence, isVerifiedSourceSyncStatus, normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import type { OfficialSourcePreflightSummary } from "../../../src/application/source-preflight";
+import {
+  isConfirmedSourcePostflightReport,
+  type PublicSourcePostflightReport,
+} from "../../../src/domain/source-postflight-reconciliation";
 import { SourcePreflightReport } from "./source-preflight-report";
 import styles from "./source-overview.module.css";
 
@@ -124,9 +128,16 @@ export default function SourceOverviewClient() {
   const [error, setError] = useState<string | null>(null);
   const [preflight, setPreflight] = useState<OfficialSourcePreflightSummary | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [coverage, setCoverage] = useState<PublicSourcePostflightReport | null>(null);
+  const [checkingCoverage, setCheckingCoverage] = useState(false);
+  const [coverageError, setCoverageError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setPreflight(null);
+    // A protected administrative append does not create a normal sync receipt.
+    // Never reuse stale coverage from a previous read-only comparison.
+    setCoverage(null);
+    setCoverageError(null);
     setLoading(true);
     setError(null);
     try {
@@ -218,8 +229,45 @@ export default function SourceOverviewClient() {
     }
   }
 
+  async function verifyStoredMovements() {
+    if (!connected || busy || checkingCoverage) return;
+    setCheckingCoverage(true);
+    setCoverage(null);
+    setCoverageError(null);
+    try {
+      const response = await fetch("/api/source/google/postflight", {
+        method: "GET", cache: "no-store",
+      });
+      if (response.status === 401 || response.status === 403) {
+        setCoverageError(response.status === 401
+          ? "Tu sesión ha caducado. Inicia sesión para volver a comprobar los movimientos."
+          : "Tu cuenta no tiene acceso a esta comprobación.");
+        setGoogle(null);
+        setSyncStateVerified(false);
+        return;
+      }
+      if (!response.ok) {
+        setCoverageError("No se pudo comparar la fuente con los movimientos guardados. No se ha modificado ningún dato.");
+        return;
+      }
+      const raw = await readJson<unknown>(response);
+      if (!isConfirmedSourcePostflightReport(raw)
+        || raw.readConsistency !== "sequential_non_atomic") {
+        setCoverageError("La comprobación ha devuelto datos incompletos. No se puede confirmar la cobertura.");
+        return;
+      }
+      setCoverage(raw);
+    } catch {
+      setCoverageError("No se pudo completar la comprobación. No se ha modificado ningún movimiento.");
+    } finally {
+      setCheckingCoverage(false);
+    }
+  }
+
   async function updateFromGoogle() {
-    if (!connected || !runtimeReady || !syncStateVerified || busy) return;
+    if (!connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage) return;
+    setCoverage(null);
+    setCoverageError(null);
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -282,7 +330,7 @@ export default function SourceOverviewClient() {
         </div>
         <div className="configuration-summary" role="group" aria-label="Resumen de la fuente bancaria">
           <div><strong>{!sourceVerified ? "—" : connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Último intento</span></div>
+          <div><strong>{formatDateTime(run?.finishedAt ?? run?.startedAt)}</strong><span>Última ejecución registrada</span></div>
           <div><strong>{stateLabel}</strong><span>Estado</span></div>
         </div>
       </header>
@@ -343,7 +391,7 @@ export default function SourceOverviewClient() {
             {staleSuccess && (
               <div className={styles.warning} role="status">
                 <strong>Comprueba la actualización</strong>
-                <p>La última sincronización correcta tiene más de 48 horas o una fecha futura. No demuestra que los movimientos de Google estén actualizados.</p>
+                <p>El último proceso de sincronización registrado tiene más de 48 horas o una fecha futura. Este historial no incluye posibles altas protegidas: comprueba los movimientos guardados antes de concluir que faltan datos.</p>
               </div>
             )}
 
@@ -356,23 +404,54 @@ export default function SourceOverviewClient() {
 
             <div className={styles.actions}>
               {connected && runtimeReady && (
-                <button className="secondary-button" type="button" disabled={busy} onClick={() => void checkWithoutImporting()}>
+                <button className="secondary-button" type="button" disabled={busy || checkingCoverage} onClick={() => void checkWithoutImporting()}>
                   Comprobar sin importar
+                </button>
+              )}
+              {connected && (
+                <button className="secondary-button" type="button"
+                  disabled={busy || checkingCoverage}
+                  onClick={() => void verifyStoredMovements()}>
+                  {checkingCoverage ? "Comparando…" : "Comparar movimientos guardados"}
                 </button>
               )}
               {google?.configured && runtimeReady && !connected && google.authMode !== "service-account" ? (
                 <a className="primary-button" href="/api/source/google/connect">Conectar Google</a>
               ) : (
-                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || !syncStateVerified || busy} onClick={() => void updateFromGoogle()}>
+                <button className="primary-button" type="button" disabled={!connected || !runtimeReady || !syncStateVerified || busy || checkingCoverage} onClick={() => void updateFromGoogle()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
                 </button>
               )}
-              <button className="secondary-button" type="button" disabled={busy} onClick={() => void load()}>
+              <button className="secondary-button" type="button" disabled={busy || checkingCoverage} onClick={() => void load()}>
                 Comprobar estado
               </button>
               <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
             {preflight && <SourcePreflightReport summary={preflight} />}
+            {coverageError && <p className="config-message warning" role="alert">{coverageError}</p>}
+            {coverage && (
+              <section className={styles.coverage} role="region" aria-label="Comparación de movimientos guardados">
+                <h3>{coverage.status === "verified"
+                  ? "Todos los movimientos comprobados coinciden"
+                  : coverage.status === "pending"
+                    ? "Hay movimientos pendientes de incorporar"
+                    : "Se han encontrado diferencias que necesitan revisión"}</h3>
+                <dl className={styles.statusGrid}>
+                  <div><dt>En Google</dt><dd>{coverage.sourceRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>Guardados</dt><dd>{coverage.persistedRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>Coincidentes</dt><dd>{coverage.matchingRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>Pendientes</dt><dd>{coverage.pendingRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>Con diferencias</dt><dd>{coverage.differingRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>Sin origen localizado</dt><dd>{coverage.orphanRows.toLocaleString("es-ES")}</dd></div>
+                </dl>
+                <p>
+                  {coverage.matchingUnknownBalances > 0
+                    ? `${coverage.matchingUnknownBalances} saldos no facilitados por el banco se mantienen sin inventar valores. `
+                    : ""}
+                  Comparación de solo lectura entre dos consultas sucesivas. No modifica Google ni los movimientos y no sustituye el historial de ejecuciones.
+                </p>
+              </section>
+            )}
 
           </section>
 
