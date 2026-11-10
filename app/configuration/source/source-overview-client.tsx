@@ -70,6 +70,11 @@ type Notice = { tone: "success" | "warning"; message: string };
 
 const EMPTY_SYNC_STATUS: SyncStatus = { run: null, cursors: [] };
 
+// Spanish's default grouping threshold may omit separators for four digits.
+// Source coverage counts must still show "3.218", as required by es-ES UX.
+const SOURCE_COUNT_FORMATTER = new Intl.NumberFormat("es-ES", { useGrouping: true });
+const formatSourceCount = (value: number) => SOURCE_COUNT_FORMATTER.format(value);
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "Aún no disponible";
   const date = new Date(value);
@@ -438,12 +443,12 @@ export default function SourceOverviewClient({ previewReadOnly = false }: { prev
                     ? "Hay movimientos pendientes de incorporar"
                     : "Se han encontrado diferencias que necesitan revisión"}</h3>
                 <dl className={styles.statusGrid}>
-                  <div><dt>En Google</dt><dd>{coverage.sourceRows.toLocaleString("es-ES")}</dd></div>
-                  <div><dt>Guardados</dt><dd>{coverage.persistedRows.toLocaleString("es-ES")}</dd></div>
-                  <div><dt>Coincidentes</dt><dd>{coverage.matchingRows.toLocaleString("es-ES")}</dd></div>
-                  <div><dt>Pendientes</dt><dd>{coverage.pendingRows.toLocaleString("es-ES")}</dd></div>
-                  <div><dt>Con diferencias</dt><dd>{coverage.differingRows.toLocaleString("es-ES")}</dd></div>
-                  <div><dt>Sin origen localizado</dt><dd>{coverage.orphanRows.toLocaleString("es-ES")}</dd></div>
+                  <div><dt>En Google</dt><dd>{formatSourceCount(coverage.sourceRows)}</dd></div>
+                  <div><dt>Guardados</dt><dd>{formatSourceCount(coverage.persistedRows)}</dd></div>
+                  <div><dt>Coincidentes</dt><dd>{formatSourceCount(coverage.matchingRows)}</dd></div>
+                  <div><dt>Pendientes</dt><dd>{formatSourceCount(coverage.pendingRows)}</dd></div>
+                  <div><dt>Con diferencias</dt><dd>{formatSourceCount(coverage.differingRows)}</dd></div>
+                  <div><dt>Sin origen localizado</dt><dd>{formatSourceCount(coverage.orphanRows)}</dd></div>
                 </dl>
                 <p>
                   {coverage.matchingUnknownBalances > 0
