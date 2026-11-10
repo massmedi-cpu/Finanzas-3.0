@@ -12,7 +12,7 @@ import {
   GOOGLE_OAUTH_NEXT_COOKIE,
   GOOGLE_OAUTH_STATE_COOKIE,
   GOOGLE_OAUTH_VERIFIER_COOKIE,
-} from "../route";
+} from "../../../../../src/infrastructure/auth/google-oauth-state";
 
 export const dynamic = "force-dynamic";
 
