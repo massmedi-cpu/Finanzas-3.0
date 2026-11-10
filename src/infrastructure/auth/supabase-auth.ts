@@ -97,6 +97,29 @@ export async function signInWithPassword(email: string, password: string): Promi
   }
 }
 
+export async function exchangeGoogleOAuthCode(authCode: string, codeVerifier: string): Promise<SessionResult> {
+  // Supabase Auth PKCE: the verifier is server-only and never sent to Google
+  // or stored in browser-accessible storage.
+  if (!authCode || authCode.length > 2048 || !codeVerifier || codeVerifier.length > 128) {
+    return { status: "invalid" };
+  }
+  try {
+    const response = await supabaseFetch("/auth/v1/token?grant_type=pkce", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ auth_code: authCode, code_verifier: codeVerifier }),
+    });
+    if (response.status === 429) return { status: "rate_limited" };
+    if ([400, 401, 403, 422].includes(response.status)) return { status: "invalid" };
+    if (!response.ok) return { status: "unavailable" };
+    const payload = await readAuthPayload(response);
+    if (!isAuthSession(payload)) return { status: "unavailable" };
+    return { status: "ok", session: payload };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
 export async function refreshAuthSession(refreshToken: string): Promise<SessionResult> {
   try {
     const response = await supabaseFetch("/auth/v1/token?grant_type=refresh_token", {
