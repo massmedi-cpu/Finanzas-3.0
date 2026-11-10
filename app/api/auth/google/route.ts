@@ -2,30 +2,15 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { safeNextPath } from "../../../../src/infrastructure/auth/access-control";
 import { SUPABASE_URL } from "../../../../src/infrastructure/auth/supabase-auth";
+import {
+  GOOGLE_OAUTH_VERIFIER_COOKIE,
+  GOOGLE_OAUTH_STATE_COOKIE,
+  GOOGLE_OAUTH_NEXT_COOKIE,
+  GOOGLE_OAUTH_COOKIE_PATH,
+  GOOGLE_OAUTH_MAX_AGE,
+} from "../../../../src/infrastructure/auth/google-oauth-state";
 
 export const dynamic = "force-dynamic";
-export const GOOGLE_OAUTH_VERIFIER_COOKIE = "financial_app_google_pkce";
-export const GOOGLE_OAUTH_STATE_COOKIE = "financial_app_google_state";
-export const GOOGLE_OAUTH_NEXT_COOKIE = "financial_app_google_next";
-export const GOOGLE_OAUTH_COOKIE_PATH = "/api/auth/google";
-export const GOOGLE_OAUTH_MAX_AGE = 300;
-
-export function expireGoogleOAuthCookies(response: NextResponse) {
-  for (const name of [
-    GOOGLE_OAUTH_VERIFIER_COOKIE,
-    GOOGLE_OAUTH_STATE_COOKIE,
-    GOOGLE_OAUTH_NEXT_COOKIE,
-  ]) {
-    response.cookies.set(name, "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: GOOGLE_OAUTH_COOKIE_PATH,
-      maxAge: 0,
-    });
-  }
-}
-
 export async function GET(request: NextRequest) {
   const state = randomBytes(32).toString("base64url");
   const verifier = randomBytes(32).toString("base64url");
