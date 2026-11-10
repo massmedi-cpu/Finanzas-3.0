@@ -184,7 +184,7 @@ test("REC-POST-292 · la vista personal no exige conciliación manual ni consult
   await page.goto("/configuration/source");
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Comparación con los movimientos guardados" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Detalles técnicos" })).toBeVisible();
   expect(postflightReads).toBe(0);
   expect(mutations).toBe(0);
@@ -197,7 +197,7 @@ test("REC-POST-293 · el contrato interno se conserva pero no aparece como éxit
     orphanRows: 0, differingRows: 0, accounts: [],
   } });
   await page.goto("/configuration/source");
-  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Comparación con los movimientos guardados" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
   const routeSource = readFileSync("app/api/source/google/postflight/route.ts", "utf8");
@@ -213,7 +213,7 @@ test("REC-POST-294 · sesión caducada revoca las acciones bancarias sin ofrecer
   await expect(page.locator(".config-message.error")).toContainText("Inicia sesión");
   await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Conciliar con datos guardados" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Conciliación con los movimientos guardados" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Comparación con los movimientos guardados" })).toHaveCount(0);
   expect(state.mutations()).toBe(0);
 });
 
