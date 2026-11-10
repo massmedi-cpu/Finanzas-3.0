@@ -446,7 +446,7 @@ export default function SourceOverviewClient() {
                 </dl>
                 <p>
                   {coverage.matchingUnknownBalances > 0
-                    ? `${coverage.matchingUnknownBalances} saldos no facilitados por el banco se mantienen sin inventar valores. `
+                    ? `${coverage.matchingUnknownBalances} ${coverage.matchingUnknownBalances === 1 ? "saldo no facilitado por el banco se mantiene" : "saldos no facilitados por el banco se mantienen"} sin inventar valores. `
                     : ""}
                   Comparación de solo lectura entre dos consultas sucesivas. No modifica Google ni los movimientos y no sustituye el historial de ejecuciones.
                 </p>
