@@ -1,3 +1,6 @@
+# REC-REL-632 (10/11/2026): authorization for precisely 30 new append-only source records.
+# Request a NEW encrypted production backup via trusted main before any financial writes.
+# This workflow does not receive database secrets, import data, merge, or publish.
 # REC-POST-DDL-520 (01/11/2026): this pull_request change intentionally requests
 # one NEW encrypted READ-ONLY backup from trusted main AFTER the owner's five
 # authorized live schema migrations. The previous 01/11 backup predates DDL.
