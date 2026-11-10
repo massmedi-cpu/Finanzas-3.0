@@ -9,6 +9,9 @@ on:
       - "proxy.ts"
       - "src/infrastructure/auth/**"
       - "app/api/auth/login/route.ts"
+      - "app/api/auth/google/**"
+      - "app/login/**"
+      - "tests/e2e/google-sign-in-auth.spec.ts"
       - "src/infrastructure/http/limited-json-request.ts"
       - "tests/e2e/auth-login-json-byte-limit.spec.ts"
       - "tests/e2e/auth-provider-response-safety.spec.ts"
@@ -31,6 +34,9 @@ on:
       - "proxy.ts"
       - "src/infrastructure/auth/**"
       - "app/api/auth/login/route.ts"
+      - "app/api/auth/google/**"
+      - "app/login/**"
+      - "tests/e2e/google-sign-in-auth.spec.ts"
       - "src/infrastructure/http/limited-json-request.ts"
       - "tests/e2e/auth-login-json-byte-limit.spec.ts"
       - "tests/e2e/auth-provider-response-safety.spec.ts"
@@ -85,6 +91,7 @@ jobs:
         run: >-
           npm run test:e2e --
           tests/e2e/production-auth.spec.ts
+          tests/e2e/google-sign-in-auth.spec.ts
           tests/e2e/auth-login-json-byte-limit.spec.ts
           tests/e2e/auth-provider-response-safety.spec.ts
           tests/e2e/auth-refresh-request-propagation.spec.ts
