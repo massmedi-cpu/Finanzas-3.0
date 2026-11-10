@@ -5,6 +5,8 @@ const PUBLIC_PATHS = new Set([
   "/login",
   "/api/build",
   "/api/auth/login",
+  "/api/auth/google",
+  "/api/auth/google/callback",
   "/api/auth/logout",
 ]);
 
