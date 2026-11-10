@@ -9,8 +9,8 @@ BEGIN
     OR current_user<>'postgres'
     -- The parent CI runner enforces the exact localhost connection URL.
     -- Docker's mapped 127.0.0.1 port is served by a bridge IP inside PG17.
-    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3188
-    OR (SELECT count(*) FROM financial_app.transactions)<>3188
+    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3218
+    OR (SELECT count(*) FROM financial_app.transactions)<>3218
   THEN RAISE EXCEPTION 'REC_AP8_POST_DDL_ACL_LOCAL_RESTORE_ONLY'; END IF;
 END $local_only$;
 BEGIN;
