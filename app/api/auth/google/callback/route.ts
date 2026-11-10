@@ -34,9 +34,8 @@ function failed(request: NextRequest, reason: "denied" | "unavailable" | "invali
 }
 
 function sameState(incoming: string, expected: string) {
-  if (!incoming || !expected || incoming.length !== expected.length) return false;
-  if (incoming.length > 128) return false;
-  return timingSafeEqual(Buffer.from(incoming), Buffer.from(expected));
+  if (!/^[A-Za-z0-9_-]{43}$/.test(incoming) || !/^[A-Za-z0-9_-]{43}$/.test(expected)) return false;
+  return timingSafeEqual(Buffer.from(incoming, "ascii"), Buffer.from(expected, "ascii"));
 }
 
 export async function GET(request: NextRequest) {
