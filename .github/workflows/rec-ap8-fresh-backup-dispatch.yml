@@ -1,3 +1,6 @@
+# REC-REL-635 (10/11/2026): after authorized append-only 30 inserts, request
+# a new trusted encrypted backup including 3,218 persisted source records.
+# Verify its isolated restore and exact counts before any potential publication.
 # REC-REL-632 (10/11/2026): authorization for precisely 30 new append-only source records.
 # Request a NEW encrypted production backup via trusted main before any financial writes.
 # This workflow does not receive database secrets, import data, merge, or publish.
