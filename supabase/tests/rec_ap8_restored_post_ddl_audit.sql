@@ -19,8 +19,8 @@ DECLARE
 BEGIN
   IF current_database() <> 'financial_app_production_backup_restore_check'
     OR current_user <> 'postgres'
-    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3188
-    OR (SELECT count(*) FROM financial_app.transactions)<>3188
+    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3218
+    OR (SELECT count(*) FROM financial_app.transactions)<>3218
     OR (SELECT count(*) FROM financial_app.documents)<>2
     OR (SELECT count(*) FROM pg_class c JOIN pg_namespace n ON c.relnamespace=n.oid
         WHERE n.nspname='financial_app' AND c.relkind='r')<>32
@@ -96,8 +96,8 @@ DO $after_synthetic$
 BEGIN
   IF current_database()<>'financial_app_production_backup_restore_check'
     OR (SELECT count(*) FROM rec_ap8_pre_rehearsal_digests)<>2
-    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3188
-    OR (SELECT count(*) FROM financial_app.transactions)<>3188
+    OR (SELECT count(*) FROM financial_app.transaction_source_records)<>3218
+    OR (SELECT count(*) FROM financial_app.transactions)<>3218
     OR EXISTS (
       SELECT 1 FROM financial_app.transaction_source_records
        WHERE source_file_id='__rec_sync_410_synthetic_only__'
