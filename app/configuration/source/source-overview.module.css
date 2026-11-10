@@ -133,5 +133,5 @@
 .previewNotice {
   margin: .85rem 0 0;
   line-height: 1.5;
-  color: var(--text-secondary);
+  color: var(--color-text-secondary);
 }
