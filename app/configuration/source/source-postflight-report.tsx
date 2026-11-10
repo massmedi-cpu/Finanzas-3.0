@@ -10,10 +10,10 @@ export function SourcePostflightReportPanel({ report }: { report: PublicSourcePo
       ? "Hay movimientos pendientes de incorporar"
       : "Hay diferencias que requieren revisión";
   return (
-    <section className={styles.preflightBlock} role="region" aria-label="Conciliación con los movimientos guardados">
+    <section className={styles.preflightBlock} role="region" aria-label="Comparación con los movimientos guardados">
       <div className="panel-heading">
         <div>
-          <p className="panel-kicker">CONCILIACIÓN DE SOLO LECTURA</p>
+          <p className="panel-kicker">COMPARACIÓN DE SOLO LECTURA</p>
           <h3>{label}</h3>
         </div>
         <span className="status-chip">Sin modificar datos</span>
