@@ -77,7 +77,7 @@ test("REC-SYNC-634 · la cobertura independiente no hereda el historial antiguo 
   const report = page.getByRole("region", { name: "Comparación de movimientos guardados" });
   await expect(report.getByRole("heading", { name: "Todos los movimientos comprobados coinciden" })).toBeVisible();
   await expect(report.getByText("3.218")).toHaveCount(3);
-  await expect(report.getByText("1 saldos no facilitados por el banco", { exact: false })).toBeVisible();
+  await expect(report.getByText("1 saldo no facilitado por el banco", { exact: false })).toBeVisible();
   expect(reads).toBe(1);
   expect(writes).toBe(0);
   await page.getByRole("button", { name: "Comprobar estado" }).click();
