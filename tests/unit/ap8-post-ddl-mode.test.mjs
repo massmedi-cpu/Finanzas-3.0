@@ -36,3 +36,23 @@ test('CI workflow triggers new audit and runs the safety gate',()=>{
   assert.match(workflow,/tests\/unit\/ap8-post-ddl-mode\.test\.mjs/);
   assert.match(workflow,/node --test tests\/unit\/ap8-post-ddl-mode\.test\.mjs/);
 });
+
+// REC-AP8-643: the fresh encrypted 10.0.103 backup is now a 3,218-row
+// post-import snapshot. The exact number is a release invariant, not a
+// substitute for RLS, guarded original files, workspace isolation, digests,
+// or rollback. A later authorized import must recertify this expectation.
+test('post-import 3218-row backup baseline is pinned consistently across isolated AP8 gates',()=>{
+  const expected='ready|{}|6|32|32|1|1|1|0|3218|3218|0|0';
+  assert.ok(shell.includes(expected), 'readiness must match the 3218-row verified backup');
+  assert.equal((sql.match(/<>3218/g) ?? []).length,4,
+    'audit must check both bank tables before and after synthetic rollback');
+  const acl=readFileSync('supabase/tests/rec_ap8_restored_post_ddl_gateway_acl.sql','utf8');
+  assert.equal((acl.match(/<>3218/g) ?? []).length,2,
+    'ACL reconstruction must require the same post-import source and transactions');
+  for (const content of [shell,sql,acl]) {
+    assert.doesNotMatch(content,/\b3188\b/,'no obsolete source-count gate may remain');
+  }
+  assert.match(sql,/original_digests_preserved=true/);
+  assert.match(sql,/REC_AP8_POST_DDL_SYNTHETIC_RESIDUE_OR_DATA_DRIFT/);
+  assert.match(shell,/post_ddl_readiness_blocked/);
+});
