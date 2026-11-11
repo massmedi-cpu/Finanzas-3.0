@@ -161,3 +161,30 @@ test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores
     && url.searchParams.get("kind") === "expense"
   )).toBe(true);
 });
+
+test("REC-UX-658 · filtros monetarios interpretan separadores españoles sin perder precisión", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Más filtros" }).click();
+
+  await page.getByLabel("Importe mínimo en euros").fill("1.234,56");
+  await page.getByLabel("Importe máximo en euros").fill("12.345");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("amountFromCents") === "123456" &&
+    url.searchParams.get("amountToCents") === "1234500",
+  )).toBe(true);
+
+  await page.getByLabel("Importe mínimo en euros").fill("-1.234");
+  await page.getByLabel("Importe máximo en euros").fill("1.234,56");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("amountFromCents") === "-123400" &&
+    url.searchParams.get("amountToCents") === "123456",
+  )).toBe(true);
+
+  await page.getByLabel("Importe mínimo en euros").fill("12.34,56");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect(page.getByRole("alert")).toContainText("Usa importes como 1.234,56");
+});

@@ -162,7 +162,7 @@ type EditorState = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MONEY_FILTER = /^-?\d+(?:[.,]\d{1,2})?$/;
+const MONEY_FILTER = /^-?(?:\d+(?:[.,]\d{1,2})?|\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?)$/;
 
 const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
@@ -259,7 +259,9 @@ function moneyFilterToCents(value: string): number | null {
   const raw = value.trim();
   if (!raw) return null;
   if (!MONEY_FILTER.test(raw)) return Number.NaN;
-  const normalized = raw.replace(",", ".");
+  // In es-ES, dots group thousands. Keep 1–2 digit dot decimals compatible.
+  const grouped = /^-?\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?$/.test(raw);
+  const normalized = (grouped ? raw.replaceAll(".", "") : raw).replace(",", ".");
   const negative = normalized.startsWith("-");
   const unsigned = negative ? normalized.slice(1) : normalized;
   const [whole, fraction = ""] = unsigned.split(".");
@@ -813,7 +815,7 @@ export default function TransactionsClient() {
     const amountFromCents = moneyFilterToCents(draftFilters.amountFrom);
     const amountToCents = moneyFilterToCents(draftFilters.amountTo);
     if (Number.isNaN(amountFromCents) || Number.isNaN(amountToCents)) {
-      setError("Introduce los importes con hasta dos decimales.");
+      setError("Usa importes como 1.234,56, con hasta dos decimales.");
       return;
     }
     if (amountFromCents !== null && amountToCents !== null && amountFromCents > amountToCents) {
