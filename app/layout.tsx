@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { APP_VERSION } from "../src/core/build-info";
 import { ActionFeedbackProvider } from "./action-feedback";
 import AppShell from "./app-shell";
@@ -50,7 +51,8 @@ export const viewport: Viewport = {
   colorScheme: "light dark",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="es"
@@ -63,7 +65,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       suppressHydrationWarning
     >
       <head>
-        <script src="/theme-init.js" />
+        <script src="/theme-init.js" nonce={nonce} />
       </head>
       <body>
         <VisualPreferencesProvider>

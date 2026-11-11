@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
-import { proxy } from "../../proxy";
+import { config, proxy } from "../../proxy";
 import {
   AUTH_ACCESS_COOKIE,
   AUTH_REFRESH_COOKIE,
@@ -237,4 +237,14 @@ test("PRE-005 does not block GET callbacks or server-to-server requests without 
   }));
   expect(serverMutation.status).toBe(200);
   expect(serverMutation.headers.get("x-middleware-next")).toBe("1");
+});
+
+test("REC-THEME-671 · protected auth exempts only the public theme-init script, never finance routes", () => {
+  const pattern = new RegExp(`^${config.matcher[0]}$`);
+  for (const path of ["/theme-init.js", "/sw.js", "/manifest.webmanifest", "/pwa-icon-192.svg"]) {
+    expect(pattern.test(path), path).toBe(false);
+  }
+  for (const path of ["/theme-init.js/private", "/", "/login", "/transactions", "/api/transactions", "/api/documents/ocr"]) {
+    expect(pattern.test(path), path).toBe(true);
+  }
 });

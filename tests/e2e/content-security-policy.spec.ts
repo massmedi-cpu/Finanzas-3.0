@@ -53,3 +53,23 @@ test("G · CSP genera un nonce nuevo para cada documento HTML", async ({ request
   expect(secondNonce).not.toBeNull();
   expect(firstNonce).not.toBe(secondNonce);
 });
+
+test("REC-THEME-671 · login CSP permits the first-paint theme script and serves actual JavaScript", async ({ request }) => {
+  const [login, asset] = await Promise.all([
+    request.get("/login"),
+    request.get("/theme-init.js"),
+  ]);
+  expect(login.status()).toBe(200);
+  const csp = login.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("'strict-dynamic'");
+  const nonce = nonceFrom(csp);
+  expect(nonce).not.toBeNull();
+
+  const html = await login.text();
+  const themeScript = html.match(/<script\b[^>]*\bsrc="\/theme-init\.js"[^>]*>/)?.[0] ?? "";
+  expect(themeScript).toContain(`nonce="${nonce}"`);
+
+  expect(asset.status()).toBe(200);
+  expect(asset.headers()["content-type"]).toMatch(/javascript/);
+  expect(await asset.text()).toContain("financial-app:visual-preferences-v1");
+});
