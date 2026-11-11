@@ -186,5 +186,5 @@ test("REC-UX-658 · filtros monetarios interpretan separadores españoles sin pe
 
   await page.getByLabel("Importe mínimo en euros").fill("12.34,56");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
-  await expect(page.getByRole("alert")).toContainText("Usa importes como 1.234,56");
+  await expect(page.getByRole("alert").filter({ hasText: "Usa importes como 1.234,56" })).toContainText("Usa importes como 1.234,56");
 });
