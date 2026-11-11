@@ -37,8 +37,9 @@ if (!layout.includes('colorScheme: "light dark"')) fail("viewport no puede decla
 if (!layout.includes('data-theme-preference="system"') || !layout.includes('data-theme="dark"')) {
   fail("RootLayout debe tener fallback SSR explícito y preferencia system");
 }
-if (!layout.includes('<script src="/theme-init.js" />')) {
-  fail("la preferencia guardada debe resolverse antes del primer paint");
+if (!layout.includes('<script src="/theme-init.js" nonce={nonce} />')
+  || !layout.includes('get("x-nonce")')) {
+  fail("la preferencia guardada debe resolverse antes del primer paint y autorizada por nonce CSP");
 }
 if (!bootstrap.includes("financial-app:visual-preferences-v1") || !bootstrap.includes("prefers-color-scheme: dark")) {
   fail("theme-init debe resolver almacenamiento local y preferencia del sistema");
