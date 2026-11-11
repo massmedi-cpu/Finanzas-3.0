@@ -82,6 +82,15 @@ test("el acceso no desborda horizontalmente en el viewport certificado", async (
   const navigation = await page.goto("/login", { waitUntil: "domcontentloaded" });
   expect(navigation?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+
+  // REC-REL-686: Google is the primary sign-in. The password button lives
+  // inside a closed <details> and must not be expected visible initially.
+  const googleLogin = page.getByRole("link", { name: "Continuar con Google" });
+  await expect(googleLogin).toBeVisible();
+  await expect(googleLogin).toHaveAttribute("href", /^\/api\/auth\/google\?next=/);
+  const alternative = page.getByText("Acceso alternativo con contraseña", { exact: true });
+  await expect(alternative).toBeVisible();
+  await alternative.click();
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
 
   const dimensions = await page.evaluate(() => ({
