@@ -137,3 +137,20 @@ test("provider errors and malformed callback never issue a session", async () =>
   expect(response.headers.get("location")).toContain("google_error=denied");
   expect(response.cookies.get(AUTH_ACCESS_COOKIE)).toBeUndefined();
 });
+
+test("REC-REL-686 · Google is visible by default and password access expands on demand", async ({ page }) => {
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+  const googleLogin = page.getByRole("link", { name: "Continuar con Google" });
+  await expect(googleLogin).toBeVisible();
+  await expect(googleLogin).toHaveAttribute("href", "/api/auth/google?next=%2F");
+  const alternative = page.getByText("Acceso alternativo con contraseña", { exact: true });
+  await expect(alternative).toBeVisible();
+
+  // Closed details must keep the password controls out of the default UI.
+  await expect(page.getByRole("button", { name: "Entrar" })).toBeHidden();
+  await alternative.click();
+  await expect(page.getByLabel("Correo electrónico")).toBeVisible();
+  await expect(page.getByLabel("Contraseña")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
+});
