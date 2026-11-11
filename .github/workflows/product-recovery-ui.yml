@@ -241,6 +241,7 @@ jobs:
           tests/e2e/transactions-quick-presets-regression.spec.ts
           tests/e2e/configuration-area-nav-mobile.spec.ts
           tests/e2e/transactions.spec.ts
+          tests/e2e/transactions-deeplink.spec.ts
           tests/e2e/accounts.spec.ts
           tests/e2e/review-action-center.spec.ts
           tests/e2e/alerts-center.spec.ts
