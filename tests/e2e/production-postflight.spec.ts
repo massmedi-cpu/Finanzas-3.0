@@ -102,3 +102,42 @@ test("cabeceras de seguridad esenciales permanecen activas", async ({ page }) =>
   expect(headers["content-security-policy"] ?? "").toContain("frame-ancestors 'none'");
   expect(headers["content-security-policy"] ?? "").toContain("object-src 'none'");
 });
+
+
+/**
+ * REC-REL-677: financialapp-home.vercel.app is a deployment-level alias,
+ * whereas finanzas-3-0.vercel.app is a project domain. Promotion/rollback
+ * must not leave the two public entry points on different deployments.
+ * Compare immutable IDs instead of just an HTTP 200 or a matching title.
+ * This applies only to the 10.0.104 release; older production is unchanged.
+ */
+test("REC-REL-677 · los dos dominios públicos apuntan al mismo deployment 10.0.104", async ({ request }) => {
+  requireReleaseIdentity();
+  if (EXPECTED_VERSION !== "10.0.104") test.skip();
+
+  const origins = [
+    "https://finanzas-3-0.vercel.app",
+    "https://financialapp-home.vercel.app",
+  ] as const;
+  for (const origin of origins) {
+    const response = await request.get(origin + "/api/build", {
+      failOnStatusCode: false,
+      maxRedirects: 0,
+    });
+    expect(response.status(), origin + " must serve a successful build identity").toBe(200);
+    expect(new URL(response.url()).origin, origin + " must not redirect to a different hostname").toBe(origin);
+    expect(response.headers()["cache-control"] ?? "", origin + " must not cache release identity").toContain("no-store");
+
+    const build = await response.json() as Record<string, unknown>;
+    expect(build.version, origin + " version").toBe(EXPECTED_VERSION);
+    expect(build.targetVersion, origin + " target version").toBe(EXPECTED_VERSION);
+    expect(build.environment, origin + " runtime environment").toBe("production");
+    expect(build.commit, origin + " exact Git SHA").toBe(EXPECTED_COMMIT);
+    expect(build.deploymentId, origin + " exact Vercel deployment").toBe(EXPECTED_DEPLOYMENT_ID);
+    expect(build.releaseFeatures, origin + " deferred document release profile").toEqual({
+      documents: false,
+      documentOcr: false,
+      documentDriveSync: false,
+    });
+  }
+});
