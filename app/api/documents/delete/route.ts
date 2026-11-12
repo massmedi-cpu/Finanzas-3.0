@@ -31,7 +31,7 @@ function apiError(error: unknown) {
 function documentId(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  if (!id || !UUID.test(id)) throw new Error("invalid_document_id");
+  if (searchParams.getAll("id").length !== 1 || !id || !UUID.test(id)) throw new Error("invalid_document_id");
   if ([...searchParams.keys()].some((key) => key !== "id")) throw new Error("invalid_document_delete_query");
   return id;
 }
