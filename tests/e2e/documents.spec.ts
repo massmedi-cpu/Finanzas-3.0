@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { POST as postDocumentAction } from "../../app/api/documents/route";
 import { errorResponse as ocrReviewError } from "../../app/api/documents/ocr-review/route";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
+import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
 import { parseDocumentQueryInteger } from "../../src/application/document-query-integer";
 import { resolvePdfOcrSource } from "../../src/infrastructure/ocr/pdf-source-provenance";
 
@@ -14,6 +15,7 @@ const transactionId = "94000000-0000-4000-8000-000000000094";
 const uploadedDocumentId = "98000000-0000-4000-8000-000000000097";
 const signedUploadPath = "uploads/97000000-0000-4000-8000-000000000097/" + uploadedDocumentId + ".pdf";
 const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/${signedUploadPath}?token=token`;
+const signedOpenUrl = `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/${signedUploadPath}?token=synthetic-open-token`;
 
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
 const item = {
@@ -88,7 +90,7 @@ async function mockDocumentApi(
       return;
     }
     if (method === "GET" && url.searchParams.get("mode") === "open") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/open`, expiresInSeconds: 300 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: signedOpenUrl, expiresInSeconds: 300 }) }); return;
     }
     if (method === "GET" && url.searchParams.has("id")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
@@ -986,7 +988,7 @@ test("REC-OCR-038 · la propuesta no puede editarse mientras una confirmación e
 test("REC-OCR-040 · Abrir original conserva el gesto de usuario hasta obtener URL firmada", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
-  await page.context().route("**/storage/v1/object/sign/financial-app-documents/open", (route) =>
+  await page.context().route("**/storage/v1/object/sign/financial-app-documents/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/plain", body: "Documento sintético" }));
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
@@ -994,9 +996,72 @@ test("REC-OCR-040 · Abrir original conserva el gesto de usuario hasta obtener U
     page.waitForEvent("popup"),
     page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
   ]);
-  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/open");
+  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/uploads/");
   await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toHaveCount(0);
   await popup.close();
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-DOC-OPEN-245 · trusted signed Storage or matching Drive ID is necessary for opening originals", () => {
+  const privateDocument = { storageProvider: "supabase" as const, sourceDriveFileId: null };
+  const driveFileId = "SyntheticDriveOriginal123";
+  const driveDocument = { storageProvider: "google_drive" as const, sourceDriveFileId: driveFileId };
+  expect(verifiedDocumentOriginalOpenUrl(
+    { provider: "supabase", url: signedOpenUrl }, privateDocument,
+  )).toBe(signedOpenUrl);
+  expect(verifiedDocumentOriginalOpenUrl(
+    { provider: "google_drive", url: `https://drive.google.com/open?id=${driveFileId}` },
+    driveDocument,
+  )).toBe(`https://drive.google.com/open?id=${driveFileId}`);
+
+  const invalidStorage = [
+    "https://documento-externo.invalid/factura.pdf",
+    "https://btzukbfesxdratqnxuoj.supabase.co.evil.invalid/storage/v1/object/sign/financial-app-documents/open?token=x",
+    `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/other-bucket/uploads/a.pdf?token=x`,
+    `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/${signedUploadPath}`,
+    `${signedOpenUrl}&redirect=https%3A%2F%2Fevil.invalid`,
+    `${signedOpenUrl}#fragment`,
+    "javascript:alert('x')",
+  ];
+  for (const url of invalidStorage) {
+    expect(() => verifiedDocumentOriginalOpenUrl(
+      { provider: "supabase", url }, privateDocument,
+    ), url).toThrow("document_open_unsafe_url");
+  }
+  expect(() => verifiedDocumentOriginalOpenUrl(
+    { provider: "google_drive", url: signedOpenUrl }, privateDocument,
+  )).toThrow("document_open_unsafe_url");
+  for (const url of [
+    "https://drive.google.com/open?id=OtherDriveFile123",
+    `https://drive.google.com/open?id=${driveFileId}&next=https%3A%2F%2Fevil.invalid`,
+    `https://drive.google.com/file/d/${driveFileId}/view`,
+    `https://evil.invalid/open?id=${driveFileId}`,
+  ]) {
+    expect(() => verifiedDocumentOriginalOpenUrl(
+      { provider: "google_drive", url }, driveDocument,
+    ), url).toThrow("document_open_unsafe_url");
+  }
+});
+
+test("REC-DOC-OPEN-246 · browser refuses an external https original and closes temporary tab", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async route => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "open") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ provider: "supabase", url: "https://example.invalid/factura.pdf" }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
+  ]);
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("No se ha podido abrir el documento original de forma segura");
+  await expect.poll(() => popup.isClosed()).toBe(true);
   expect(writes).toHaveLength(0);
 });
 
@@ -1481,7 +1546,7 @@ test("REC-DOC-057 · respuesta de otra página no sustituye el listado solicitad
 test("REC-DOC-058 · abrir desde la ficha conserva el gesto del navegador y la URL firmada", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
-  await page.context().route("**/storage/v1/object/sign/financial-app-documents/open", (route) =>
+  await page.context().route("**/storage/v1/object/sign/financial-app-documents/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/plain", body: "Documento sintético" }));
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
@@ -1489,7 +1554,7 @@ test("REC-DOC-058 · abrir desde la ficha conserva el gesto del navegador y la U
     page.waitForEvent("popup"),
     page.getByRole("button", { name: /Abrir documento/i }).click(),
   ]);
-  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/open");
+  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/uploads/");
   await expect(page.getByTestId("documents-alert")).toHaveCount(0);
   await popup.close();
   expect(writes).toEqual([]);
