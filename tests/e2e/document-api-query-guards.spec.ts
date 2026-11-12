@@ -114,3 +114,17 @@ test("REC-DOC-DELETE-247 · duplicate IDs never reach preflight or destructive d
     }
   }
 });
+
+test("REC-DOC-DELETE-255 · forward migration repairs nonexistent audit actor_type column", () => {
+  const sql = readFileSync(
+    "supabase/migrations/20261112191500_rec_document_delete_audit_schema.sql", "utf8",
+  ).replace(/\\s+/g, " ");
+  expect(sql).toContain("create or replace function financial_app.delete_document_registration(p_id uuid)");
+  expect(sql).toContain("workspace_id, entity_type, entity_id, field_name, original_value, new_value, change_origin");
+  expect(sql).not.toContain("change_origin, actor_type");
+  expect(sql).toContain("'true'::jsonb, 'user'");
+  expect(sql).toContain("financial_app.assert_workspace_reference(v_workspace_id, v_document.workspace_id)");
+  expect(sql).toContain("v_preflight := financial_app.document_delete_preflight(p_id)");
+  expect(sql).toContain("grant execute on function financial_app.delete_document_registration(uuid) to service_role");
+  expect(sql).toContain("v_document.storage_provider = 'google_drive'");
+});

@@ -248,5 +248,47 @@ if (Deno.args[0] === "prepare") {
     const recovered = await operation(c.owner.token, "document.detail", { id });
     assert(recovered.status === 200, "single_owner_access_not_recovered");
   } finally { await memberGateSql.end(); }
+  // REC-DOC-DELETE-255: exercise the actual SQL deletion and audit INSERT on
+  // disposable PostgreSQL 17. Never call the cloud database or private Drive.
+  const deleteSql = database();
+  try {
+    const syntheticDriveId = "AUD-DELETE-" + crypto.randomUUID();
+    const testDocumentId = crypto.randomUUID();
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceA},false)`;
+    await deleteSql`insert into financial_app.documents (
+      id,workspace_id,type,status,original_file_name,mime_type,
+      storage_provider,storage_key,source_drive_file_id,size_bytes
+    ) values (
+      ${testDocumentId}::uuid,${workspaceA}::uuid,'invoice','pending_review',
+      'AUD disposable deletion fixture.pdf','application/pdf','google_drive',
+      ${"drive:" + syntheticDriveId},${syntheticDriveId},1234
+    )`;
+    const preflight = await deleteSql`select financial_app.document_delete_preflight(${testDocumentId}::uuid) as result`;
+    assert(preflight[0]?.result?.canDelete === true, 'synthetic_delete_preflight_denied');
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceB},false)`;
+    let denied = false;
+    try {
+      await deleteSql`select financial_app.delete_document_registration(${testDocumentId}::uuid)`;
+    } catch {
+      denied = true;
+    }
+    assert(denied, 'cross_workspace_delete_accepted');
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceA},false)`;
+    const deleted = await deleteSql`select financial_app.delete_document_registration(${testDocumentId}::uuid) as result`;
+    assert(deleted[0]?.result?.deleted === true
+      && deleted[0]?.result?.sourceOriginalPreserved === true, 'deletion_not_certified');
+    const persisted = await deleteSql`
+      select
+        (select count(*)::int from financial_app.documents
+          where id=${testDocumentId}::uuid) as documents,
+        (select count(*)::int from financial_app.audit_changes
+          where workspace_id=${workspaceA}::uuid and entity_type='document'
+            and entity_id=${testDocumentId}::uuid and field_name='deleted'
+            and original_value->>'storageProvider'='google_drive') as audit_events
+    `;
+    assert(persisted[0]?.documents === 0 && persisted[0]?.audit_events === 1,
+      'deletion_audit_missing_or_document_not_deleted');
+    console.log('REC_DOC_DELETE_SCHEMA|status=verified|disposable=true|scope_denial=true|audit_insert=true|drive_original_untouched=true');
+  } finally { await deleteSql.end(); }
   console.log("AUD_AUTH|stage=verified|owner_only=true|member_denied=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
 } else { throw new Error("expected_prepare_or_verify"); }
