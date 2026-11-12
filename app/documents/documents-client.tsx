@@ -1996,6 +1996,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     <OcrReviewPanel
                       documentId={detail.document.id}
                       storageProvider={detail.document.storageProvider}
+                      sourceDriveFileId={detail.document.sourceDriveFileId}
                       mimeType={detail.document.mimeType}
                       onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
                     />
