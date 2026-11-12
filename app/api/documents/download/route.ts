@@ -18,6 +18,7 @@ import {
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
+import { documentDownloadContentDisposition } from "../../../../src/application/document-download-content-disposition";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
 
 export const dynamic = "force-dynamic";
@@ -54,17 +55,11 @@ function driveDownloader() {
   return googleDriveDownloader;
 }
 
-function safeDownloadName(value: string) {
-  const clean = value.replace(/[\r\n"\\/]/g, "_").trim().slice(0, 240);
-  return clean || "documento";
-}
-
 function attachmentHeaders(fileName: string, mimeType: string) {
-  const safeName = safeDownloadName(fileName);
   return {
     ...BASE_HEADERS,
     "content-type": mimeType,
-    "content-disposition": `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`,
+    "content-disposition": documentDownloadContentDisposition(fileName),
   };
 }
 
