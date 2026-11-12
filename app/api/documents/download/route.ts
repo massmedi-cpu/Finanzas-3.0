@@ -4,6 +4,7 @@ import {
   GoogleDriveDocumentError,
 } from "../../../../src/infrastructure/google/google-drive-document-downloader";
 import { FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID } from "../../../../src/infrastructure/google/google-drive-document-discovery";
+import { resolveAuthorizedDocumentFolders } from "../../../../src/application/document-drive-folder-scope";
 import {
   GOOGLE_DOCUMENT_READONLY_SCOPES,
   GoogleServiceAccountAccessTokenProvider,
@@ -175,7 +176,10 @@ export async function GET(request: Request) {
       const downloaded = await driveDownloader().download({
         fileId,
         expectedMimeType: mimeType,
-        expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        expectedAuthorizedRootFolderIds: resolveAuthorizedDocumentFolders(
+          process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS,
+          FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        ),
       });
       if (!downloaded.bytes.byteLength || downloaded.bytes.byteLength > MAX_FILE_BYTES) throw new Error("document_download_too_large");
       return new Response(downloaded.bytes, {
