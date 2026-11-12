@@ -370,3 +370,95 @@ test('real authenticated preferences, keyboard navigation, privacy, PWA and offl
   expect((await api(page, '/api/transactions?limit=1')).rows).toHaveLength(1);
   console.log('AUD_HTTP|case=preferences_pwa|reload_persists=true|keyboard_focus=true|privacy_on_blur=true|service_worker_real=true|offline_private_cache_absent=true|recovery_real=true');
 });
+
+
+test('REC-DOC-E2E-252 · real isolated Storage round-trip checks all four MIME types and tenant ACL', async ({ page }) => {
+  // This test is ONLY reachable in the disposable CI runtime validated above:
+  // it must never connect to the live account, personal Drive or production.
+  test.setTimeout(240_000);
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body style="font-family:Arial;padding:36px;background:white;color:black"><main><h1>DOCUMENTO SINTÉTICO</h1><p>09/10/2026</p><p>TOTAL 19,00 EUR</p><p>SIN DATOS PERSONALES</p></main></body></html>');
+  const png = await page.locator('main').screenshot({ type: 'png' });
+  const jpeg = await page.locator('main').screenshot({ type: 'jpeg', quality: 88 });
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const webpBase64 = await page.evaluate(async (base64: string) => {
+    const image = new Image();
+    image.src = 'data:image/png;base64,' + base64;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('synthetic_canvas_missing');
+    ctx.drawImage(image, 0, 0);
+    const encoded = canvas.toDataURL('image/webp', 0.88);
+    if (!encoded.startsWith('data:image/webp;base64,')) throw new Error('synthetic_webp_missing');
+    return encoded.slice('data:image/webp;base64,'.length);
+  }, png.toString('base64'));
+  const webp = Buffer.from(webpBase64, 'base64');
+
+  const cases = [
+    { kind: 'invoice', mime: 'application/pdf', ext: 'pdf', data: pdf },
+    { kind: 'ticket', mime: 'image/jpeg', ext: 'jpg', data: jpeg },
+    { kind: 'other', mime: 'image/webp', ext: 'webp', data: webp },
+    { kind: 'ticket', mime: 'image/png', ext: 'png', data: png },
+  ] as const;
+  const sha256 = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
+  const registered: Array<{ id: string; mime: string; original: Buffer; hash: string }> = [];
+
+  for (const item of cases) {
+    const name = 'AUD-MIME-' + item.ext + '.' + item.ext;
+    const digest = sha256(item.data);
+    const signed = await api(page, '/api/documents', 'POST', {
+      action: 'upload_sign', type: item.kind, originalFileName: name,
+      mimeType: item.mime, sizeBytes: item.data.byteLength, expectedSha256: digest,
+    });
+    const signedUrl = new URL(signed.signedUrl);
+    expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+    expect(signedUrl.pathname).toContain('/storage/v1/object/upload/sign/financial-app-documents/uploads/');
+    // The local signed PUT is intentionally redirected ONLY to ephemeral Storage.
+    const put = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search, {
+      method: 'PUT', headers: { 'content-type': item.mime }, body: item.data,
+    });
+    expect(put.status).toBe(200);
+    const saved = await api(page, '/api/documents', 'POST', {
+      action: 'upload_finalize', type: item.kind, originalFileName: name,
+      mimeType: item.mime, path: signed.path, expectedSizeBytes: item.data.byteLength,
+      expectedSha256: digest,
+    });
+    expect(saved.document.id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(saved.document.mimeType).toBe(item.mime);
+    expect(saved.uploadIntegrity).toEqual({
+      sha256: digest, sizeBytes: item.data.byteLength, verified: true,
+    });
+    const detail = await api(page, '/api/documents?id=' + saved.document.id);
+    expect(detail.document.mimeType).toBe(item.mime);
+    expect(detail.document.originalFileName).toBe(name);
+    const download = await page.request.get('/api/documents/download?id=' + saved.document.id);
+    expect(download.status()).toBe(200);
+    expect(download.headers()['content-type']).toContain(item.mime);
+    expect(sha256(await download.body())).toBe(digest);
+    registered.push({ id: saved.document.id, mime: item.mime, original: item.data, hash: digest });
+  }
+
+  // A second real GoTrue identity must never list/read/download an owner's
+  // document. No signed original, document id or token is printed in logs.
+  const foreignLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreignLogin.status()).toBe(200);
+  for (const item of registered) {
+    expect((await page.request.get('/api/documents?id=' + item.id)).status()).toBe(404);
+    expect((await page.request.get('/api/documents/download?id=' + item.id)).status()).toBe(404);
+  }
+  const ownerLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.owner.email, password: c.owner.password },
+  });
+  expect(ownerLogin.status()).toBe(200);
+  for (const item of registered) {
+    const response = await page.request.get('/api/documents/download?id=' + item.id);
+    expect(response.status()).toBe(200);
+    expect(sha256(await response.body())).toBe(item.hash);
+  }
+  console.log('AUD_HTTP|case=original_mime_acl|types=pdf,jpeg,webp,png|signed_storage=true|sha_roundtrip=4|foreign_detail_denied=4|foreign_download_denied=4|owner_reauth=true|personal_data=false');
+});
