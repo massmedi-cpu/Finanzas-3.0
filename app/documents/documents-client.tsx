@@ -14,6 +14,7 @@ import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
+import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import { SpanishDateField } from "./spanish-date-field";
@@ -1638,13 +1639,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         if (!previewWindow.closed) previewWindow.close();
         return;
       }
-      if (typeof result?.url !== "string") throw new Error("document_open_failed");
-      const destination = new URL(result.url);
-      if (destination.protocol !== "https:"
-        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
-        throw new Error("document_open_unsafe_url");
-      }
-      previewWindow.location.replace(destination.href);
+      const safeOriginal = verifiedDocumentOriginalOpenUrl(result, {
+        storageProvider: detail.document.storageProvider,
+        sourceDriveFileId: detail.document.sourceDriveFileId,
+      });
+      previewWindow.location.replace(safeOriginal);
       setNotice("Original abierto en otra pestaña.");
     } catch (caught) {
       if (!previewWindow.closed) previewWindow.close();
