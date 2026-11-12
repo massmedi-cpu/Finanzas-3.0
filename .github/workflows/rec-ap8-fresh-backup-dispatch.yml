@@ -68,6 +68,16 @@ jobs:
               || livePr.base.ref !== event.base.ref) {
               throw new Error('REC_AP8_DISPATCH_STALE_OR_UNTRUSTED_PR');
             }
+            // Avoid requesting duplicate encrypted backups on every unrelated
+            // PR commit. The protected fresh-backup action must be explicitly
+            // opted in by an exact commit-message marker on the live head.
+            const currentCommit = (await github.rest.repos.getCommit({
+              owner, repo, ref: livePr.head.sha,
+            })).data;
+            if (!currentCommit.commit?.message?.includes('[REC-FRESH-BACKUP]')) {
+              core.info('REC_AP8_DISPATCH|skipped=true|reason=no_fresh_backup_marker');
+              return;
+            }
             const response = await fetch('https://financialapp-home.vercel.app/api/build', {
               headers: {accept:'application/json','cache-control':'no-store'},
               signal: AbortSignal.timeout(15000), redirect:'error',
