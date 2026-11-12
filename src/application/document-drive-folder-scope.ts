@@ -6,6 +6,15 @@ const MAX_TRAVERSED_FOLDERS = 100;
 const MAX_FOLDER_DEPTH = 6;
 const DRIVE_ID = /^[A-Za-z0-9_-]{10,200}$/;
 
+export type ScopedDiscoveredDriveDocument = DiscoveredDriveDocument & {
+  /** Trusted scope from the folder listing, not metadata supplied by the browser. */
+  authorizedParentFolderId: string;
+};
+
+type ScopedDocumentDriveDiscoveryResult = Omit<GoogleDriveDocumentDiscoveryResult, "files"> & {
+  files: ScopedDiscoveredDriveDocument[];
+};
+
 export class DocumentDriveFolderScopeError extends Error {
   readonly code: string;
 
@@ -41,13 +50,13 @@ export async function discoverAuthorizedDocumentFolders(
   folderIds: readonly string[],
   listFolder: (folderId: string) => Promise<GoogleDriveDocumentDiscoveryResult>,
   listChildFolders?: (folderId: string) => Promise<string[]>,
-): Promise<GoogleDriveDocumentDiscoveryResult> {
+): Promise<ScopedDocumentDriveDiscoveryResult> {
   if (folderIds.length < 1 || folderIds.length > MAX_AUTHORIZED_FOLDERS
     || folderIds.some((id) => !DRIVE_ID.test(id))
     || new Set(folderIds).size !== folderIds.length) {
     throw new DocumentDriveFolderScopeError("document_drive_folder_scope_invalid");
   }
-  const files: DiscoveredDriveDocument[] = [];
+  const files: ScopedDiscoveredDriveDocument[] = [];
   const seen = new Set<string>();
   // Breadth-first traversal; discovered children are still scoped to an exact
   // explicitly authorized parent. Never follow arbitrary Drive search results.
@@ -70,7 +79,7 @@ export async function discoverAuthorizedDocumentFolders(
         throw new DocumentDriveFolderScopeError("document_drive_folder_duplicate_or_invalid_file");
       }
       seen.add(file.fileId);
-      files.push(file);
+      files.push({ ...file, authorizedParentFolderId: folderId });
     }
     skippedUnsupported += result.skippedUnsupported;
     skippedInvalid += result.skippedInvalid;
