@@ -523,12 +523,38 @@ test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across 
   const pdf = await page.pdf({ format: 'A4', printBackground: true });
   const sha256 = (input: Uint8Array) => createHash('sha256').update(input).digest('hex');
   const name = 'AUD-UI-CYCLE-254.pdf';
+  const sanitizedHttp: string[] = [];
+  page.on('response', response => {
+    const url = new URL(response.url());
+    // Strictly omit all URLs, querystrings, signed tokens and response bodies.
+    const area = url.pathname.startsWith('/storage/v1/object/upload/sign/')
+      ? 'storage_put'
+      : url.pathname === '/api/documents' ? 'documents_api' : null;
+    if (area) sanitizedHttp.push(area + ':' + response.request().method() + ':' + response.status());
+  });
   await page.goto('/documents');
   await page.getByLabel('Galería o archivo').setInputFiles({
     name, mimeType: 'application/pdf', buffer: pdf,
   });
   await page.getByRole('button', { name: 'Guardar original' }).click();
-  await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 90_000 });
+  try {
+    await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 22_000 });
+  } catch (error) {
+    const alert = await page.getByTestId('documents-alert').textContent().catch(() => '');
+    const recovery = await page.getByTestId('document-upload-unverified').count();
+    const button = await page.getByRole('button', { name: /Guardar original|Guardando/ }).textContent().catch(() => '');
+    const safeCategory = !alert ? 'missing' : /almacenamiento privado autorizado/.test(alert) ? 'unsafe_storage'
+      : /subida anterior|subida sin confirmar|Recupera primero/.test(alert) ? 'pending_upload'
+      : /sin confirmar|confirmar|recuperación|comprobar/i.test(alert) ? 'uncertain_upload'
+      : /sesión|inicia sesión/.test(alert) ? 'auth'
+      : /bloqueo|pestañas/.test(alert) ? 'lock'
+      : /carga|datos|error/i.test(alert) ? 'generic' : 'other';
+    console.log('AUD_HTTP|diagnostic=upload_ui|alert=' + safeCategory
+      + '|recovery=' + recovery
+      + '|button=' + (button?.trim() === 'Guardar original' ? 'idle' : 'busy')
+      + '|events=' + sanitizedHttp.join(','));
+    throw error;
+  }
 
   const documentList = await api(page, '/api/documents?scope=ordinary&limit=100');
   const saved = documentList.items.find((item: any) => item.originalFileName === name);
