@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { knownPublicErrorCode } from "../../src/infrastructure/http/gateway-public-error";
+import { documentDownloadContentDisposition } from "../../src/application/document-download-content-disposition";
 import {
   LimitedResponseBodyError,
   readLimitedResponseBody,
@@ -140,4 +141,53 @@ test("REC-DOC-SEC-011 · los códigos de descarga no aceptan propiedades heredad
   const route = readFileSync(join(process.cwd(), "app/api/documents/download/route.ts"), "utf8");
   expect(route).toContain("knownPublicErrorCode(error, statuses)");
   expect(route).not.toContain("statuses[error.message]");
+});
+
+
+test("REC-DOC-DOWNLOAD-242 · Unicode/emoji and apostrophes remain downloadable with ASCII header fallback", () => {
+  for (const name of [
+    "Factura año 2026 - café.pdf",
+    "Factura 🧾 tienda.pdf",
+    "O'Brien & familia (diciembre).pdf",
+    "archivo 50% de ahorro.pdf",
+    "Factura\u0000\r\nmaliciosa.pdf",
+  ]) {
+    const disposition = documentDownloadContentDisposition(name);
+    const response = new Response(null, { headers: {
+      "content-disposition": disposition,
+      "content-type": "application/pdf",
+    } });
+    const header = response.headers.get("content-disposition")!;
+    expect(header).toMatch(/^attachment; filename="[\x20-\x7E]+"; filename\*=UTF-8''/);
+    const unicode = header.split("filename*=UTF-8''")[1];
+    expect(unicode).not.toContain("'");
+    expect(unicode).not.toContain("\r");
+    expect(unicode).not.toContain("\n");
+    expect(decodeURIComponent(unicode)).toBe(
+      name.replace(/[\u0000-\u001F\u007F-\u009F"\\/]/g, "_").trim(),
+    );
+  }
+});
+
+test("REC-DOC-DOWNLOAD-243 · empty and malformed Unicode names never create invalid HTTP headers", () => {
+  expect(documentDownloadContentDisposition("")).toContain('filename="documento"');
+  for (const source of [
+    "\uD800unpaired", "unpaired\uDC00", "a".repeat(250) + "🧾",
+    "\t\n", 'inv\\"oice.pdf',
+  ]) {
+    const disposition = documentDownloadContentDisposition(source);
+    expect(() => new Response(null, {
+      headers: { "content-disposition": disposition },
+    })).not.toThrow();
+    const filename = disposition.split("filename*=UTF-8''")[1];
+    expect(() => decodeURIComponent(filename)).not.toThrow();
+    expect(Array.from(decodeURIComponent(filename)).length).toBeLessThanOrEqual(180);
+  }
+});
+
+test("REC-DOC-DOWNLOAD-244 · original-download route uses reviewed safe disposition builder", () => {
+  const route = readFileSync(join(process.cwd(), "app/api/documents/download/route.ts"), "utf8");
+  expect(route).toContain('import { documentDownloadContentDisposition }');
+  expect(route).toContain('"content-disposition": documentDownloadContentDisposition(fileName)');
+  expect(route).not.toContain("safeDownloadName");
 });
