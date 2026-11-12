@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { GET as getDocuments } from "../../app/api/documents/route";
+import { GET as deletePreflight, DELETE as deleteOriginal } from "../../app/api/documents/delete/route";
 import { errorResponse as ocrReviewError } from "../../app/api/documents/ocr-review/route";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../src/infrastructure/http/limited-json-request";
 
@@ -91,4 +92,25 @@ test("REC-DOC-AUTH-227 · PATCH verifies membership before body parsing or write
   expect(deny).toBeGreaterThan(verify);
   expect(parse).toBeGreaterThan(deny);
   expect(write).toBeGreaterThan(parse);
+});
+
+test("REC-DOC-DELETE-247 · duplicate IDs never reach preflight or destructive document deletion", async () => {
+  const second = "93000000-0000-4000-8000-000000000118";
+  for (const [url, code] of [
+    [`https://test.local/api/documents/delete?id=${ID}&id=${second}`, "invalid_document_id"],
+    [`https://test.local/api/documents/delete?id=${ID}&id=${ID}`, "invalid_document_id"],
+    [`https://test.local/api/documents/delete?id=${ID}&mode=preflight`, "invalid_document_delete_query"],
+  ] as const) {
+    for (const [method, handler] of [
+      ["GET", deletePreflight],
+      ["DELETE", deleteOriginal],
+    ] as const) {
+      const response = await handler(new Request(url, { method }));
+      expect(response.status(), method + " " + code).toBe(400);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      await expect(response.json()).resolves.toMatchObject({
+        error: "document_delete_failed", code,
+      });
+    }
+  }
 });
