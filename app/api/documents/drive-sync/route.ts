@@ -81,7 +81,7 @@ function timestamp(value: string | null) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | undefined) {
+function changed(file: ScopedDiscoveredDriveDocument, previous: ExistingDocument | undefined) {
   if (!previous) return true;
   return (
     previous.mimeType.toLowerCase() !== file.mimeType ||
