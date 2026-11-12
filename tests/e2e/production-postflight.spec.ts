@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectedProductionDocumentProfile, requiresDualProductionDomainCheck } from "../../src/domain/release-production-profile";
 
 const EXPECTED_VERSION = process.env.EXPECTED_APP_VERSION?.trim() ?? "";
 const EXPECTED_COMMIT = process.env.EXPECTED_COMMIT_SHA?.trim() ?? "";
@@ -29,13 +30,14 @@ test("identidad exacta del deployment de producción", async ({ request }) => {
   expectExactCommit(build.commit);
   expect(build.deploymentId).toBe(EXPECTED_DEPLOYMENT_ID);
 
-  // REC-REL-596: preview flags do not prove the production build used the
-  // same frozen launch profile. Fail closed before accepting 10.0.104.
-  // Prior production versions are intentionally unaffected by this release gate.
-  if (EXPECTED_VERSION === "10.0.104") {
+  // REC-REL-596/702/703: certify the exact production profile. 10.0.104
+  // is deliberately deferred; every newer version must actually expose all
+  // agreed capabilities. A green build from another SHA cannot substitute it.
+  const expectedDocumentProfile = expectedProductionDocumentProfile(EXPECTED_VERSION);
+  if (expectedDocumentProfile !== null) {
     expect(build.releaseFeatures,
-      "10.0.104 must be built with Documents, OCR and document Drive sync deferred"
-    ).toEqual({ documents: false, documentOcr: false, documentDriveSync: false });
+      "Production must expose its exact frozen document/OCR launch profile"
+    ).toEqual(expectedDocumentProfile);
   }
 });
 
@@ -118,11 +120,12 @@ test("cabeceras de seguridad esenciales permanecen activas", async ({ page }) =>
  * whereas finanzas-3-0.vercel.app is a project domain. Promotion/rollback
  * must not leave the two public entry points on different deployments.
  * Compare immutable IDs instead of just an HTTP 200 or a matching title.
- * This applies only to the 10.0.104 release; older production is unchanged.
+ * Applies to 10.0.104 AND every future complete release. Earlier
+ * production versions retain their historical postflight behavior.
  */
-test("REC-REL-677 · los dos dominios públicos apuntan al mismo deployment 10.0.104", async ({ request }) => {
+test("REC-REL-677 · los dos dominios públicos apuntan al mismo deployment final", async ({ request }) => {
   requireReleaseIdentity();
-  if (EXPECTED_VERSION !== "10.0.104") test.skip();
+  if (!requiresDualProductionDomainCheck(EXPECTED_VERSION)) test.skip();
 
   const origins = [
     "https://finanzas-3-0.vercel.app",
@@ -143,10 +146,7 @@ test("REC-REL-677 · los dos dominios públicos apuntan al mismo deployment 10.0
     expect(build.environment, origin + " runtime environment").toBe("production");
     expect(build.commit, origin + " exact Git SHA").toBe(EXPECTED_COMMIT);
     expect(build.deploymentId, origin + " exact Vercel deployment").toBe(EXPECTED_DEPLOYMENT_ID);
-    expect(build.releaseFeatures, origin + " deferred document release profile").toEqual({
-      documents: false,
-      documentOcr: false,
-      documentDriveSync: false,
-    });
+    expect(build.releaseFeatures, origin + " exact release document/OCR profile")
+      .toEqual(expectedProductionDocumentProfile(EXPECTED_VERSION));
   }
 });

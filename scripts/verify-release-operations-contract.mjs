@@ -57,6 +57,11 @@ requireText(postflightConfig, 'testMatch: "production-postflight.spec.ts"', "pos
 requireText(postflightSpec, "EXPECTED_APP_VERSION", "postflight_dynamic_version");
 requireText(postflightSpec, "EXPECTED_COMMIT_SHA", "postflight_dynamic_commit");
 requireText(postflightSpec, "EXPECTED_DEPLOYMENT_ID", "postflight_dynamic_deployment");
+requireText(postflightSpec, "expectedProductionDocumentProfile(EXPECTED_VERSION)", "postflight_complete_document_release_gate");
+requireText(postflightSpec, "requiresDualProductionDomainCheck(EXPECTED_VERSION)", "postflight_dual_domain_future_release");
+requireText(read("src/domain/release-production-profile.ts"), "patch >= 105", "full_release_version_boundary");
+requireText(read("tests/unit/release-production-profile.test.mjs"), "REC-REL-703", "complete_release_profile_unit_test");
+requireText(read(".github/workflows/release-operations-contract.yml"), "release-production-profile.test.mjs", "release_profile_ci_test");
 requireText(readonlyVerifier, "default_transaction_read_only=on", "readonly_database_session");
 requireText(readonlyVerifier, 'snapshot.bankSourcePolicy !== "read_only"', "readonly_bank_source_policy");
 requireText(readonlyVerifier, 'snapshot.locale !== "es-ES"', "readonly_regional_contract");

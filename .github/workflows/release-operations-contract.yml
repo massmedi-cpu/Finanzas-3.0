@@ -14,6 +14,8 @@ on:
       - "scripts/verify-production-data-readonly.mjs"
       - "scripts/release-source-coverage-gate.mjs"
       - "scripts/verify-release-operations-contract.mjs"
+      - "src/domain/release-production-profile.ts"
+      - "tests/unit/release-production-profile.test.mjs"
   workflow_dispatch:
 
 permissions:
@@ -34,6 +36,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: node scripts/verify-release-operations-contract.mjs
+      - name: Certify historical restricted vs future complete release profiles
+        run: node --experimental-strip-types --test tests/unit/release-production-profile.test.mjs
       - run: npm run typecheck
       - name: Compile generic Production postflight suite without touching Production
         env:
