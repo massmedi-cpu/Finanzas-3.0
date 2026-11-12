@@ -106,7 +106,7 @@ test("REC-DOC-DELETE-247 · duplicate IDs never reach preflight or destructive d
       ["DELETE", deleteOriginal],
     ] as const) {
       const response = await handler(new Request(url, { method }));
-      expect(response.status(), method + " " + code).toBe(400);
+      expect(response.status, method + " " + code).toBe(400);
       expect(response.headers.get("cache-control")).toBe("no-store");
       await expect(response.json()).resolves.toMatchObject({
         error: "document_delete_failed", code,
