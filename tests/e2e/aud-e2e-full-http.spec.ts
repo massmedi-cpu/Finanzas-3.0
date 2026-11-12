@@ -567,11 +567,32 @@ test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across 
   expect(downloaded.status()).toBe(200);
   expect(sha256(await downloaded.body())).toBe(sha256(pdf));
 
-  const [popup] = await Promise.all([
+  const isSignedOriginal = (rawUrl: string) => {
+    const url = new URL(rawUrl);
+    return url.origin === canonicalStorageOrigin
+      && url.pathname.startsWith('/storage/v1/object/sign/financial-app-documents/uploads/')
+      && url.pathname.endsWith('.pdf');
+  };
+  // Headless Chromium can leave PDF viewer popups at about:blank. Require
+  // the actual signed request and successful Storage response, not a
+  // browser-specific visible PDF address or synthetic Navigation success.
+  const signedRequest = page.context().waitForEvent('request', {
+    predicate: request => request.method() === 'GET' && isSignedOriginal(request.url()),
+    timeout: 20_000,
+  });
+  const signedResponse = page.context().waitForEvent('response', {
+    predicate: response => isSignedOriginal(response.url()),
+    timeout: 20_000,
+  });
+  const [popup, originalRequest, originalResponse] = await Promise.all([
     page.waitForEvent('popup'),
+    signedRequest,
+    signedResponse,
     page.getByTestId('ocr-review-panel').getByRole('button', { name: 'Abrir', exact: true }).click(),
   ]);
-  await expect.poll(() => popup.url()).toContain('/storage/v1/object/sign/financial-app-documents/uploads/');
+  expect(originalRequest.method()).toBe('GET');
+  expect(originalResponse.status()).toBe(200);
+  expect(originalResponse.headers()['content-type']).toContain('application/pdf');
   await popup.close();
   await page.reload();
   await page.getByRole('button', { name: new RegExp(name) }).click();
