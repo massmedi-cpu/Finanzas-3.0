@@ -14,11 +14,10 @@ import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { isDocumentOcrDeferred } from "../../src/application/release-ocr-scope";
-import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
+import { verifiedDocumentOriginalOpenUrl, DOCUMENT_SIGNED_STORAGE_ORIGIN } from "../../src/application/document-original-open-url";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import { SpanishDateField } from "./spanish-date-field";
-import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
@@ -1348,7 +1347,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       let uploadUrl: URL;
       try { uploadUrl = new URL(sign.signedUrl); }
       catch { throw new Error("document_upload_unsafe_url"); }
-      if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== SUPABASE_ORIGIN
+      if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== DOCUMENT_SIGNED_STORAGE_ORIGIN
         || uploadUrl.pathname !== `/storage/v1/object/upload/sign/financial-app-documents/${sign.path}`
         || uploadUrl.searchParams.getAll("token").length !== 1
         || uploadUrl.searchParams.get("token") !== sign.token

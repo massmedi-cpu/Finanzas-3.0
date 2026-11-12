@@ -16,7 +16,36 @@ async function login(page: Page, account = 'owner') {
   await page.context().route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === canonicalStorageOrigin && url.pathname.startsWith('/storage/v1/')) {
-      return route.continue({ url: localStorageOrigin + url.pathname + url.search });
+      // Playwright cannot route.continue() an HTTPS request to HTTP local
+      // Storage (scheme changes are rejected). Proxy ONLY this trusted
+      // Storage path in the disposable test runner, never a cloud endpoint.
+      const storageRequest = route.request();
+      const method = storageRequest.method();
+      const cors = {
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET,HEAD,PUT,POST,OPTIONS',
+        'access-control-allow-headers': '*',
+      };
+      if (method === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      const safeHeaders: Record<string, string> = {};
+      for (const key of ['content-type', 'x-upsert', 'cache-control']) {
+        const value = storageRequest.headers()[key];
+        if (value) safeHeaders[key] = value;
+      }
+      const upstream = await fetch(localStorageOrigin + url.pathname + url.search, {
+        method, headers: safeHeaders,
+        body: method === 'GET' || method === 'HEAD' ? undefined : storageRequest.postDataBuffer() ?? undefined,
+        redirect: 'manual',
+      });
+      const body = Buffer.from(await upstream.arrayBuffer());
+      const headers = Object.fromEntries(upstream.headers.entries());
+      delete headers['content-length'];
+      delete headers['content-encoding'];
+      await route.fulfill({ status: upstream.status, headers: { ...headers, ...cors }, body });
+      return;
     }
     if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)) return route.abort();
     return route.continue();

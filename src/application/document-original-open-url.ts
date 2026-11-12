@@ -1,4 +1,7 @@
-import { SUPABASE_ORIGIN } from "../infrastructure/auth/supabase-auth";
+// Signed object links belong to the reviewed private Storage project, even
+// when disposable CI runs Auth against a local Supabase instance. Never derive
+// the permitted original destination from an untrusted gateway response.
+export const DOCUMENT_SIGNED_STORAGE_ORIGIN = "https://btzukbfesxdratqnxuoj.supabase.co";
 
 type OriginalDocumentSource = {
   storageProvider: "supabase" | "google_drive";
@@ -22,7 +25,7 @@ function unsafe(): never {
 export function verifiedDocumentOriginalOpenUrl(
   response: unknown,
   source: OriginalDocumentSource,
-  signedStorageOrigin: string = SUPABASE_ORIGIN,
+  signedStorageOrigin: string = DOCUMENT_SIGNED_STORAGE_ORIGIN,
 ): string {
   if (!response || typeof response !== "object" || Array.isArray(response)
     || !source || typeof source !== "object") return unsafe();
