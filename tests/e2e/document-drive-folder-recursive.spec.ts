@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { GoogleDriveDocumentDownloader } from "../../src/infrastructure/google/google-drive-document-downloader";
 import { GoogleDriveDocumentDiscovery } from "../../src/infrastructure/google/google-drive-document-discovery";
 import {
   discoverAuthorizedDocumentFolders,
@@ -92,4 +95,45 @@ test("REC-DOC-SCOPE-233 · consulta a Google restringida al padre, cursor comple
       { id: CHILD, mimeType: "application/vnd.google-apps.folder" }] })) as typeof fetch);
   await expect(dup.listAuthorizedChildFolders(ROOT))
     .rejects.toThrow("Hay una subcarpeta inválida");
+});
+
+
+test("REC-DOC-SCOPE-234 · each discovered file retains its actual authorized parent", async () => {
+  const result = await discoverAuthorizedDocumentFolders([ROOT], async (folderId) =>
+    folderId === ROOT ? files(OTHER) : folderId === CHILD ? files(DEEP) : files(),
+  async (folderId) => folderId === ROOT ? [CHILD] : []);
+  expect(result.files.map((item) => [item.fileId, item.authorizedParentFolderId]))
+    .toEqual([[OTHER, ROOT], [DEEP, CHILD]]);
+});
+
+test("REC-DOC-SCOPE-235 · moving a discovered file out of its scoped parent blocks download", async () => {
+  const discovered = await discoverAuthorizedDocumentFolders([ROOT], async (folderId) =>
+    folderId === CHILD ? files(OTHER) : files(),
+  async (folderId) => folderId === ROOT ? [CHILD] : []);
+  expect(discovered.files[0].authorizedParentFolderId).toBe(CHILD);
+
+  let mediaRequests = 0;
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" },
+    (async (request: RequestInfo | URL) => {
+      if (String(request).includes("?fields=")) return Response.json({
+        id: OTHER, name: "Documento sintético.pdf", mimeType: "application/pdf",
+        size: "123", modifiedTime: "2026-10-20T08:00:00.000Z",
+        parents: [ROOT], version: "8", trashed: false,
+      });
+      mediaRequests += 1;
+      return new Response("%PDF-1.4");
+    }) as typeof fetch,
+  );
+  await expect(downloader.download({
+    fileId: discovered.files[0].fileId,
+    expectedMimeType: discovered.files[0].mimeType,
+    expectedAuthorizedFolderId: discovered.files[0].authorizedParentFolderId,
+  })).rejects.toMatchObject({ code: "google_drive_document_access_denied" });
+  expect(mediaRequests).toBe(0);
+});
+
+test("REC-DOC-SCOPE-236 · automatic Drive sync always forwards discovered parent as a preflight guard", () => {
+  const route = readFileSync(join(process.cwd(), "app/api/documents/drive-sync/route.ts"), "utf8");
+  expect(route).toContain("expectedAuthorizedFolderId: candidate.authorizedParentFolderId");
 });
