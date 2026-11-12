@@ -13,12 +13,11 @@ export class OcrReviewBoundary extends Component<Props, State> {
     return { failed: true };
   }
 
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error("ocr-review-render-error", {
-      name: error.name,
-      message: error.message,
-      componentStack: info.componentStack?.slice(0, 1200) ?? null,
-    });
+  componentDidCatch(_error: Error, _info: ErrorInfo) {
+    // Render errors can contain OCR text, private filenames or invoice fields.
+    // Report only a stable diagnostic code; never log the raw exception,
+    // component stack or user-supplied financial content to the browser.
+    console.error("ocr-review-render-error");
   }
 
   private reset = () => {

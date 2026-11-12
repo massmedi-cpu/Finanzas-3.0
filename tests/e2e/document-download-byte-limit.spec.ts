@@ -262,3 +262,15 @@ test("REC-DOC-OPEN-251 · signed canonical Storage origin is independent of loca
     expect(route).toContain('}, `https://${SUPABASE_STORAGE_HOST}`)');
   }
 });
+
+test("REC-OCR-PRIV-257 · OCR render failures never log document text or component stacks", () => {
+  const boundary = readFileSync(join(process.cwd(), "app/documents/ocr-review-boundary.tsx"), "utf8");
+  const handler = boundary.slice(
+    boundary.indexOf("componentDidCatch("),
+    boundary.indexOf("private reset", boundary.indexOf("componentDidCatch(")),
+  );
+  expect(handler).toContain('console.error("ocr-review-render-error");');
+  expect(handler).not.toContain("error.message");
+  expect(handler).not.toContain("info.componentStack");
+  expect(handler).not.toContain("console.error(\"ocr-review-render-error\",");
+});
