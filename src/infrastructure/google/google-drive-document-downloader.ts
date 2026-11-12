@@ -7,6 +7,8 @@ export const GOOGLE_DRIVE_OCR_MAX_BYTES = 15 * 1024 * 1024;
 const DRIVE_FETCH_TIMEOUT_MS = 45_000;
 
 const FILE_ID = /^[A-Za-z0-9_-]{10,200}$/;
+const MAX_AUTHORIZED_ROOTS = 12;
+const MAX_AUTHORIZED_FOLDER_DEPTH = 6;
 const ALLOWED_MIMES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -133,16 +135,93 @@ export class GoogleDriveDocumentDownloader {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
+
+  /**
+   * Resolve a Drive file's real parent chain to one of the server-configured
+   * authorized roots. A child folder's placement is mutable, so call this
+   * BEFORE and AFTER the media read and require the same chain both times.
+   * Only trusted Drive metadata and server-side root IDs are accepted.
+   */
+  private async verifiedAuthorizedFolderChain(
+    rawParents: unknown,
+    roots: ReadonlySet<string>,
+    accessToken: string,
+    mismatchCode: "google_drive_document_access_denied" | "google_drive_document_source_changed",
+  ): Promise<string> {
+    const mismatch = () => new GoogleDriveDocumentError(
+      mismatchCode,
+      "El documento no conserva una ruta íntegra a una carpeta Drive autorizada.",
+    );
+    if (!Array.isArray(rawParents) || rawParents.length !== 1
+      || typeof rawParents[0] !== "string" || !FILE_ID.test(rawParents[0])) {
+      throw mismatch();
+    }
+    const chain: string[] = [];
+    let folderId: string = rawParents[0];
+    for (let depth = 0; depth <= MAX_AUTHORIZED_FOLDER_DEPTH; depth++) {
+      if (chain.includes(folderId)) throw mismatch();
+      chain.push(folderId);
+      if (roots.has(folderId)) return chain.join("/");
+      if (depth === MAX_AUTHORIZED_FOLDER_DEPTH) break;
+      const folderUrl =
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(folderId)}` +
+        "?fields=id,mimeType,trashed,parents&supportsAllDrives=true";
+      const response = await this.fetcher(folderUrl, {
+        method: "GET",
+        headers: googleHeaders(accessToken),
+        cache: "no-store",
+        redirect: "error",
+        signal: AbortSignal.timeout(DRIVE_FETCH_TIMEOUT_MS),
+      }).catch(() => null);
+      if (!response) {
+        throw new GoogleDriveDocumentError(
+          "google_drive_document_download_failed",
+          "No se pudo comprobar la pertenencia de una carpeta a la raíz autorizada.",
+        );
+      }
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403 || response.status === 404) {
+          throw mismatch();
+        }
+        throw new GoogleDriveDocumentError(
+          "google_drive_document_download_failed",
+          "Google Drive no ha permitido verificar la carpeta del documento.",
+        );
+      }
+      const folder = (await response.json().catch(() => null)) as DriveMetadata | null;
+      if (!folder || asNonEmptyString(folder.id) !== folderId
+        || folder.mimeType !== "application/vnd.google-apps.folder" || folder.trashed === true
+        || !Array.isArray(folder.parents) || folder.parents.length !== 1
+        || typeof folder.parents[0] !== "string" || !FILE_ID.test(folder.parents[0])) {
+        throw mismatch();
+      }
+      folderId = folder.parents[0];
+    }
+    throw mismatch();
+  }
+
   async download(input: {
     fileId: string;
     expectedMimeType: string;
     expectedModifiedTime?: string;
     expectedSizeBytes?: number;
     expectedAuthorizedFolderId?: string;
+    /** Server-configured roots only. Allows verified descendants as well as direct children. */
+    expectedAuthorizedRootFolderIds?: readonly string[];
   }) {
     const fileId = input.fileId.trim();
     const expectedMimeType = input.expectedMimeType.trim().toLowerCase();
     const authorizedFolder = input.expectedAuthorizedFolderId?.trim() ?? null;
+    const rootIds = input.expectedAuthorizedRootFolderIds;
+    if (rootIds !== undefined && (!Array.isArray(rootIds) || rootIds.length < 1
+      || rootIds.length > MAX_AUTHORIZED_ROOTS || rootIds.some((id) => typeof id !== "string" || !FILE_ID.test(id))
+      || new Set(rootIds).size !== rootIds.length)) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_id_invalid",
+        "El conjunto de carpetas Drive autorizadas no es válido.",
+      );
+    }
+    const roots = rootIds === undefined ? null : new Set(rootIds);
     if (authorizedFolder !== null && !FILE_ID.test(authorizedFolder)) {
       throw new GoogleDriveDocumentError("google_drive_document_id_invalid", "La carpeta Drive autorizada no es válida.");
     }
@@ -205,6 +284,10 @@ export class GoogleDriveDocumentDownloader {
         "Este archivo no pertenece a la carpeta documental autorizada.",
       );
     }
+    const initialAuthorizedChain = roots === null ? null
+      : await this.verifiedAuthorizedFolderChain(
+        metadata?.parents, roots, accessToken, "google_drive_document_access_denied",
+      );
     if (mimeType !== expectedMimeType || !ALLOWED_MIMES.has(mimeType)) {
       throw new GoogleDriveDocumentError(
         "google_drive_document_mime_mismatch",
@@ -307,6 +390,16 @@ export class GoogleDriveDocumentDownloader {
       throw new GoogleDriveDocumentError(
         "google_drive_document_source_changed",
         "El documento salió de la carpeta autorizada durante la descarga.",
+      );
+    }
+    const finalAuthorizedChain = roots === null ? null
+      : await this.verifiedAuthorizedFolderChain(
+        finalMetadata?.parents, roots, accessToken, "google_drive_document_source_changed",
+      );
+    if (initialAuthorizedChain !== finalAuthorizedChain) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_source_changed",
+        "Una carpeta del documento cambió de ubicación durante la descarga.",
       );
     }
     if (asNonEmptyString(finalMetadata?.id) !== fileId || finalMetadata?.trashed === true
