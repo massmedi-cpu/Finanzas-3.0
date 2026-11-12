@@ -107,6 +107,7 @@ async function existingDriveDocuments() {
 async function verifyCandidates(
   candidates: SyncCandidate[],
   driveDownloader: GoogleDriveDocumentDownloader,
+  authorizedRoots: readonly string[],
 ) {
   const verified: SyncCandidate[] = [];
   let failed = 0;
@@ -127,6 +128,7 @@ async function verifyCandidates(
           // Recheck Drive's authoritative parent before AND after reading bytes.
           // A file moved outside its enumerated folder must never be ingested.
           expectedAuthorizedFolderId: candidate.authorizedParentFolderId,
+          expectedAuthorizedRootFolderIds: authorizedRoots,
         });
         if (!downloaded.modifiedTime) {
           throw new Error("drive_verified_modified_time_missing");
@@ -236,7 +238,7 @@ export async function POST() {
       .map((file) => ({ ...file, type: inferDocumentType(file.name) }));
     const candidates = changedFiles.slice(0, MAX_IMPORTS_PER_RUN);
     const pending = Math.max(0, changedFiles.length - candidates.length);
-    const { verified, failed } = await verifyCandidates(candidates, readers.downloader);
+    const { verified, failed } = await verifyCandidates(candidates, readers.downloader, folderIds);
 
     let imported = 0;
     if (verified.length > 0) {
