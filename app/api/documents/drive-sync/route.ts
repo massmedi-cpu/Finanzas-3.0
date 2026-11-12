@@ -3,7 +3,6 @@ import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
   GoogleDriveDocumentDiscoveryError,
-  type DiscoveredDriveDocument,
 } from "../../../../src/infrastructure/google/google-drive-document-discovery";
 import {
   GoogleDriveDocumentDownloader,
