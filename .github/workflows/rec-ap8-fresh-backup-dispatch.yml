@@ -1,3 +1,7 @@
+# REC-BACKUP-255 (12/11/2026): the AP8 restore rehearsal intentionally rejected
+# an untrusted latest backup. Ask the existing identity-guarded main workflow
+# for one fresh encrypted, READ-ONLY backup; do not bypass the trust selector.
+# No release, database write, or sensitive content is requested by this PR.
 # REC-REL-637 (10/11/2026): after the UI regression assertion fix, relay
 # one current-HEAD backup request; older queued PR events must fail closed.
 # REC-REL-635 (10/11/2026): after authorized append-only 30 inserts, request
