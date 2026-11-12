@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { documentOcrErrorMessage } from "../../src/application/document-ocr-error-messages";
+import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
 import { OcrReviewHttpError, isDefinitelyRejectedOcrReview, sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
 import { interpretDocumentOcrFinancially, type DocumentOcrFinancialInterpretation } from "../../src/domain/document-ocr-financial-interpretation";
 import { useActionFeedback } from "../action-feedback";
@@ -313,11 +314,13 @@ function sameInstant(left: string | undefined, right: string) {
 export function OcrReviewPanel({
   documentId,
   storageProvider,
+  sourceDriveFileId,
   mimeType,
   onConfirmed,
 }: {
   documentId: string;
   storageProvider: StorageProvider;
+  sourceDriveFileId: string | null;
   mimeType: string;
   onConfirmed?: () => Promise<void> | void;
 }) {
@@ -681,13 +684,11 @@ export function OcrReviewPanel({
         if (!previewWindow.closed) previewWindow.close();
         return;
       }
-      if (typeof opened?.url !== "string") throw new Error("document_open_failed");
-      const destination = new URL(opened.url);
-      if (destination.protocol !== "https:"
-        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
-        throw new Error("document_open_unsafe_url");
-      }
-      previewWindow.location.replace(destination.href);
+      const safeOriginal = verifiedDocumentOriginalOpenUrl(opened, {
+        storageProvider,
+        sourceDriveFileId,
+      });
+      previewWindow.location.replace(safeOriginal);
     } catch {
       if (!previewWindow.closed) previewWindow.close();
       if (isCurrent()) setError("No se ha podido abrir el documento original de forma segura.");
