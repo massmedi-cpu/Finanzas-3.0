@@ -207,6 +207,29 @@ test('document original, genuine OCR, human review, associations, owner designat
   expect((await api(page, `/api/documents?id=${id}`)).document.lineItems).toHaveLength(2);
   await api(page, '/api/documents', 'PATCH', { action: 'associate', documentId: id, transactionId: ids.rule, method: 'manual' });
   expect((await api(page, `/api/documents?id=${id}`)).associations.some((r: any) => r.transactionId === ids.rule)).toBe(true);
+  // REC-DOC-E2E-253: a repeated association must not create another bank link.
+  const duplicateAssociation = await page.request.patch('/api/documents', {
+    data: { action: 'associate', documentId: id, transactionId: ids.rule, method: 'manual' },
+  });
+  expect([200, 409]).toContain(duplicateAssociation.status());
+  expect((await api(page, `/api/documents?id=${id}`)).associations
+    .filter((r: any) => r.transactionId === ids.rule)).toHaveLength(1);
+  // An authenticated account belonging to another workspace cannot remove
+  // this owner's association; then re-authenticate as the owner and re-read.
+  const foreignLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreignLogin.status()).toBe(200);
+  const foreignUnassociate = await page.request.patch('/api/documents', {
+    data: { action: 'unassociate', documentId: id, transactionId: ids.rule },
+  });
+  expect([403, 404]).toContain(foreignUnassociate.status());
+  const ownerLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.owner.email, password: c.owner.password },
+  });
+  expect(ownerLogin.status()).toBe(200);
+  expect((await api(page, `/api/documents?id=${id}`)).associations
+    .filter((r: any) => r.transactionId === ids.rule)).toHaveLength(1);
   expect((await api(page, `/api/documents?id=${c.documentId}`)).associations).toHaveLength(0);
   await api(page, '/api/documents', 'PATCH', { action: 'unassociate', documentId: id, transactionId: ids.rule });
   expect((await api(page, `/api/documents?id=${id}`)).associations).toHaveLength(0);
@@ -461,4 +484,41 @@ test('REC-DOC-E2E-252 · real isolated Storage round-trip checks all four MIME t
     expect(sha256(await response.body())).toBe(item.hash);
   }
   console.log('AUD_HTTP|case=original_mime_acl|types=pdf,jpeg,webp,png|signed_storage=true|sha_roundtrip=4|foreign_detail_denied=4|foreign_download_denied=4|owner_reauth=true|personal_data=false');
+});
+
+
+test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across reload', async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page);
+  await page.setContent('<html lang="es"><body style="font:28px Arial;padding:32px"><main><h1>FACTURA SINTÉTICA</h1><p>15/10/2026</p><p>TOTAL 29,00 EUR</p><p>SIN DATOS PERSONALES</p></main></body></html>');
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const sha256 = (input: Uint8Array) => createHash('sha256').update(input).digest('hex');
+  const name = 'AUD-UI-CYCLE-254.pdf';
+  await page.goto('/documents');
+  await page.getByLabel('Galería o archivo').setInputFiles({
+    name, mimeType: 'application/pdf', buffer: pdf,
+  });
+  await page.getByRole('button', { name: 'Guardar original' }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 90_000 });
+
+  const documentList = await api(page, '/api/documents?scope=ordinary&limit=100');
+  const saved = documentList.items.find((item: any) => item.originalFileName === name);
+  expect(saved?.id).toMatch(/^[0-9a-f-]{36}$/i);
+  const downloaded = await page.request.get('/api/documents/download?id=' + saved.id);
+  expect(downloaded.status()).toBe(200);
+  expect(sha256(await downloaded.body())).toBe(sha256(pdf));
+
+  const [popup] = await Promise.all([
+    page.waitForEvent('popup'),
+    page.getByTestId('ocr-review-panel').getByRole('button', { name: 'Abrir', exact: true }).click(),
+  ]);
+  await expect.poll(() => popup.url()).toContain('/storage/v1/object/sign/financial-app-documents/uploads/');
+  await popup.close();
+  await page.reload();
+  await page.getByRole('button', { name: new RegExp(name) }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+  const reloaded = await page.request.get('/api/documents/download?id=' + saved.id);
+  expect(reloaded.status()).toBe(200);
+  expect(sha256(await reloaded.body())).toBe(sha256(pdf));
+  console.log('AUD_HTTP|case=owner_ui_original|synthetic_pdf=true|private_signed_open=true|sha_download=true|reload_persisted=true|personal_data=false');
 });
