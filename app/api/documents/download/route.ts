@@ -118,7 +118,7 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
     url = new URL(verifiedDocumentOriginalOpenUrl(opened, {
       storageProvider: detail.document.storageProvider,
       sourceDriveFileId: detail.document.sourceDriveFileId,
-    }));
+    }, `https://${SUPABASE_STORAGE_HOST}`));
   } catch {
     throw new Error("document_download_source_rejected");
   }

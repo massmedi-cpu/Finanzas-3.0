@@ -22,6 +22,7 @@ function unsafe(): never {
 export function verifiedDocumentOriginalOpenUrl(
   response: unknown,
   source: OriginalDocumentSource,
+  signedStorageOrigin: string = SUPABASE_ORIGIN,
 ): string {
   if (!response || typeof response !== "object" || Array.isArray(response)
     || !source || typeof source !== "object") return unsafe();
@@ -45,7 +46,7 @@ export function verifiedDocumentOriginalOpenUrl(
     return url.href;
   }
 
-  if (url.origin !== SUPABASE_ORIGIN || !PRIVATE_ORIGINAL_PATH.test(url.pathname)
+  if (url.origin !== signedStorageOrigin || !PRIVATE_ORIGINAL_PATH.test(url.pathname)
     || [...url.searchParams.keys()].join(",") !== "token"
     || !url.searchParams.get("token")) return unsafe();
   return url.href;

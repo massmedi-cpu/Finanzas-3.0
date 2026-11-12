@@ -233,3 +233,32 @@ test("REC-DOC-OPEN-250 · signed source rejects foreign buckets, extra tokens an
     { provider: "google_drive", url: valid }, source,
   )).toThrow("document_open_unsafe_url");
 });
+
+// REC-DOC-OPEN-251: isolated Auth/Storage/OCR tests deliberately configure
+// a loopback Supabase URL; their signed gateway URLs use the canonical origin.
+test("REC-DOC-OPEN-251 · signed canonical Storage origin is independent of local auth origin", () => {
+  const canonical = "https://btzukbfesxdratqnxuoj.supabase.co";
+  const source = { storageProvider: "supabase" as const, sourceDriveFileId: null };
+  const path = "/storage/v1/object/sign/financial-app-documents/uploads/"
+    + "97000000-0000-4000-8000-000000000097/"
+    + "98000000-0000-4000-8000-000000000097.pdf?token=synthetic";
+  expect(verifiedDocumentOriginalOpenUrl({
+    provider: "supabase", url: canonical + path,
+  }, source, canonical)).toBe(canonical + path);
+  for (const rejected of [
+    "http://127.0.0.1:54321" + path,
+    "https://other.supabase.co" + path,
+    canonical + path + "&redirect=https%3A%2F%2Fevil.invalid",
+  ]) {
+    expect(() => verifiedDocumentOriginalOpenUrl({
+      provider: "supabase", url: rejected,
+    }, source, canonical), rejected).toThrow("document_open_unsafe_url");
+  }
+  for (const path of [
+    "app/api/documents/ocr/route.ts",
+    "app/api/documents/download/route.ts",
+  ]) {
+    const route = readFileSync(join(process.cwd(), path), "utf8");
+    expect(route).toContain('}, `https://${SUPABASE_STORAGE_HOST}`)');
+  }
+});

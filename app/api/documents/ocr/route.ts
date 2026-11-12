@@ -438,7 +438,7 @@ async function documentBytes(detail: DocumentDetail) {
     verifiedUrl = verifiedDocumentOriginalOpenUrl(opened, {
       storageProvider: detail.document.storageProvider,
       sourceDriveFileId: detail.document.sourceDriveFileId,
-    });
+    }, `https://${SUPABASE_STORAGE_HOST}`);
   } catch {
     throw new OcrApiError("ocr_source_url_rejected", 503);
   }
