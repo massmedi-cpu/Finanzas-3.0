@@ -433,6 +433,132 @@ test("REC-DOC-AUTH-228 · re-opening Drive originals requires authorized folder 
     const downloadEnd = source.indexOf("});", downloadStart);
     expect(downloadEnd, file).toBeGreaterThan(downloadStart);
     const options = source.slice(downloadStart, downloadEnd);
-    expect(options, file).toContain("expectedAuthorizedFolderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID");
+    // Roots are supplied only by server configuration, not by a browser.
+    // This allows a validated descendant of an authorized private root.
+    expect(options, file).toContain("expectedAuthorizedRootFolderIds: resolveAuthorizedDocumentFolders(");
+    expect(options, file).toContain("process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS");
+    expect(source, file).toContain("FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID");
   }
+});
+
+
+// All metadata below is synthetic. The authoritative file parent may be an
+// authorized root OR a descendant folder; a subtree can be moved independently
+// of a file without changing that file's own version or direct parent.
+const authorizedRoot = "R".repeat(24);
+const nestedFolder = "C".repeat(24);
+const unrelatedRoot = "X".repeat(24);
+
+function nestedOriginalFetcher(options: {
+  folderParent: string;
+  movedAfterMedia?: string;
+  directParent?: string;
+  malformedFolder?: boolean;
+}) {
+  let folderReads = 0;
+  let mediaReads = 0;
+  let fileReads = 0;
+  const fetcher: typeof fetch = async input => {
+    const url = new URL(String(input));
+    if (url.searchParams.get("alt") === "media") {
+      mediaReads++;
+      return new Response(pdf, { headers: { "content-length": String(Buffer.byteLength(pdf)) } });
+    }
+    if (url.pathname.endsWith("/" + fileId)) {
+      fileReads++;
+      return Response.json({
+        id: fileId, name: "factura-subcarpeta.pdf", mimeType: "application/pdf",
+        size: String(Buffer.byteLength(pdf)), modifiedTime: authoritativeDate,
+        version: "17", parents: [options.directParent ?? nestedFolder], trashed: false,
+      });
+    }
+    if (url.pathname.endsWith("/" + nestedFolder)) {
+      folderReads++;
+      return Response.json({
+        id: nestedFolder,
+        mimeType: options.malformedFolder ? "application/pdf" : "application/vnd.google-apps.folder",
+        parents: [options.movedAfterMedia && mediaReads ? options.movedAfterMedia : options.folderParent],
+        trashed: false,
+      });
+    }
+    // An unexpected Drive ancestor must never be silently accepted.
+    return Response.json({ error: "not_found" }, { status: 404 });
+  };
+  return { fetcher, counts: () => ({ folderReads, mediaReads, fileReads }) };
+}
+
+test("REC-DOC-SCOPE-237 · OCR/download admit descendants of root only with verified Drive ancestry", async () => {
+  const nested = nestedOriginalFetcher({ folderParent: authorizedRoot });
+  const reader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" }, nested.fetcher,
+  );
+  const result = await reader.download({
+    fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedRootFolderIds: [authorizedRoot],
+  });
+  expect(result.fileId).toBe(fileId);
+  expect(nested.counts()).toEqual({ folderReads: 2, mediaReads: 1, fileReads: 2 });
+
+  const direct = nestedOriginalFetcher({
+    folderParent: unrelatedRoot, directParent: authorizedRoot,
+  });
+  await new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" }, direct.fetcher,
+  ).download({
+    fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedRootFolderIds: [authorizedRoot],
+  });
+  expect(direct.counts()).toEqual({ folderReads: 0, mediaReads: 1, fileReads: 2 });
+});
+
+test("REC-DOC-SCOPE-238 · file outside every authorized root is rejected before bytes are read", async () => {
+  const mock = nestedOriginalFetcher({ folderParent: unrelatedRoot });
+  const reader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" }, mock.fetcher,
+  );
+  await expect(reader.download({
+    fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedRootFolderIds: [authorizedRoot],
+  })).rejects.toMatchObject({ code: "google_drive_document_access_denied" });
+  expect(mock.counts().mediaReads).toBe(0);
+});
+
+test("REC-DOC-SCOPE-239 · moving only the containing folder invalidates the downloaded file", async () => {
+  const mock = nestedOriginalFetcher({
+    folderParent: authorizedRoot, movedAfterMedia: unrelatedRoot,
+  });
+  const reader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" }, mock.fetcher,
+  );
+  await expect(reader.download({
+    fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedRootFolderIds: [authorizedRoot],
+    expectedAuthorizedFolderId: nestedFolder,
+  })).rejects.toMatchObject({ code: "google_drive_document_source_changed" });
+  expect(mock.counts()).toMatchObject({ mediaReads: 1, fileReads: 2 });
+});
+
+test("REC-DOC-SCOPE-240 · malformed folder metadata and untrusted root lists fail closed", async () => {
+  const malformed = nestedOriginalFetcher({ folderParent: authorizedRoot, malformedFolder: true });
+  const reader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "synthetic-readonly" }, malformed.fetcher,
+  );
+  await expect(reader.download({
+    fileId, expectedMimeType: "application/pdf",
+    expectedAuthorizedRootFolderIds: [authorizedRoot],
+  })).rejects.toMatchObject({ code: "google_drive_document_access_denied" });
+  expect(malformed.counts().mediaReads).toBe(0);
+  for (const roots of [[authorizedRoot, authorizedRoot], [], Array(13).fill(authorizedRoot)]) {
+    await expect(reader.download({
+      fileId, expectedMimeType: "application/pdf",
+      expectedAuthorizedRootFolderIds: roots,
+    })).rejects.toMatchObject({ code: "google_drive_document_id_invalid" });
+  }
+});
+
+test("REC-DOC-SCOPE-241 · automatic Drive import passes both true parent and authorized root chain", () => {
+  const src = readFileSync(join(process.cwd(), "app/api/documents/drive-sync/route.ts"), "utf8");
+  expect(src).toContain("expectedAuthorizedFolderId: candidate.authorizedParentFolderId");
+  expect(src).toContain("expectedAuthorizedRootFolderIds: authorizedRoots");
+  expect(src).toContain("verifyCandidates(candidates, readers.downloader, folderIds)");
 });
