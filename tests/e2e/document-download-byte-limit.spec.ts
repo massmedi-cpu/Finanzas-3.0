@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { knownPublicErrorCode } from "../../src/infrastructure/http/gateway-public-error";
 import { documentDownloadContentDisposition } from "../../src/application/document-download-content-disposition";
+import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
+import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import {
   LimitedResponseBodyError,
   readLimitedResponseBody,
@@ -190,4 +192,44 @@ test("REC-DOC-DOWNLOAD-244 · original-download route uses reviewed safe disposi
   expect(route).toContain('import { documentDownloadContentDisposition }');
   expect(route).toContain('"content-disposition": documentDownloadContentDisposition(fileName)');
   expect(route).not.toContain("safeDownloadName");
+});
+
+// REC-DOC-OPEN-249–250: synthetic URLs only. No private original or gateway call.
+test("REC-DOC-OPEN-249 · OCR and download validate signed gateway URLs before reading bytes", () => {
+  for (const filename of [
+    "app/api/documents/ocr/route.ts",
+    "app/api/documents/download/route.ts",
+  ]) {
+    const route = readFileSync(join(process.cwd(), filename), "utf8");
+    expect(route).toContain('callPersistenceGateway<DocumentOpen>("document.open"');
+    expect(route).toContain("verifiedDocumentOriginalOpenUrl(opened, {");
+    expect(route).toContain("storageProvider: detail.document.storageProvider");
+    expect(route).toContain("sourceDriveFileId: detail.document.sourceDriveFileId");
+  }
+});
+
+test("REC-DOC-OPEN-250 · signed source rejects foreign buckets, extra tokens and redirects", () => {
+  const source = { storageProvider: "supabase" as const, sourceDriveFileId: null };
+  const valid = SUPABASE_ORIGIN
+    + "/storage/v1/object/sign/financial-app-documents/uploads/"
+    + "97000000-0000-4000-8000-000000000097/"
+    + "98000000-0000-4000-8000-000000000097.pdf?token=synthetic";
+  expect(verifiedDocumentOriginalOpenUrl({ provider: "supabase", url: valid }, source)).toBe(valid);
+  for (const invalid of [
+    valid.replace("financial-app-documents", "other-bucket"),
+    valid.replace("/storage/v1/object/sign/", "/storage/v1/object/public/"),
+    valid.replace("/uploads/", "/other/"),
+    valid.replace("97000000-0000-4000-8000-000000000097", "not-a-workspace"),
+    valid + "&token=another",
+    valid + "&redirect=https%3A%2F%2Foutside.invalid",
+    valid + "#fragment",
+    valid.replace(SUPABASE_ORIGIN, "https://outside.invalid"),
+    valid.replace("?token=synthetic", ""),
+  ]) {
+    expect(() => verifiedDocumentOriginalOpenUrl({ provider: "supabase", url: invalid }, source),
+      invalid).toThrow("document_open_unsafe_url");
+  }
+  expect(() => verifiedDocumentOriginalOpenUrl(
+    { provider: "google_drive", url: valid }, source,
+  )).toThrow("document_open_unsafe_url");
 });

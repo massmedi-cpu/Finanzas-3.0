@@ -25,6 +25,7 @@ import {
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { LimitedResponseBodyError, readLimitedResponseBody } from "../../../../src/infrastructure/http/limited-response-body";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
+import { verifiedDocumentOriginalOpenUrl } from "../../../../src/application/document-original-open-url";
 
 import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
 
@@ -431,7 +432,17 @@ async function documentBytes(detail: DocumentDetail) {
   }
 
   const opened = await callPersistenceGateway<DocumentOpen>("document.open", { id: detail.document.id });
-  return downloadPrivateDocument(opened.url);
+  let verifiedUrl: string;
+  try {
+    // Never feed OCR an unscoped signed URL, even from the expected host.
+    verifiedUrl = verifiedDocumentOriginalOpenUrl(opened, {
+      storageProvider: detail.document.storageProvider,
+      sourceDriveFileId: detail.document.sourceDriveFileId,
+    });
+  } catch {
+    throw new OcrApiError("ocr_source_url_rejected", 503);
+  }
+  return downloadPrivateDocument(verifiedUrl);
 }
 
 async function executeOcr(request: Request) {

@@ -20,6 +20,7 @@ import { knownPublicErrorCode, publicRemoteGatewayCode } from "../../../../src/i
 import { documentBytesMatchMimeType } from "../../../../src/domain/document-content-signature";
 import { documentDownloadContentDisposition } from "../../../../src/application/document-download-content-disposition";
 import { isPrivateDocumentOriginalDetailForId, type PrivateDocumentOriginalDetail } from "../../../../src/application/private-document-original-detail";
+import { verifiedDocumentOriginalOpenUrl } from "../../../../src/application/document-original-open-url";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -112,9 +113,14 @@ async function downloadSupabaseOriginal(id: string, detail: DocumentDetail) {
   const opened = await callPersistenceGateway<DocumentOpen>("document.open", { id });
   let url: URL;
   try {
-    url = new URL(opened.url);
+    // Share the strict gateway URL contract with the browser. Validate
+    // provider, private bucket/path and signed token BEFORE reading bytes.
+    url = new URL(verifiedDocumentOriginalOpenUrl(opened, {
+      storageProvider: detail.document.storageProvider,
+      sourceDriveFileId: detail.document.sourceDriveFileId,
+    }));
   } catch {
-    throw new Error("document_download_url_invalid");
+    throw new Error("document_download_source_rejected");
   }
   if (
     url.protocol !== "https:"
