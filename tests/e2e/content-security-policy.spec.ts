@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
+import { DOCUMENT_SIGNED_STORAGE_ORIGIN } from "../../src/application/document-original-open-url";
 
 function directive(csp: string, name: string) {
   return csp
@@ -30,7 +31,12 @@ test("G · CSP aplica una política estricta con nonce a las respuestas HTML", a
 
   const connectSrc = directive(csp, "connect-src");
   const connectSources = connectSrc.split(/\s+/);
-  expect(connectSources).toEqual(["connect-src", "'self'", SUPABASE_ORIGIN]);
+  // Exact-origin union: production has 2 entries; only isolated local Auth
+  // needs the additionally reviewed signed-Storage origin.
+  expect(connectSources).toEqual([
+    "connect-src", "'self'", SUPABASE_ORIGIN,
+    ...(SUPABASE_ORIGIN === DOCUMENT_SIGNED_STORAGE_ORIGIN ? [] : [DOCUMENT_SIGNED_STORAGE_ORIGIN]),
+  ]);
   expect(connectSources).not.toContain("*.supabase.co");
   expect(connectSources).not.toContain("https:");
 

@@ -533,6 +533,10 @@ test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across 
     if (area) sanitizedHttp.push(area + ':' + response.request().method() + ':' + response.status());
   });
   await page.goto('/documents');
+  // Fail early if CSP blocks canonical signed Storage in isolated local Auth.
+  const csp = (await page.request.get('/documents')).headers()['content-security-policy'] ?? '';
+  expect(csp).toContain('connect-src');
+  expect(csp).toContain(canonicalStorageOrigin);
   await page.getByLabel('Galería o archivo').setInputFiles({
     name, mimeType: 'application/pdf', buffer: pdf,
   });
