@@ -30,6 +30,7 @@ import {
   DocumentDriveFolderScopeError,
   discoverAuthorizedDocumentFolders,
   resolveAuthorizedDocumentFolders,
+  type ScopedDiscoveredDriveDocument,
 } from "../../../../src/application/document-drive-folder-scope";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ const DOWNLOAD_CONCURRENCY = 4;
 type ExistingDocument = DocumentDriveInventoryRow;
 type DocumentList = DocumentDriveInventoryPage;
 
-type SyncCandidate = DiscoveredDriveDocument & {
+type SyncCandidate = ScopedDiscoveredDriveDocument & {
   type: "ticket" | "invoice" | "other";
 };
 
@@ -123,6 +124,9 @@ async function verifyCandidates(
           expectedMimeType: candidate.mimeType,
           expectedModifiedTime: candidate.modifiedTime,
           expectedSizeBytes: candidate.sizeBytes,
+          // Recheck Drive's authoritative parent before AND after reading bytes.
+          // A file moved outside its enumerated folder must never be ingested.
+          expectedAuthorizedFolderId: candidate.authorizedParentFolderId,
         });
         if (!downloaded.modifiedTime) {
           throw new Error("drive_verified_modified_time_missing");
