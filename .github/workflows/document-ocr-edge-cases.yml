@@ -8,9 +8,11 @@ on:
     paths:
       - "src/domain/document-ocr.ts"
       - "src/application/document-ocr-service.ts"
+      - "src/infrastructure/ocr/image-metadata.ts"
       - "supabase/migrations/20260903200004_financial_app_foundations.sql"
       - "supabase/migrations/20260906194000_phase9_document_engine_core.sql"
       - "tests/e2e/document-ocr-edge-cases-10.0.33.spec.ts"
+      - "tests/e2e/document-ocr-image-metadata.spec.ts"
       - "tests/e2e/document-ocr-contract.spec.ts"
       - "tests/e2e/document-ocr-structured-review.spec.ts"
       - "tests/e2e/document-ocr-natural-review.spec.ts"
@@ -68,6 +70,7 @@ jobs:
         run: >-
           npx playwright test
           tests/e2e/document-ocr-edge-cases-10.0.33.spec.ts
+          tests/e2e/document-ocr-image-metadata.spec.ts
           tests/e2e/document-ocr-contract.spec.ts
           tests/e2e/document-ocr-structured-review.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts

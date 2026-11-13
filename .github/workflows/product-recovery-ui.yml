@@ -238,6 +238,7 @@ jobs:
           tests/e2e/document-ocr-post-confirmation-list-sync.spec.ts
           tests/e2e/document-ocr-financial-interpretation.spec.ts
           tests/e2e/document-ocr-pdf-native-coverage.spec.ts
+          tests/e2e/document-ocr-image-metadata.spec.ts
           tests/e2e/document-ocr-pdf-hybrid-provider.spec.ts
           tests/e2e/gateway-request-body-limit.spec.ts
           tests/e2e/deployment-region-contract.spec.ts
