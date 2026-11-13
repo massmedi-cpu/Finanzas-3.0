@@ -1734,8 +1734,23 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // Do not turn that into success or issue an implicit destructive DELETE.
       if (response.status === 404) {
         const detailResponse = await fetch("/api/documents?id=" + encodeURIComponent(id), { cache: "no-store" });
+        // A generic 200 or login fallback does NOT prove the document still
+        // exists. Only a complete response for the same owner document may
+        // release the crash-recovery journal without rerunning SQL DELETE.
         if (detailResponse.ok) {
+          const readback = await readJson(detailResponse) as DocumentDetail;
+          if (readback?.document?.id !== id || ![1, 2, 3].includes(readback.contractVersion)
+            || !Array.isArray(readback.associations)
+            || readback.principles?.bankSource !== "read_only") {
+            throw new Error("document_delete_recovery_unverified");
+          }
+          if (localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY) !== id) {
+            throw new Error("document_delete_recovery_conflict");
+          }
           localStorage.removeItem(PENDING_DOCUMENT_DELETE_KEY);
+          if (localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY) !== null) {
+            throw new Error("document_delete_recovery_unavailable");
+          }
           setPendingDeleteRecovery(null);
           setError("La ficha sigue existiendo: la eliminación anterior no llegó a confirmarse. No se ha borrado nada; puedes revisarla y decidir de nuevo.");
           return;
