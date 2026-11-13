@@ -186,6 +186,7 @@ jobs:
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/document-delete-recovery.spec.ts
           tests/e2e/release-ocr-scope.spec.ts
           tests/e2e/release-document-scope.spec.ts
           tests/e2e/protected-preview-release-profile.spec.ts
