@@ -59,6 +59,69 @@ if (!/\[inbucket\]\r?\nenabled = false/.test(updated)) {
 fs.writeFileSync(file, updated);
 process.stdout.write('AUD_AUTH|mail_capture_disabled=true|db_auth_storage_intact=true\n');
 NODE
+# GitHub runners can already have 54321 or 54322 bound. Verify host-port
+# availability BEFORE starting the genuine local Supabase stack. Reassign
+# only occupied ports inside the disposable config; status.json supplies the
+# chosen API_URL/DB_URL to every caller, never a hard-coded remote endpoint.
+node - "$workdir/supabase/config.toml" <<'NODE_LOCAL_PORTS'
+const fs = require('node:fs');
+const net = require('node:net');
+const path = process.argv[2];
+let config = fs.readFileSync(path, 'utf8');
+function locate(section) {
+  const lines = config.split(/\r?\n/);
+  const headers = lines.map((line, i) => line.trim() === '[' + section + ']' ? i : -1).filter(i => i >= 0);
+  if (headers.length !== 1) throw Error('AUD_AUTH|invalid_local_section_' + section);
+  const start = headers[0] + 1;
+  let end = start;
+  while (end < lines.length && !/^\s*\[[^\]]+\]\s*$/.test(lines[end])) end++;
+  const ports = [];
+  for (let i = start; i < end; i++) if (/^\s*port\s*=/.test(lines[i])) ports.push(i);
+  if (ports.length !== 1 || !/^\s*port\s*=\s*\d+\s*(?:#.*)?$/.test(lines[ports[0]])) {
+    throw Error('AUD_AUTH|invalid_local_port_' + section);
+  }
+  const original = Number(lines[ports[0]].match(/=\s*(\d+)/)[1]);
+  if (!Number.isSafeInteger(original) || original < 1024 || original > 65535) {
+    throw Error('AUD_AUTH|invalid_local_port_' + section);
+  }
+  return { lines, index: ports[0], original };
+}
+async function canBind(port) {
+  return new Promise(resolve => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.listen({ host: '0.0.0.0', port, exclusive: true }, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+(async () => {
+  const reserved = new Set(
+    [...config.matchAll(/^\s*port\s*=\s*(\d+)\s*(?:#.*)?$/gm)].map(x => Number(x[1]))
+  );
+  for (const section of ['api', 'db']) {
+    const existing = locate(section);
+    let port = existing.original;
+    if (!(await canBind(port))) {
+      port = 0;
+      for (let candidate = 55000; candidate < 55100; candidate++) {
+        if (!reserved.has(candidate) && await canBind(candidate)) {
+          port = candidate;
+          break;
+        }
+      }
+      if (!port) throw Error('AUD_AUTH|no_available_disposable_local_port');
+      const updated = locate(section);
+      updated.lines[updated.index] = 'port = ' + port;
+      config = updated.lines.join('\n');
+      reserved.add(port);
+    }
+    process.stdout.write('AUD_AUTH|local_' + section + '_port=' + port +
+      '|default_conflict=' + (port !== existing.original) + '|host_only=true\n');
+  }
+  fs.writeFileSync(path, config);
+})().catch(error => { console.error(error.message); process.exitCode = 1; });
+NODE_LOCAL_PORTS
 # Start Auth, REST and Storage against the genuine managed schemas, not stubs.
 # Migrations are copied verbatim before start; no production bootstrap data.
 cp -a supabase/migrations "$workdir/supabase/migrations"
