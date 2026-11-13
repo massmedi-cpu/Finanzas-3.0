@@ -536,3 +536,40 @@
     transform: none;
   }
 }
+
+/* Always-visible desktop exit, with a separate mobile entry in Más. */
+.sessionExit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.9rem;
+  margin-left: auto;
+  border: 1px solid var(--border-navigation);
+  border-radius: var(--radius-item);
+  background: var(--surface-navigation);
+  color: var(--text-on-strong);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.sessionExit:hover,
+.sessionExit:focus-visible {
+  border-color: var(--border-primary-strong);
+  background: var(--surface-primary-soft);
+}
+.sessionExit:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+@media (min-width: 68.75rem) {
+  .sessionExit {
+    margin-top: auto;
+    margin-left: 0;
+    width: 100%;
+  }
+}
+@media (max-width: 48rem) {
+  .sessionExit { display: none; }
+}
