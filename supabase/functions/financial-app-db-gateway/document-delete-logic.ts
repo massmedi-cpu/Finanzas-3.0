@@ -150,14 +150,23 @@ export async function handleDocumentDeleteAction({
 
     const deletedRows = await sql`select financial_app.delete_document_registration(${id}::uuid) as result`;
     const deleted = unwrapResult(deletedRows);
+    if (deleted.deleted !== true || deleted.documentId !== id || deleted.bankSource !== "read_only") {
+      throw new Error("document_delete_contract_invalid");
+    }
+    // The SQL receipt includes Storage keys, source Drive identifiers and
+    // original filenames for private forensic recovery. Do not serialize any
+    // of those internal fields in the public API, including error responses.
+    const publicResult = {
+      contractVersion: 1, deleted: true, documentId: id, bankSource: "read_only",
+    };
 
     // The committed SQL audit is the durable recovery handle if Storage fails.
     // Any success declaration must follow a separate Storage readback.
     const cleaned = await cleanupFromDeleteReceipt(sql, id);
     if ("error" in cleaned) {
-      return json({ ...deleted, storageCleanupPending: true, storageCleanupCode: cleaned.error });
+      return json({ ...publicResult, storageCleanupPending: true, storageCleanupCode: cleaned.error });
     }
-    return json({ ...deleted, ...cleaned });
+    return json({ ...publicResult, ...cleaned });
   }
 
   if (action === "document.delete_cleanup") {
