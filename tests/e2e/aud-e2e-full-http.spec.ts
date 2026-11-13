@@ -632,6 +632,15 @@ test('REC-DOC-E2E-262 · deletion removes only disposable private original, retr
     return saved.document.id as string;
   };
   const id = await signAndFinalize();
+  // Archiving is reversible, and an archived original must never be deleted.
+  await api(page, '/api/documents', 'PATCH', { action: 'status', id, status: 'archived' });
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('archived');
+  expect((await api(page, '/api/documents/delete?id=' + id)).canDelete).toBe(false);
+  const deniedArchiveDelete = await page.request.delete('/api/documents/delete?id=' + id);
+  expect(deniedArchiveDelete.status()).toBe(409);
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('archived');
+  await api(page, '/api/documents', 'PATCH', { action: 'status', id, status: 'imported' });
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('imported');
   const originalUrl = new URL((await api(page, '/api/documents?id=' + id + '&mode=open')).url);
   expect(originalUrl.origin).toBe(canonicalStorageOrigin);
   const originalStorageUrl = localStorageOrigin + originalUrl.pathname + originalUrl.search;
