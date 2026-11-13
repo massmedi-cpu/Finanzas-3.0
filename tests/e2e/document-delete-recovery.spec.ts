@@ -103,3 +103,43 @@ test("REC-DOC-DELETE-259 · owner confirmation, uncertain cleanup and reload-saf
   expect(writes).toEqual(["GET", "DELETE", "POST"]);
   expect(removeAttempts).toBe(1);
 });
+
+
+test("REC-DOC-DELETE-275 · malformed 200 cannot erase a pending delete journal", async ({ page }) => {
+  let responseIsValid = false;
+  const writes: string[] = [];
+  await page.addInitScript(({ key, id }) => {
+    localStorage.setItem(key, id);
+  }, { key: "financial-app:documents:pending-delete-cleanup:v1", id: ID });
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("id")) {
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify(responseIsValid
+          ? { contractVersion: 3, document: { id: ID }, associations: [], principles }
+          : { ok: true, documentId: "other-document" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ contractVersion: 3, items: [], total: 0, offset: 0,
+        limit: 50, testCount: 0, principles }) });
+  });
+  await page.route(/\/api\/documents\/delete\?.*$/, async (route) => {
+    writes.push(route.request().method());
+    await route.fulfill({ status: 404, contentType: "application/json",
+      body: '{"error":"document_delete_cleanup_not_found"}' });
+  });
+  await page.goto("/documents");
+  const banner = page.getByTestId("document-delete-recovery");
+  await expect(banner).toBeVisible();
+  await banner.getByRole("button", { name: "Reintentar limpieza" }).click();
+  await expect(banner).toBeVisible();
+  await expect(page.getByTestId("documents-alert")).toBeVisible();
+  expect(writes).toEqual(["POST"]);
+
+  responseIsValid = true;
+  await banner.getByRole("button", { name: "Reintentar limpieza" }).click();
+  await expect(banner).toHaveCount(0);
+  await expect(page.getByTestId("documents-alert")).toContainText("La ficha sigue existiendo");
+  expect(writes).toEqual(["POST", "POST"]);
+});
