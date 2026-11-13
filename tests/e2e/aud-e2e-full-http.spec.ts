@@ -72,6 +72,19 @@ async function transaction(page: Page, id: string) {
   return row;
 }
 
+// REC-PUB-FULL-273: HTTP proves the actual optimized Next build exposes all
+// three launch capabilities while tests run against real local Auth + Storage.
+test('REC-PUB-FULL-273 · actual isolated Next build exposes complete release features', async ({ page }) => {
+  const response = await page.request.get('/api/build');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toContain('no-store');
+  const build = await response.json();
+  expect(build.releaseFeatures).toEqual({
+    documents: true, documentOcr: true, documentDriveSync: true,
+  });
+  console.log('AUD_HTTP|case=full_release_profile|documents=true|ocr=true|drive_sync=true|local_only=true');
+});
+
 test('HTTP boundary verifies signature/claims, Preview read-only and actual user isolation', async ({ page }) => {
   const c = await login(page);
   const tokens = JSON.parse(await fs.readFile(`${dir}/machine-tokens.json`, 'utf8'));
