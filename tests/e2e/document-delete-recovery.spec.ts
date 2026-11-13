@@ -1,10 +1,20 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { createRequire } from "node:module";
-// Playwright transpiles spec imports through its runner; a normal TS namespace
-// import did not expose ScriptTarget, even after unwrapping .default. Load the
-// installed CommonJS TypeScript compiler with Node's native require instead.
-const ts = createRequire(process.cwd() + "/package.json")("typescript") as typeof import("typescript");
+import { execFileSync } from "node:child_process";
+
+// Run TypeScript in a true Node process instead of the Playwright spec loader:
+// three previous Playwright transforms exposed a partial TypeScript module
+// (no ScriptTarget enum). The child checks syntax, and FAILS if the installed
+// compiler is missing or produces any error diagnostic. No network or SQL.
+const nodeSyntaxCheck = [
+  'const ts = require("typescript");',
+  'const fs = require("node:fs");',
+  'if (typeof ts.transpileModule !== "function" || ts.ScriptTarget?.ES2022 === undefined || ts.ModuleKind?.ESNext === undefined) throw new Error("typescript_compiler_unavailable");',
+  'const source = fs.readFileSync("supabase/functions/financial-app-db-gateway/document-delete-logic.ts", "utf8");',
+  'const parsed = ts.transpileModule(source, {fileName: "document-delete-logic.ts", reportDiagnostics: true, compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}});',
+  'const errors = (parsed.diagnostics || []).filter(item => item.category === ts.DiagnosticCategory.Error);',
+  'if (errors.length) { for (const error of errors) console.error(ts.flattenDiagnosticMessageText(error.messageText, "\\n")); process.exit(1); }',
+].join("\n");
 
 const ID = "93000000-0000-4000-8000-000000000258";
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
@@ -20,12 +30,15 @@ const document = {
 test("REC-DOC-DELETE-258 · retry is ID-only; gateway must recover a scoped SQL audit receipt", () => {
   const gateway = readFileSync("supabase/functions/financial-app-db-gateway/document-delete-logic.ts", "utf8");
   const route = readFileSync("app/api/documents/delete/route.ts", "utf8");
-  const parsed = ts.transpileModule(gateway, {
-    fileName: "document-delete-logic.ts", reportDiagnostics: true,
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-  });
-  expect((parsed.diagnostics ?? []).filter((item) => item.category === ts.DiagnosticCategory.Error))
-    .toHaveLength(0);
+  // Node's native CommonJS loader provides the complete TypeScript compiler
+  // independently of how Playwright loads and bundles this test module.
+  expect(() => execFileSync(process.execPath, ["-e", nodeSyntaxCheck], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    timeout: 15_000,
+    maxBuffer: 100_000,
+    env: { ...process.env, NODE_OPTIONS: "" },
+  })).not.toThrow();
   expect(gateway).toContain("return value.toLowerCase()");
   expect(gateway).toContain("const publicResult =");
   expect(gateway).not.toContain("json({ ...deleted");
