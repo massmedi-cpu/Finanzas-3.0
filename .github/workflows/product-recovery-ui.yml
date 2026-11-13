@@ -101,6 +101,13 @@ jobs:
 
   synthetic-browser-matrix:
     runs-on: ubuntu-latest
+    # This is the FULL product profile. The independent deferred job above
+    # certifies the restricted candidate; neither result can substitute for
+    # the other. NEXT_PUBLIC flags must be fixed BEFORE Next's build.
+    env:
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DOCUMENTS: enabled
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR: enabled
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC: enabled
     # Full mobile + desktop integrated suite exceeded the 25-min previous limit.
     # Keep the complete suite; bound CI with a realistic 40-min ceiling.
     timeout-minutes: 40
@@ -186,6 +193,7 @@ jobs:
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/release-full-document-profile.spec.ts
           tests/e2e/document-delete-recovery.spec.ts
           tests/e2e/release-ocr-scope.spec.ts
           tests/e2e/release-document-scope.spec.ts
