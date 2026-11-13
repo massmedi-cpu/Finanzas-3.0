@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import * as ts from "typescript";
 
 const ID = "93000000-0000-4000-8000-000000000258";
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
@@ -15,6 +16,16 @@ const document = {
 test("REC-DOC-DELETE-258 · retry is ID-only; gateway must recover a scoped SQL audit receipt", () => {
   const gateway = readFileSync("supabase/functions/financial-app-db-gateway/document-delete-logic.ts", "utf8");
   const route = readFileSync("app/api/documents/delete/route.ts", "utf8");
+  const parsed = ts.transpileModule(gateway, {
+    fileName: "document-delete-logic.ts", reportDiagnostics: true,
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+  });
+  expect((parsed.diagnostics ?? []).filter((item) => item.category === ts.DiagnosticCategory.Error))
+    .toHaveLength(0);
+  expect(gateway).toContain("return value.toLowerCase()");
+  expect(gateway).toContain("const publicResult =");
+  expect(gateway).not.toContain("json({ ...deleted");
+  expect(gateway).not.toContain("json({ ...deleted, ...cleaned");
   expect(gateway).toContain('action === "document.delete_cleanup"');
   expect(gateway).toContain("financial_app.require_current_workspace_id()");
   expect(gateway).toContain("entity_type='document' and entity_id=");
