@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { inferDocumentType } from "../../src/application/document-drive-file-type";
+import { classifyVerifiedDriveName, inferDocumentType } from "../../src/application/document-drive-file-type";
 
 test("REC-DOC-AUTH-218 · Auto Drive jamás consulta la carpeta con cuenta de servicio antes de Auth", () => {
   const source = readFileSync("app/api/documents/drive-sync/route.ts", "utf8");
@@ -65,4 +65,18 @@ test("REC-DOC-DRIVE-TYPE-302 · avoid false positives inside words and preserve 
   }
   expect(inferDocumentType("factura-ticket.pdf")).toBe("invoice");
   expect(inferDocumentType("tiqué_2026.jpg")).toBe("ticket");
+});
+
+test("REC-DOC-DRIVE-TYPE-303 · downloaded authoritative name decides document type", () => {
+  expect(classifyVerifiedDriveName("contrato_2026.pdf", "Factura_2026.pdf"))
+    .toEqual({ name: "Factura_2026.pdf", type: "invoice" });
+  expect(classifyVerifiedDriveName("Ticket_2026.jpg", "contrato_2026.jpg"))
+    .toEqual({ name: "contrato_2026.jpg", type: "other" });
+  expect(classifyVerifiedDriveName("factura_2026.pdf", null))
+    .toEqual({ name: "factura_2026.pdf", type: "invoice" });
+  const source = readFileSync("app/api/documents/drive-sync/route.ts", "utf8");
+  expect(source).toContain("verified[position] = {");
+  expect(source).toContain("...classifyVerifiedDriveName(candidate.name, downloaded.fileName)");
+  expect(source).toContain("verified.filter((item): item is SyncCandidate => item !== undefined)");
+  expect(source).not.toContain("verified.push(");
 });

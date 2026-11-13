@@ -1,5 +1,5 @@
 import { isDocumentDriveSyncDeferred } from "../../../../src/application/release-ocr-scope";
-import { inferDocumentType } from "../../../../src/application/document-drive-file-type";
+import { classifyVerifiedDriveName, inferDocumentType } from "../../../../src/application/document-drive-file-type";
 import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
@@ -99,7 +99,8 @@ async function verifyCandidates(
   driveDownloader: GoogleDriveDocumentDownloader,
   authorizedRoots: readonly string[],
 ) {
-  const verified: SyncCandidate[] = [];
+  // Workers finish in arbitrary order; retain discovery order for deterministic batches.
+  const verified: Array<SyncCandidate | undefined> = new Array(candidates.length);
   let failed = 0;
   let cursor = 0;
 
@@ -123,13 +124,14 @@ async function verifyCandidates(
         if (!downloaded.modifiedTime) {
           throw new Error("drive_verified_modified_time_missing");
         }
-        verified.push({
+        verified[position] = {
           ...candidate,
-          name: downloaded.fileName ?? candidate.name,
+          // The authoritative Drive name and inferred type must agree.
+          ...classifyVerifiedDriveName(candidate.name, downloaded.fileName),
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
           modifiedTime: downloaded.modifiedTime, // Verified server revision only.
-        });
+        };
       } catch {
         failed += 1;
       }
@@ -139,7 +141,7 @@ async function verifyCandidates(
   await Promise.all(
     Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, candidates.length) }, () => worker()),
   );
-  return { verified, failed };
+  return { verified: verified.filter((item): item is SyncCandidate => item !== undefined), failed };
 }
 
 function apiError(error: unknown) {

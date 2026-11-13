@@ -13,3 +13,13 @@ export function inferDocumentType(name: string): DriveDocumentType {
   if (/(^|[^a-z])(ticket|tique|recibo)(?=$|[^a-z])/.test(normalized)) return "ticket";
   return "other";
 }
+
+/**
+ * Registration metadata must use the same authoritative name supplied by
+ * Drive's post-download verification, not an earlier folder-listing name.
+ * A null verified name preserves the valid discovery fallback.
+ */
+export function classifyVerifiedDriveName(discoveredName: string, verifiedName: string | null) {
+  const name = verifiedName ?? discoveredName;
+  return { name, type: inferDocumentType(name) };
+}
