@@ -171,6 +171,9 @@ export default function MobileNavigation() {
               <small>Solo se guarda en este dispositivo. No contiene datos financieros.</small>
             </div>
             <PwaInstallButton className={styles.mobileMoreInstall} />
+            <Link prefetch={false} href="/logout" className={styles.mobileMoreLink} aria-label="Cerrar sesión de Financial App">
+              Cerrar sesión
+            </Link>
           </nav>
         </>}
       </div>
