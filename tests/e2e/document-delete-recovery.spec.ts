@@ -1,20 +1,30 @@
 import { expect, test } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// Run TypeScript in a true Node process instead of the Playwright spec loader:
-// three previous Playwright transforms exposed a partial TypeScript module
-// (no ScriptTarget enum). The child checks syntax, and FAILS if the installed
-// compiler is missing or produces any error diagnostic. No network or SQL.
+// The locked TypeScript 7 package exports version metadata, not the old
+// transpileModule/ScriptTarget API. Node 24's parser checks the Edge source
+// without executing its Deno imports, issuing requests or opening SQL.
+// Keep this in a child process so Playwright's transform cannot affect it.
 const nodeSyntaxCheck = [
-  'const ts = require("typescript");',
+  'const { stripTypeScriptTypes } = require("node:module");',
   'const fs = require("node:fs");',
-  'if (typeof ts.transpileModule !== "function" || ts.ScriptTarget?.ES2022 === undefined || ts.ModuleKind?.ESNext === undefined) throw new Error("typescript_compiler_unavailable");',
-  'const source = fs.readFileSync("supabase/functions/financial-app-db-gateway/document-delete-logic.ts", "utf8");',
-  'const parsed = ts.transpileModule(source, {fileName: "document-delete-logic.ts", reportDiagnostics: true, compilerOptions: {target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext}});',
-  'const errors = (parsed.diagnostics || []).filter(item => item.category === ts.DiagnosticCategory.Error);',
-  'if (errors.length) { for (const error of errors) console.error(ts.flattenDiagnosticMessageText(error.messageText, "\\n")); process.exit(1); }',
+  'const source = fs.readFileSync(process.argv[1], "utf8");',
+  'stripTypeScriptTypes(source, { mode: "strip", sourceUrl: process.argv[1] });',
 ].join("\n");
+
+function checkTypeScriptSyntax(path: string) {
+  return execFileSync(process.execPath, ["-e", nodeSyntaxCheck, path], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    timeout: 15_000,
+    maxBuffer: 100_000,
+    stdio: "pipe",
+    env: { ...process.env, NODE_OPTIONS: "" },
+  });
+}
 
 const ID = "93000000-0000-4000-8000-000000000258";
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
@@ -30,15 +40,9 @@ const document = {
 test("REC-DOC-DELETE-258 · retry is ID-only; gateway must recover a scoped SQL audit receipt", () => {
   const gateway = readFileSync("supabase/functions/financial-app-db-gateway/document-delete-logic.ts", "utf8");
   const route = readFileSync("app/api/documents/delete/route.ts", "utf8");
-  // Node's native CommonJS loader provides the complete TypeScript compiler
-  // independently of how Playwright loads and bundles this test module.
-  expect(() => execFileSync(process.execPath, ["-e", nodeSyntaxCheck], {
-    cwd: process.cwd(),
-    encoding: "utf8",
-    timeout: 15_000,
-    maxBuffer: 100_000,
-    env: { ...process.env, NODE_OPTIONS: "" },
-  })).not.toThrow();
+  expect(() => checkTypeScriptSyntax(
+    "supabase/functions/financial-app-db-gateway/document-delete-logic.ts",
+  )).not.toThrow();
   expect(gateway).toContain("return value.toLowerCase()");
   expect(gateway).toContain("const publicResult =");
   expect(gateway).not.toContain("json({ ...deleted");
@@ -56,6 +60,29 @@ test("REC-DOC-DELETE-258 · retry is ID-only; gateway must recover a scoped SQL 
   expect(gateway).not.toContain("payload?.storageKey");
   expect(route).toContain('callPersistenceGateway("document.delete_cleanup", { id })');
   expect(route).toContain('const id = documentId(request)');
+});
+
+test("REC-DOC-DELETE-281 · syntax gate rejects broken Edge code without executing it", () => {
+  const directory = mkdtempSync(join(tmpdir(), "financial-app-edge-syntax-"));
+  const path = join(directory, "fixture.ts");
+  try {
+    // Parsing must neither resolve an external import nor execute a statement.
+    writeFileSync(path, 'import "https://invalid.example/never-load.ts";\n'
+      + 'export const value: string = "syntax-only";\n'
+      + 'throw new Error("syntax_gate_executed_source");\n');
+    expect(() => checkTypeScriptSyntax(path)).not.toThrow();
+    // Cover the extra brace that originally broke the deletion gateway and
+    // an incomplete declaration; a missing parser must never turn into PASS.
+    for (const source of [
+      "export function removeDocument(id: string) { return id; }}",
+      "export function removeDocument(id: string) {",
+    ]) {
+      writeFileSync(path, source);
+      expect(() => checkTypeScriptSyntax(path)).toThrow();
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test("REC-DOC-DELETE-259 · owner confirmation, uncertain cleanup and reload-safe ID retry", async ({ page }) => {
