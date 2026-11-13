@@ -62,6 +62,8 @@ requireText(postflightSpec, "requiresDualProductionDomainCheck(EXPECTED_VERSION)
 requireText(read("src/domain/release-production-profile.ts"), "patch >= 105", "full_release_version_boundary");
 requireText(read("tests/unit/release-production-profile.test.mjs"), "REC-REL-703", "complete_release_profile_unit_test");
 requireText(read(".github/workflows/release-operations-contract.yml"), "release-production-profile.test.mjs", "release_profile_ci_test");
+requireText(read(".github/workflows/release-operations-contract.yml"), "release-manifest-profile.test.mjs", "manifest_profile_ci_test");
+requireText(read(".github/workflows/publish-verified-release.yml"), "npm run release:manifest", "release_manifest_enforced_at_publish");
 requireText(readonlyVerifier, "default_transaction_read_only=on", "readonly_database_session");
 requireText(readonlyVerifier, 'snapshot.bankSourcePolicy !== "read_only"', "readonly_bank_source_policy");
 requireText(readonlyVerifier, 'snapshot.locale !== "es-ES"', "readonly_regional_contract");

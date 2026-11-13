@@ -16,6 +16,8 @@ on:
       - "scripts/verify-release-operations-contract.mjs"
       - "src/domain/release-production-profile.ts"
       - "tests/unit/release-production-profile.test.mjs"
+      - "scripts/create-release-manifest.mjs"
+      - "tests/unit/release-manifest-profile.test.mjs"
   workflow_dispatch:
 
 permissions:
@@ -38,6 +40,8 @@ jobs:
       - run: node scripts/verify-release-operations-contract.mjs
       - name: Certify historical restricted vs future complete release profiles
         run: node --experimental-strip-types --test tests/unit/release-production-profile.test.mjs
+      - name: Certify release manifest document feature identity
+        run: node --experimental-strip-types --test tests/unit/release-manifest-profile.test.mjs
       - run: npm run typecheck
       - name: Compile generic Production postflight suite without touching Production
         env:

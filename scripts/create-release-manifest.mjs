@@ -2,6 +2,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { expectedProductionDocumentProfile } from "../src/domain/release-production-profile.ts";
 
 const SHA = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -49,6 +50,20 @@ if (build.artifactAlgorithm !== "sha256") fail("artifact_algorithm");
 if (build.artifactScope !== "deployment-provenance-v1") fail("artifact_scope");
 if (typeof build.artifactDigest !== "string" || !SHA256.test(build.artifactDigest)) fail("artifact_digest");
 
+// The verified Production build must match the feature contract of its
+// immutable version. 10.0.104 is restricted, whereas 10.0.105+ is complete.
+// Legacy 10.0.103 and earlier builds keep their historical contract.
+const expectedDocumentProfile = expectedProductionDocumentProfile(build.version);
+if (expectedDocumentProfile !== null) {
+  const actual = build.releaseFeatures;
+  if (!actual || typeof actual !== "object" || Array.isArray(actual)) fail("document_profile_missing");
+  for (const [key, required] of Object.entries(expectedDocumentProfile)) {
+    if (typeof actual[key] !== "boolean" || actual[key] !== required) {
+      fail(`document_profile_mismatch:${key}`);
+    }
+  }
+}
+
 const expectedReleaseId = `financial-app@${build.version}+${build.artifactDigest.slice(0, 16)}`;
 if (build.releaseId !== expectedReleaseId) fail("release_id");
 
@@ -60,6 +75,7 @@ const manifest = {
   commit: build.commit,
   deploymentId: build.deploymentId,
   environment: build.environment,
+  ...(expectedDocumentProfile === null ? {} : { releaseFeatures: expectedDocumentProfile }),
   releaseId: build.releaseId,
   artifact: {
     algorithm: build.artifactAlgorithm,
