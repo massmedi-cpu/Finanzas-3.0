@@ -31,6 +31,7 @@ type PendingPrivateUpload = PendingFinalize & {
 };
 
 const PENDING_PRIVATE_UPLOAD_KEY = "financial-app:documents:pending-private-upload:v1";
+const PENDING_DOCUMENT_DELETE_KEY = "financial-app:documents:pending-delete-cleanup:v1";
 const PRIVATE_SHA256 = /^[0-9a-f]{64}$/;
 
 async function fileSha256(file: File) {
@@ -678,6 +679,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [loadedListKey, setLoadedListKey] = useState<string | null>(null);
   const [listLoadFailed, setListLoadFailed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{ id: string; name: string; provider: StorageProvider } | null>(null);
+  const [deleteReviewed, setDeleteReviewed] = useState(false);
+  const [pendingDeleteRecovery, setPendingDeleteRecovery] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
@@ -753,6 +757,27 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+  useEffect(() => {
+    // Keep only an opaque document UUID; never store a Storage key, signed
+    // download URL, original content or bearer credential in this journal.
+    const readPendingDelete = () => {
+      try {
+        const id = localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY);
+        setPendingDeleteRecovery(id && DOCUMENT_UUID.test(id) ? id : null);
+        if (id && !DOCUMENT_UUID.test(id)) {
+          setError("La referencia de recuperación del borrado no es válida. Ningún archivo se eliminará automáticamente.");
+        }
+      } catch {
+        setError("Este navegador impide recuperar de forma segura un borrado pendiente.");
+      }
+    };
+    readPendingDelete();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === PENDING_DOCUMENT_DELETE_KEY) readPendingDelete();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
@@ -1617,6 +1642,118 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     } finally { setBusy(null); }
   }
 
+
+  async function requestDocumentDeletion() {
+    if (!detail || busy || pendingDeleteRecovery || metadataDirtyRef.current || uploadInFlight.current) return;
+    const id = detail.document.id;
+    setBusy("delete-preflight");
+    setError(null);
+    try {
+      const preflight = await readJson(await fetch("/api/documents/delete?id=" + encodeURIComponent(id), { cache: "no-store" }));
+      if (selectedIdRef.current !== id) return;
+      if (!preflight || preflight.canDelete !== true) {
+        setError("La ficha no se puede eliminar: debe estar libre de asociaciones, revisiones y bloqueos. Archívala si deseas conservarla.");
+        return;
+      }
+      setDeleteReviewed(false);
+      setDeleteConfirmation({ id, name: detail.document.originalFileName, provider: detail.document.storageProvider });
+    } catch (caught) {
+      setAuthRecovery(authRecoveryFromError(caught));
+      setError(friendlyError(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function verifyDeletedDocument(id: string) {
+    const response = await fetch("/api/documents?id=" + encodeURIComponent(id), { cache: "no-store" });
+    // Do not equate HTTP 401/403/503 or a malformed 200 with deletion.
+    if (response.status !== 404) throw new Error("document_delete_not_verified");
+  }
+
+  async function finishDeleteRecovery(id: string) {
+    await verifyDeletedDocument(id);
+    try {
+      if (localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY) !== id) throw new Error("document_delete_recovery_unavailable");
+      localStorage.removeItem(PENDING_DOCUMENT_DELETE_KEY);
+      if (localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY)) throw new Error("document_delete_recovery_unavailable");
+    } catch {
+      throw new Error("document_delete_recovery_unavailable");
+    }
+    setPendingDeleteRecovery(null);
+    if (selectedIdRef.current === id) {
+      selectedIdRef.current = null;
+      setSelectedId(null);
+      setDetail(null);
+      setCandidates(null);
+      setTransactions(null);
+    }
+    if (await loadList() !== true) {
+      setError("El borrado se ha verificado, pero no se ha podido actualizar el archivo documental. Pulsa Reintentar lista.");
+      return;
+    }
+    setNotice("Ficha eliminada y almacenamiento comprobado. El banco no se ha modificado.");
+  }
+
+  async function confirmDocumentDeletion() {
+    const requested = deleteConfirmation;
+    if (!requested || !deleteReviewed || busy || pendingDeleteRecovery || metadataDirtyRef.current) return;
+    const id = requested.id;
+    if (selectedIdRef.current !== id) return;
+    setBusy("delete");
+    setError(null);
+    setDeleteConfirmation(null);
+    try {
+      // Persist the ID before sending DELETE: connection loss can occur
+      // after SQL committed but before the browser sees an acknowledgement.
+      localStorage.setItem(PENDING_DOCUMENT_DELETE_KEY, id);
+      if (localStorage.getItem(PENDING_DOCUMENT_DELETE_KEY) !== id) throw new Error("document_delete_recovery_unavailable");
+      setPendingDeleteRecovery(id);
+      const result = await readJson(await fetch("/api/documents/delete?id=" + encodeURIComponent(id), { method: "DELETE" }));
+      if (!result || result.deleted !== true || result.documentId !== id) throw new Error("document_delete_not_verified");
+      if (result.storageCleanupPending !== false) {
+        setError("La ficha se ha eliminado, pero la limpieza del archivo privado no está comprobada. Usa «Reintentar limpieza»; no subas otra copia.");
+        return;
+      }
+      await finishDeleteRecovery(id);
+    } catch {
+      setError("El borrado puede haberse aplicado sin confirmación completa. Conservamos la referencia; pulsa «Reintentar limpieza». No repetiremos la eliminación de la ficha automáticamente.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function retryDocumentCleanup() {
+    const id = pendingDeleteRecovery;
+    if (!id || busy) return;
+    setBusy("delete-cleanup");
+    setError(null);
+    try {
+      const response = await fetch("/api/documents/delete?id=" + encodeURIComponent(id), { method: "POST" });
+      // If the first DELETE never reached the server, no audit receipt exists.
+      // Do not turn that into success or issue an implicit destructive DELETE.
+      if (response.status === 404) {
+        const detailResponse = await fetch("/api/documents?id=" + encodeURIComponent(id), { cache: "no-store" });
+        if (detailResponse.ok) {
+          localStorage.removeItem(PENDING_DOCUMENT_DELETE_KEY);
+          setPendingDeleteRecovery(null);
+          setError("La ficha sigue existiendo: la eliminación anterior no llegó a confirmarse. No se ha borrado nada; puedes revisarla y decidir de nuevo.");
+          return;
+        }
+        throw new Error("document_delete_missing_receipt");
+      }
+      const result = await readJson(response);
+      if (!result || result.deleted !== true || result.documentId !== id || result.storageCleanupPending !== false) {
+        throw new Error("document_delete_cleanup_pending");
+      }
+      await finishDeleteRecovery(id);
+    } catch {
+      setError("La limpieza del documento aún no está acreditada. No se ha repetido el borrado SQL ni se ha tocado ningún original de Drive. Vuelve a intentar después de recuperar la conexión.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function openDocument() {
     if (!detail || busy || originalOpenInFlight.current) return;
     const id = detail.document.id;
@@ -1749,6 +1886,42 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   return (
     <main className={styles.shell}>
+      {deleteConfirmation ? (
+        <div className={styles.unsavedBackdrop}>
+          <section className={styles.unsavedDialog} role="alertdialog" aria-modal="true"
+            aria-labelledby="document-delete-heading" aria-describedby="document-delete-explanation"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && busy !== "delete") {
+                event.preventDefault();
+                setDeleteConfirmation(null);
+                setDeleteReviewed(false);
+              }
+              if (event.key !== "Tab") return;
+              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+              const first = buttons[0], last = buttons[buttons.length - 1];
+              if (first && last && event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+              else if (first && last && !event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }}>
+            <h2 id="document-delete-heading">Confirmar eliminación</h2>
+            <p id="document-delete-explanation">
+              Se eliminará la ficha «{deleteConfirmation.name}» de Financial App.
+              {deleteConfirmation.provider === "google_drive"
+                ? " El archivo original de Google Drive se conservará."
+                : " El original privado se eliminará del almacenamiento de Financial App y su ausencia se comprobará."}
+              Esta acción no cambia movimientos ni saldos bancarios.
+            </p>
+            <label className={styles.reviewConfirmation}>
+              <input type="checkbox" checked={deleteReviewed} onChange={(event) => setDeleteReviewed(event.target.checked)} />
+              He comprobado la ficha y quiero eliminarla.
+            </label>
+            <div className={styles.unsavedActions}>
+              <button type="button" autoFocus className={styles.secondaryButton} onClick={() => { setDeleteConfirmation(null); setDeleteReviewed(false); }}>Cancelar</button>
+              <button type="button" className={styles.dangerButton} disabled={!deleteReviewed || busy !== null}
+                onClick={() => void confirmDocumentDeletion()}>Eliminar ficha</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {pendingExit ? (
         <div className={styles.unsavedBackdrop}>
           <section
@@ -1813,6 +1986,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         {error ? <div className={styles.alert} role="alert" data-testid="documents-alert">{error}</div> : null}
         {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/documents" /> : null}
         {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
+        {pendingDeleteRecovery ? (
+          <div className={styles.alert} role="status" data-testid="document-delete-recovery">
+            <strong>Borrado pendiente de comprobación.</strong> Conservamos solo el identificador de la ficha para reintentar su limpieza privada de forma segura.
+            <button type="button" className={styles.secondaryButton} disabled={busy !== null}
+              onClick={() => void retryDocumentCleanup()}>
+              {busy === "delete-cleanup" ? "Comprobando limpieza…" : "Reintentar limpieza"}
+            </button>
+          </div>
+        ) : null}
 
         <section className={styles.uploadPanel} aria-labelledby="upload-title">
           <div>
@@ -1944,6 +2126,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     <StatusBadge status={detail.document.status} />
                     <button className={styles.secondaryButton} onClick={() => void openDocument()} disabled={busy === "open"}>Abrir documento ↗</button>
                     <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
+                    <button type="button" className={styles.dangerButton}
+                      onClick={() => void requestDocumentDeletion()}
+                      disabled={busy !== null || metadataDirty || Boolean(pendingDeleteRecovery) || detail.associations.length > 0 || detail.document.status === "confirmed"}>
+                      Eliminar documento
+                    </button>
                   </div>
                 </header>
                 {detail.document.isTest === true ? (
