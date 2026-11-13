@@ -9,10 +9,13 @@ function valid(width: number, height: number) {
 }
 
 function png(bytes: Uint8Array): OcrImageMetadata | null {
-  if (bytes.byteLength < 24) return null;
+  // Signature and arbitrary bytes at 16/20 are not an IHDR: reject truncated
+  // camera/gallery uploads before their forged dimensions can reach Tesseract.
+  if (bytes.byteLength < 33) return null;
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (!signature.every((value, index) => bytes[index] === value)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(8, false) !== 13 || ascii(bytes, 12, 16) !== "IHDR") return null;
   const width = view.getUint32(16, false);
   const height = view.getUint32(20, false);
   return valid(width, height) ? { mimeType: "image/png", width, height } : null;
@@ -55,6 +58,13 @@ function webp(bytes: Uint8Array): OcrImageMetadata | null {
   if (bytes.byteLength < 30 || ascii(bytes, 0, 4) !== "RIFF" || ascii(bytes, 8, 12) !== "WEBP") return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const chunk = ascii(bytes, 12, 16);
+  // Never read VP8X / VP8 / VP8L dimensions beyond the declared RIFF and
+  // first-chunk bounds. The decoder will validate the remaining image data.
+  const riffEnd = view.getUint32(4, true) + 8;
+  const chunkSize = view.getUint32(16, true);
+  const minimumSize = chunk === "VP8X" ? 10 : chunk === "VP8 " ? 10 : chunk === "VP8L" ? 5 : 0;
+  if (!minimumSize || chunkSize < minimumSize || (chunk === "VP8X" && chunkSize !== 10)
+    || riffEnd > bytes.byteLength || 20 + chunkSize + (chunkSize % 2) > riffEnd) return null;
   let width = 0;
   let height = 0;
   if (chunk === "VP8X") {
