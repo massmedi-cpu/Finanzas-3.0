@@ -1,3 +1,5 @@
+# REC-AP8-RETRY-20261113: request a new trusted, read-only encrypted backup after
+# runs 202 and 203 failed on reversed manual inputs; keep production isolated.
 # REC-BACKUP-255 (12/11/2026): the AP8 restore rehearsal intentionally rejected
 # an untrusted latest backup. Ask the existing identity-guarded main workflow
 # for one fresh encrypted, READ-ONLY backup; do not bypass the trust selector.
