@@ -28,6 +28,7 @@ on:
       - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
       - 'supabase/functions/financial-app-db-gateway/source-sync-router.ts'
       - 'src/application/source-stable-replay-proof.ts'
+      - 'src/application/document-drive-file-type.ts'
       - 'src/application/document-drive-inventory.ts'
       - 'src/application/document-drive-folder-scope.ts'
       - 'src/application/private-document-original-detail.ts'
@@ -210,6 +211,7 @@ jobs:
           tests/e2e/logout-draft-preservation.spec.ts
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts
+          tests/e2e/document-drive-sync-preflight.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
           tests/e2e/document-drive-folder-scope.spec.ts
           tests/e2e/document-drive-folder-recursive.spec.ts

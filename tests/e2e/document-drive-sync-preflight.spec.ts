@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
+import { inferDocumentType } from "../../src/application/document-drive-file-type";
 
 test("REC-DOC-AUTH-218 · Auto Drive jamás consulta la carpeta con cuenta de servicio antes de Auth", () => {
   const source = readFileSync("app/api/documents/drive-sync/route.ts", "utf8");
@@ -37,4 +38,31 @@ test("REC-DOC-AUTH-220 · la credencial de Google solo se consulta tras verifica
   expect(branch.indexOf("const readers = googleReaders()"))
     .toBeGreaterThan(branch.indexOf("await requireVerifiedSourceWorkspace()"));
   expect(automatic).toContain("getGoogleServiceAccountCredentialsFromEnvironment");
+});
+
+test("REC-DOC-DRIVE-TYPE-301 · classify filenames with underscores, digits and accents", () => {
+  for (const name of [
+    "Factura_2026-11.pdf", "FACTURA2026.PDF", "mi_factura_11.pdf",
+    "fáctura-noviembre.pdf", "Invoice_004.pdf", "invoice2026.pdf",
+  ]) {
+    expect(inferDocumentType(name), name).toBe("invoice");
+  }
+  for (const name of [
+    "ticket_2026.jpg", "Ticket2026.jpg", "tique_2026.pdf",
+    "Recibo_2026.pdf", "recibo2026.pdf",
+  ]) {
+    expect(inferDocumentType(name), name).toBe("ticket");
+  }
+});
+
+test("REC-DOC-DRIVE-TYPE-302 · avoid false positives inside words and preserve other", () => {
+  for (const name of [
+    "prefactura.pdf", "facturacion-noviembre.pdf", "facturita.pdf",
+    "ticketera.jpg", "misrecibos.pdf", "documento_general.pdf",
+    "contrato2026.pdf",
+  ]) {
+    expect(inferDocumentType(name), name).toBe("other");
+  }
+  expect(inferDocumentType("factura-ticket.pdf")).toBe("invoice");
+  expect(inferDocumentType("tiqué_2026.jpg")).toBe("ticket");
 });

@@ -1,4 +1,5 @@
 import { isDocumentDriveSyncDeferred } from "../../../../src/application/release-ocr-scope";
+import { inferDocumentType } from "../../../../src/application/document-drive-file-type";
 import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
@@ -63,16 +64,6 @@ function googleReaders() {
     downloader = new GoogleDriveDocumentDownloader(accessTokens);
   }
   return { discovery, downloader };
-}
-
-function inferDocumentType(name: string): SyncCandidate["type"] {
-  const normalized = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  if (/\b(factura|invoice)\b/.test(normalized)) return "invoice";
-  if (/\b(ticket|tique|recibo)\b/.test(normalized)) return "ticket";
-  return "other";
 }
 
 function timestamp(value: string | null) {

@@ -19,6 +19,7 @@ on:
       - "tests/e2e/document-ocr-service.spec.ts"
       - "tests/e2e/documents.spec.ts"
       - "tests/e2e/document-test-designation.spec.ts"
+      - "src/application/document-drive-file-type.ts"
       - "tests/e2e/document-drive-sync-preflight.spec.ts"
       - "tests/e2e/document-drive-folder-scope.spec.ts"
       - "tests/e2e/document-drive-folder-recursive.spec.ts"
