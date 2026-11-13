@@ -708,6 +708,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [uploadUnverified, setUploadUnverified] = useState(false);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
+  const [ocrDraftState, setOcrDraftState] = useState({ dirty: false, locked: false });
   // Preserve unsaved changes even when the detail is hidden after a failed read.
   const [draftPendingVerification, setDraftPendingVerification] = useState(false);
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
@@ -784,6 +785,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
+  const ocrDraftStateRef = useRef({ dirty: false, locked: false });
+  const onOcrDraftStateChange = useCallback((next: { dirty: boolean; locked: boolean }) => {
+    ocrDraftStateRef.current = next;
+    setOcrDraftState((previous) => previous.dirty === next.dirty && previous.locked === next.locked ? previous : next);
+  }, []);
+  const protectOcrDraftBeforeMutation = () => {
+    if (!ocrDraftStateRef.current.dirty) return false;
+    setError("Confirma la revisión OCR o descarta sus correcciones antes de modificar la ficha. El borrador sigue conservado en esta pestaña.");
+    return true;
+  };
   const draftPendingVerificationRef = useRef(false);
   const bypassUnloadOnceRef = useRef(false);
   const exitReturnFocusRef = useRef<HTMLElement | null>(null);
@@ -896,6 +907,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         selectedIdRef.current
         && !data.items.some((item) => item.id === selectedIdRef.current)
         && !metadataDirtyRef.current
+        && !ocrDraftStateRef.current.dirty
       ) {
         setSelectedId(null);
         setDetail(null);
@@ -1049,13 +1061,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     const beforeUnload = (event: BeforeUnloadEvent) => {
       const recoveryPresent = readPrivateUploadJournal().present;
       if (bypassUnloadOnceRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
-      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
+      if (!metadataDirtyRef.current && !ocrDraftStateRef.current.dirty && !uploadLockPendingRef.current && !uploadInFlight.current && !recoveryPresent) return;
       event.preventDefault();
       event.returnValue = "";
     };
     const protectInternalNavigation = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      if (!metadataDirtyRef.current && !uploadLockPendingRef.current && !uploadInFlight.current) return;
+      if (!metadataDirtyRef.current && !ocrDraftStateRef.current.dirty && !uploadLockPendingRef.current && !uploadInFlight.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const anchor = target.closest("a[href]");
@@ -1067,6 +1079,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
       event.preventDefault();
       event.stopPropagation();
+      if (ocrDraftStateRef.current.locked) {
+        setError("Antes de salir, termina la confirmación OCR o comprueba su historial. La revisión sigue protegida.");
+        return;
+      }
       if (uploadLockPendingRef.current || uploadInFlight.current) {
         setError("Hay un envío de documento en curso. Termina o recupera esa misma subida antes de cambiar de página; así no se pierde el original ni se crea una copia.");
         return;
@@ -1085,7 +1101,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const selectDocument = (id: string) => {
     if (id === selectedIdRef.current || busy) return;
-    if (metadataDirtyRef.current) {
+    if (ocrDraftStateRef.current.locked) {
+      setError("Antes de cambiar de documento, termina la confirmación OCR o comprueba su historial. La revisión sigue protegida.");
+      return;
+    }
+    if (metadataDirtyRef.current || ocrDraftStateRef.current.dirty) {
       exitReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setPendingExit({ type: "document", id });
       return;
@@ -1098,6 +1118,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const continueDocumentExit = (target: PendingDocumentExit) => {
     setPendingExit(null);
     metadataDirtyRef.current = false;
+    onOcrDraftStateChange({ dirty: false, locked: false });
     draftPendingVerificationRef.current = false;
     setDraftPendingVerification(false);
     if (target.type === "document") {
@@ -1232,7 +1253,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setDebouncedQuery("");
       setOffset(0);
       await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
-      if (metadataDirtyRef.current) {
+      if (metadataDirtyRef.current || ocrDraftStateRef.current.dirty) {
         setPendingExit({ type: "document", id: confirmed.document.id });
         setNotice("El registro se ha confirmado sobre la misma ruta privada, sin crear una copia nueva. Resuelve los cambios pendientes antes de abrir su ficha.");
       } else {
@@ -1255,6 +1276,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
+    if (protectOcrDraftBeforeMutation()) return;
     if (busy || uploadInFlight.current || uploadLockPendingRef.current) return;
     // localStorage is not atomic across browser tabs: two tabs can both read
     // an empty journal and sign independent private objects before either
@@ -1348,7 +1370,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setDebouncedQuery("");
         setOffset(0);
         await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
-        if (metadataDirtyRef.current) {
+        if (metadataDirtyRef.current || ocrDraftStateRef.current.dirty) {
           setPendingExit({ type: "document", id });
           setNotice("Este archivo ya existe. No se ha enviado otra copia; resuelve los cambios pendientes antes de abrirlo.");
         } else {
@@ -1441,7 +1463,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setDebouncedQuery("");
       setOffset(0);
       await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
-      if (metadataDirtyRef.current) {
+      if (metadataDirtyRef.current || ocrDraftStateRef.current.dirty) {
         // Uploading another file must never discard an unrelated unsaved
         // metadata draft. Let the existing save/discard dialog arbitrate.
         setPendingExit({ type: "document", id });
@@ -1474,6 +1496,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function persistMetadata(verifiedDetail?: DocumentDetail): Promise<boolean> {
+    if (protectOcrDraftBeforeMutation()) return false;
     // After a failed readback the rendered detail is deliberately discarded.
     // A freshly verified detail may be supplied only by the recovery path,
     // while the unconfirmed editor is preserved separately.
@@ -1562,7 +1585,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function saveAndContinue() {
-    if (!pendingExit || busy) return;
+    if (!pendingExit || busy || protectOcrDraftBeforeMutation()) return;
     const target = pendingExit;
     // A previous PATCH may have succeeded while its readback failed.
     // Restore a verified detail without ever replacing the unsaved editor;
@@ -1578,13 +1601,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   function discardAndContinue() {
-    if (!pendingExit) return;
+    if (!pendingExit || ocrDraftStateRef.current.locked) return;
     if (detail) setEditor(editorFromDocument(detail.document));
     continueDocumentExit(pendingExit);
   }
 
   async function changeStatus(status: DocumentStatus) {
-    if (!detail) return;
+    if (!detail || protectOcrDraftBeforeMutation()) return;
     setBusy(`status-${status}`);
     setError(null);
     try {
@@ -1601,6 +1624,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   async function changeTestDesignation(event: FormEvent) {
     event.preventDefault();
+    if (protectOcrDraftBeforeMutation()) return;
     if (!detail || busy || metadataDirty || !designationReviewed || !designationReason.trim()) return;
     const id = detail.document.id;
     const isTest = detail.document.isTest !== true;
@@ -1644,6 +1668,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
 
   async function requestDocumentDeletion() {
+    if (protectOcrDraftBeforeMutation()) return;
     if (!detail || busy || pendingDeleteRecovery || metadataDirtyRef.current || uploadInFlight.current) return;
     const id = detail.document.id;
     setBusy("delete-preflight");
@@ -1696,6 +1721,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function confirmDocumentDeletion() {
+    if (protectOcrDraftBeforeMutation()) return;
     const requested = deleteConfirmation;
     if (!requested || !deleteReviewed || busy || pendingDeleteRecovery || metadataDirtyRef.current) return;
     const id = requested.id;
@@ -1823,6 +1849,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function associate(transactionId: string, method: "manual" | "suggested") {
+    if (protectOcrDraftBeforeMutation()) return;
     if (!detail || busy || associationMutationInFlight.current || (method === "suggested" && metadataDirtyRef.current)) return;
     associationMutationInFlight.current = true;
     setBusy(`associate-${transactionId}`);
@@ -1844,6 +1871,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function unassociate(transactionId: string) {
+    if (protectOcrDraftBeforeMutation()) return;
     if (!detail || busy || associationMutationInFlight.current) return;
     associationMutationInFlight.current = true;
     setBusy(`unassociate-${transactionId}`);
@@ -1962,8 +1990,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           >
             <h2 id="document-unsaved-heading">Cambios sin guardar</h2>
             <p id="document-unsaved-detail">
-              Hay cambios de metadatos sin guardar. Puedes guardarlos antes de continuar,
-              seguir editando sin perder el borrador o descartarlos.
+              {ocrDraftState.dirty
+                ? "Hay una revisión OCR sin confirmar. Sigue editando para confirmarla en su formulario, o descarta expresamente los cambios de esta ficha y su revisión OCR. Guardar metadatos no confirma una revisión OCR."
+                : "Hay cambios de metadatos sin guardar. Puedes guardarlos antes de continuar, seguir editando sin perder el borrador o descartarlos."}
             </p>
             {error ? <p className={styles.unsavedError} role="alert">{error}</p> : null}
             <div className={styles.unsavedActions}>
@@ -1971,12 +2000,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 onClick={() => { setPendingExit(null); exitReturnFocusRef.current?.focus(); }} disabled={busy === "metadata"}>
                 Seguir editando
               </button>
-              <button type="button" className={styles.primaryButton}
+              {!ocrDraftState.dirty ? <button type="button" className={styles.primaryButton}
                 onClick={() => void saveAndContinue()} disabled={busy === "metadata"}>
                 {busy === "metadata" ? "Guardando…" : "Guardar y continuar"}
-              </button>
+              </button> : null}
               <button type="button" className={styles.dangerButton}
-                onClick={discardAndContinue} disabled={busy === "metadata"}>
+                onClick={discardAndContinue} disabled={busy === "metadata" || ocrDraftState.locked}>
                 Descartar cambios
               </button>
             </div>
@@ -2200,6 +2229,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                       sourceDriveFileId={detail.document.sourceDriveFileId}
                       mimeType={detail.document.mimeType}
                       onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
+                      onDraftStateChange={onOcrDraftStateChange}
+                      readOnly={busy !== null}
                     />
                   </OcrReviewBoundary>
                 )}

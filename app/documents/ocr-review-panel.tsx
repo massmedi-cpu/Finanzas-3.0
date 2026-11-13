@@ -317,16 +317,24 @@ export function OcrReviewPanel({
   sourceDriveFileId,
   mimeType,
   onConfirmed,
+  onDraftStateChange,
+  readOnly = false,
 }: {
   documentId: string;
   storageProvider: StorageProvider;
   sourceDriveFileId: string | null;
   mimeType: string;
   onConfirmed?: () => Promise<void> | void;
+  onDraftStateChange?: (state: { dirty: boolean; locked: boolean }) => void;
+  readOnly?: boolean;
 }) {
   const actionFeedback = useActionFeedback();
   const [result, setResult] = useState<OcrResult | null>(null);
   const [draft, setDraft] = useState<ReviewDraft | null>(null);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const draftDirtyRef = useRef(false);
+  const [reanalysisRequested, setReanalysisRequested] = useState(false);
+  const analyzeButtonRef = useRef<HTMLButtonElement | null>(null);
   const [ocrRunId, setOcrRunId] = useState<string | null>(null);
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -355,6 +363,9 @@ export function OcrReviewPanel({
     confirmInFlight.current = false;
     setResult(null);
     setDraft(null);
+    setDraftDirty(false);
+    draftDirtyRef.current = false;
+    setReanalysisRequested(false);
     setOcrRunId(null);
     setConfirmedRevision(null);
     setConfirmationUnverified(false);
@@ -374,7 +385,16 @@ export function OcrReviewPanel({
     };
   }, [documentId]);
 
-  const editsLocked = busy || confirming || confirmationUnverified;
+  useEffect(() => {
+    onDraftStateChange?.({
+      dirty: draftDirty || confirming || confirmationUnverified,
+      locked: confirming || confirmationUnverified || reanalysisRequested,
+    });
+  }, [draftDirty, confirming, confirmationUnverified, reanalysisRequested, onDraftStateChange]);
+
+  useEffect(() => () => onDraftStateChange?.({ dirty: false, locked: false }), [onDraftStateChange]);
+
+  const editsLocked = readOnly || busy || confirming || confirmationUnverified;
 
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
   const review = useMemo(() => result ? summarizeDocumentOcrReview(result) : null, [result]);
@@ -418,8 +438,17 @@ export function OcrReviewPanel({
     }
   }
 
-  async function runOcr() {
-    if (!supported || busy || confirming || confirmationUnverified || ocrInFlight.current || activeDocumentId.current !== documentId) return;
+  async function runOcr(discardDraft = false) {
+    if (!supported || readOnly || busy || confirming || confirmationUnverified || ocrInFlight.current || activeDocumentId.current !== documentId) return;
+    // A retry replaces the reading and its evidence. Never erase human
+    // corrections merely because the user clicked the analysis button.
+    if (draftDirtyRef.current && !discardDraft) {
+      setReanalysisRequested(true);
+      return;
+    }
+    setReanalysisRequested(false);
+    setDraftDirty(false);
+    draftDirtyRef.current = false;
     const generation = documentGeneration.current;
     const controller = new AbortController();
     const isCurrent = () => !controller.signal.aborted
@@ -468,7 +497,7 @@ export function OcrReviewPanel({
   }
 
   async function confirmReview() {
-    if (!draft || !ocrRunId || confirming || confirmedRevision !== null || confirmationUnverified || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
+    if (!draft || !ocrRunId || readOnly || confirming || confirmedRevision !== null || confirmationUnverified || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
     confirmInFlight.current = true;
     pendingFinancialEvidence.current = null;
     const generation = documentGeneration.current;
@@ -545,6 +574,8 @@ export function OcrReviewPanel({
       pendingFinancialEvidence.current = null;
       setConfirmationUnverified(false);
       setConfirmedRevision(revision);
+      setDraftDirty(false);
+      draftDirtyRef.current = false;
       actionFeedback.success(feedbackId, `Revisión OCR confirmada · revisión ${revision}.`);
       // Refreshing the parent list is not part of the PATCH transaction.
       // A failed post-save refresh must never claim that persistence failed.
@@ -606,6 +637,8 @@ export function OcrReviewPanel({
         knownReviewRevision.current = confirmed;
         pendingFinancialEvidence.current = null;
         setConfirmedRevision(confirmed);
+        setDraftDirty(false);
+        draftDirtyRef.current = false;
         setConfirmationUnverified(false);
         setError(null);
         actionFeedback.success(`documents:ocr-confirm:${documentId}`, `Revisión OCR verificada en el historial · revisión ${confirmed}.`);
@@ -634,12 +667,16 @@ export function OcrReviewPanel({
 
   function updateDraft<K extends keyof ReviewDraft>(key: K, value: ReviewDraft[K]) {
     if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
+    setDraftDirty(true);
+    draftDirtyRef.current = true;
     setDraft((current) => current ? { ...current, [key]: value } : current);
     setConfirmedRevision(null);
   }
 
   function updateLine(index: number, key: keyof ReviewLineDraft, value: string) {
     if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
+    setDraftDirty(true);
+    draftDirtyRef.current = true;
     setDraft((current) => {
       if (!current) return current;
       const lineItems = current.lineItems.map((line, lineIndex) => lineIndex === index ? { ...line, [key]: value } : line);
@@ -650,6 +687,8 @@ export function OcrReviewPanel({
 
   function addLine() {
     if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
+    setDraftDirty(true);
+    draftDirtyRef.current = true;
     setDraft((current) => current ? {
       ...current,
       lineItems: [...current.lineItems, { rowKey: createLineKey(), description: "", quantity: "", unitPrice: "", total: "" }],
@@ -659,6 +698,8 @@ export function OcrReviewPanel({
 
   function removeLine(index: number) {
     if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
+    setDraftDirty(true);
+    draftDirtyRef.current = true;
     setDraft((current) => current ? { ...current, lineItems: current.lineItems.filter((_, lineIndex) => lineIndex !== index) } : current);
     setConfirmedRevision(null);
   }
@@ -716,13 +757,42 @@ export function OcrReviewPanel({
 
   return (
     <section className={`${styles.subsection} ${ocrStyles.section}`} aria-labelledby="ocr-review-title" data-testid="ocr-review-panel">
+      {reanalysisRequested ? (
+        <div className={styles.unsavedBackdrop}>
+          <section className={styles.unsavedDialog} role="alertdialog" aria-modal="true"
+            aria-labelledby="ocr-reanalysis-heading" aria-describedby="ocr-reanalysis-detail"
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                event.preventDefault();
+                setReanalysisRequested(false);
+                analyzeButtonRef.current?.focus();
+              }
+              if (event.key !== "Tab") return;
+              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+              const first = buttons[0];
+              const last = buttons[buttons.length - 1];
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+            }}>
+            <h2 id="ocr-reanalysis-heading">Reemplazar la revisión OCR</h2>
+            <p id="ocr-reanalysis-detail">Hay correcciones manuales sin confirmar. Si vuelves a analizar, se descartarán y se preparará una lectura nueva. Puedes seguir revisando para conservarlas.</p>
+            <div className={styles.unsavedActions}>
+              <button type="button" autoFocus className={styles.secondaryButton} onClick={() => {
+                setReanalysisRequested(false);
+                analyzeButtonRef.current?.focus();
+              }}>Seguir revisando</button>
+              <button type="button" className={styles.dangerButton} disabled={readOnly} onClick={() => void runOcr(true)}>Descartar y volver a analizar</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <div className={styles.subsectionHeading}>
         <div>
           <p className={styles.sectionEyebrow}>LECTURA DEL DOCUMENTO</p>
           <h3 id="ocr-review-title">Revisar con OCR</h3>
           <p>Lee el original, reconstruye su texto e interpreta los datos financieros sin sustituir la evidencia OCR. Nada se confirma sin revisión humana.</p>
         </div>
-        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy || confirming || confirmationUnverified}>
+        <button ref={analyzeButtonRef} className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || editsLocked}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
         </button>
       </div>
@@ -791,10 +861,12 @@ export function OcrReviewPanel({
                   <h3>Corregir y confirmar datos</h3>
                   <p>La propuesta parte del OCR, pero estos campos son editables y no sustituyen al original hasta que los confirmes.</p>
                 </div>
-                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || confirming || confirmedRevision !== null || confirmationUnverified || result.status === "empty"}>
+                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || editsLocked || confirmedRevision !== null || result.status === "empty"}>
                   {confirming ? "Confirmando…" : confirmedRevision ? "Confirmado ✓" : "Confirmar revisión"}
                 </button>
               </div>
+
+              {draftDirty ? <p role="status" data-testid="ocr-draft-dirty">Hay correcciones OCR sin confirmar. Se conservan en esta pestaña; confirma la revisión antes de salir o descártalas expresamente.</p> : null}
 
               <div className={styles.formGrid}>
                 <label>Tipo<select disabled={editsLocked} value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>

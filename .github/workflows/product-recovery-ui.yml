@@ -167,6 +167,13 @@ jobs:
           npm run verify:semantic-design
       - name: Build optimized application and run cumulative guards
         run: npm run build
+      - name: Protect unsaved OCR reviews before the cumulative matrix
+        # Run the loss-of-draft regressions early; the cumulative module
+        # matrix below still certifies the complete Documents surface.
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests
+          tests/e2e/documents.spec.ts --grep REC-OCR-DRAFT
+          --project=chromium-desktop --project=chromium-mobile
       - name: Browser coverage, theme, keyboard and layout checks
         run: >-
           npx playwright test --config=playwright.recovery.config.ts --fail-on-flaky-tests

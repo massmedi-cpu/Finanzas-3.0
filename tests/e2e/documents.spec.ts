@@ -649,6 +649,195 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-DRAFT-282 · reanalizar exige descarte explícito y cancelar conserva todas las correcciones", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  const ocrReads: string[] = [];
+  await mockDocumentApi(page, writes, ocrReads);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("EMISOR CORREGIDO MANUALMENTE");
+  await form.getByLabel("Total (€)", { exact: true }).fill("61,25");
+  await form.getByRole("button", { name: "Añadir línea" }).click();
+  await form.getByLabel("Descripción", { exact: true }).last().fill("Línea comprobada en el original");
+  await panel.getByRole("button", { name: "Volver a analizar" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Reemplazar la revisión OCR" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Seguir revisando" })).toBeFocused();
+  expect(ocrReads).toHaveLength(1);
+  await dialog.getByRole("button", { name: "Seguir revisando" }).click();
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("EMISOR CORREGIDO MANUALMENTE");
+  await expect(form.getByLabel("Total (€)", { exact: true })).toHaveValue("61,25");
+  await expect(form.getByLabel("Descripción", { exact: true }).last()).toHaveValue("Línea comprobada en el original");
+  const analyze = panel.getByRole("button", { name: "Volver a analizar" });
+  await expect(analyze).toBeFocused();
+  await analyze.click();
+  await page.keyboard.press("Shift+Tab");
+  await expect(dialog.getByRole("button", { name: "Descartar y volver a analizar" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Seguir revisando" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(analyze).toBeFocused();
+  expect(ocrReads).toHaveLength(1);
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-283 · el descarte confirmado sustituye la lectura sin reutilizar correcciones humanas", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  const ocrReads: string[] = [];
+  await mockDocumentApi(page, writes, ocrReads);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("BORRADOR A DESCARTAR");
+  await panel.getByRole("button", { name: "Volver a analizar" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Descartar y volver a analizar" }).click();
+  await expect.poll(() => ocrReads.length).toBe(2);
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("Proveedor Demo");
+  await expect(panel.getByTestId("ocr-draft-dirty")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-284 · cambiar de documento protege OCR y guardar metadatos no puede confirmarlo", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const other = { ...item, id: "93000000-0000-4000-8000-000000000092", originalFileName: "otra-factura.pdf" };
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET" || url.searchParams.has("mode")) return route.fallback();
+    await route.fulfill({ status: 200, json: url.searchParams.has("id")
+      ? { contractVersion: 1, document: url.searchParams.get("id") === other.id ? other : item, associations: [], principles }
+      : { contractVersion: 1, items: [item, other], total: 2, limit: 50, offset: 0, principles } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("CORRECCIÓN PRIVADA EN ESTA PESTAÑA");
+  await page.getByRole("button", { name: /otra-factura.pdf/i }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(dialog).toContainText("Guardar metadatos no confirma una revisión OCR");
+  await expect(dialog.getByRole("button", { name: "Guardar y continuar" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Seguir editando" }).click();
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("CORRECCIÓN PRIVADA EN ESTA PESTAÑA");
+  await page.getByRole("link", { name: "← Inicio" }).click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("CORRECCIÓN PRIVADA EN ESTA PESTAÑA");
+  await page.getByRole("button", { name: /otra-factura.pdf/i }).click();
+  await dialog.getByRole("button", { name: "Descartar cambios" }).click();
+  await expect(page.getByRole("heading", { name: "otra-factura.pdf", exact: true })).toBeVisible();
+  await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-285 · filtrar el listado y modificar el estado no descarta la revisión OCR", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("EMISOR PENDIENTE");
+  await page.getByRole("button", { name: "Archivado", exact: true }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Confirma la revisión OCR");
+  await page.getByRole("complementary", { name: "Listado de documentos" }).getByLabel("Buscar", { exact: true }).fill("sin-coincidencias");
+  await expect(page.getByTestId("documents-filtered-empty")).toBeVisible();
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("EMISOR PENDIENTE");
+  await expect(panel.getByTestId("ocr-draft-dirty")).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-286 · una confirmación incierta impide abandonar el historial y no vuelve a guardar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirms = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirms += 1;
+    await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("REVISIÓN EN COMPROBACIÓN");
+  await form.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(panel.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  await page.getByRole("link", { name: "← Inicio" }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  await expect(page.getByTestId("documents-alert")).toContainText("comprueba su historial");
+  await expect(page.getByRole("alertdialog", { name: "Cambios sin guardar" })).toHaveCount(0);
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("REVISIÓN EN COMPROBACIÓN");
+  expect(confirms).toBe(1);
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-287 · una confirmación verificada libera la salida sin un segundo guardado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirms = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirms += 1;
+    const submitted = route.request().postDataJSON();
+    await route.fulfill({ status: 200, json: {
+      contractVersion: 2, revision: 1, documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
+      rawEvidenceImmutable: true, bankSource: "read_only", financialWrites: false, requiresHumanReview: true,
+      reviewedValues: { ...submitted },
+    } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("EMISOR CONFIRMADO");
+  await expect(panel.getByTestId("ocr-draft-dirty")).toBeVisible();
+  await form.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(panel.getByText("Guardada como revisión 1.")).toBeVisible();
+  await expect(panel.getByTestId("ocr-draft-dirty")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Archivado", exact: true })).toBeEnabled();
+  // Selecting a filter with no matching rows now clears the clean detail.
+  await page.getByRole("complementary", { name: "Listado de documentos" }).getByLabel("Buscar", { exact: true }).fill("sin-coincidencias");
+  await expect(panel).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect(confirms).toBe(1);
+  expect(writes).toEqual([]);
+});
+
+test("REC-OCR-DRAFT-288 · guardar metadatos no escribe ni pierde correcciones OCR pendientes", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const form = panel.getByTestId("ocr-confirmation-form");
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await form.getByLabel("Emisor", { exact: true }).fill("CORRECCIÓN OCR");
+  await page.locator('form').filter({ has: page.getByRole("button", { name: "Guardar metadatos" }) }).getByLabel("Emisor", { exact: true }).fill("METADATO PENDIENTE");
+  await page.getByRole("button", { name: "Guardar metadatos" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Confirma la revisión OCR");
+  await expect(form.getByLabel("Emisor", { exact: true })).toHaveValue("CORRECCIÓN OCR");
+  await expect(panel.getByTestId("ocr-draft-dirty")).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
 test("REC-OCR-052 · un nuevo intento OCR fallido no muestra el resultado anterior como lectura actual", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
