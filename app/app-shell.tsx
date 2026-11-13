@@ -23,7 +23,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const alreadyInsideSharedShell = useContext(AppShellBoundaryContext);
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/logout") {
     return <>{children}</>;
   }
 
@@ -201,6 +201,9 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               <ProductIcon name="chevron-right" size="1.1em" />
             </button>
           </div>
+          <Link prefetch={false} href="/logout" className={styles.sessionExit} aria-label="Cerrar sesión de Financial App">
+            Cerrar sesión
+          </Link>
         </div>
         {pendingHref && <span className={styles.navigationProgress} aria-hidden="true" />}
       </div>
