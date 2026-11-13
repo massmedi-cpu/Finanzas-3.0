@@ -111,3 +111,45 @@ test("REC-OCR-META-006 JPEG accepts SOF before SOS and rejects forged SOF in sca
   expect(readOcrImageMetadata(trailing)).toBeNull();
   expect(readOcrImageMetadata(valid.subarray(0, 12))).toBeNull();
 });
+
+test("REC-OCR-META-007 reject SOF after unframed JPEG data and nested SOI", () => {
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x40, 0x00, 0x80, 0x01, 0x01, 0x11, 0x00]);
+  // Prior to this regression, the scanner skipped arbitrary junk to the
+  // next FF C0 and incorrectly reported geometry for an invalid upload.
+  const junk = Buffer.concat([Buffer.from([0xff, 0xd8, 0x13, 0x37, 0x42]), sof]);
+  expect(readOcrImageMetadata(junk)).toBeNull();
+  const nestedStart = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xd8]), sof]);
+  expect(readOcrImageMetadata(nestedStart)).toBeNull();
+  const byteStuffed = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0x00]), sof]);
+  expect(readOcrImageMetadata(byteStuffed)).toBeNull();
+});
+
+test("REC-OCR-META-008 reject impossible JPEG SOF segment lengths and components", () => {
+  // Length seven has room for dimensions but not the mandatory component
+  // count and component description; it was previously accepted.
+  const short = Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x07, 0x08, 0x00, 0x40, 0x00, 0x80]);
+  expect(readOcrImageMetadata(short)).toBeNull();
+
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x40, 0x00, 0x80, 0x01, 0x01, 0x11, 0x00]);
+  const zeroComponents = Buffer.from(sof);
+  zeroComponents[9] = 0;
+  expect(readOcrImageMetadata(Buffer.concat([Buffer.from([0xff, 0xd8]), zeroComponents]))).toBeNull();
+  const fiveComponents = Buffer.from(sof);
+  fiveComponents[9] = 5;
+  expect(readOcrImageMetadata(Buffer.concat([Buffer.from([0xff, 0xd8]), fiveComponents]))).toBeNull();
+  const wrongLength = Buffer.concat([Buffer.from(sof), Buffer.from([0x00])]);
+  wrongLength.writeUInt16BE(12, 2);
+  expect(readOcrImageMetadata(Buffer.concat([Buffer.from([0xff, 0xd8]), wrongLength]))).toBeNull();
+});
+
+test("REC-OCR-META-009 valid three-component JPEG with FF fill and sliced buffer", () => {
+  const sof = Buffer.from([
+    0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x40, 0x00, 0x80, 0x03,
+    0x01, 0x11, 0x00, 0x02, 0x11, 0x00, 0x03, 0x11, 0x00,
+  ]);
+  const bytes = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), sof, Buffer.from([0xff, 0xd9])]);
+  expect(readOcrImageMetadata(bytes)).toEqual({ mimeType: "image/jpeg", width: 128, height: 64 });
+  const padded = Buffer.concat([Buffer.alloc(5), bytes, Buffer.alloc(7)]);
+  expect(readOcrImageMetadata(padded.subarray(5, padded.length - 7)))
+    .toEqual({ mimeType: "image/jpeg", width: 128, height: 64 });
+});

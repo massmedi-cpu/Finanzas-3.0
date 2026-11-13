@@ -27,7 +27,9 @@ function jpeg(bytes: Uint8Array): OcrImageMetadata | null {
   const startOfFrame = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
   let offset = 2;
   while (offset + 3 < bytes.byteLength) {
-    while (offset < bytes.byteLength && bytes[offset] !== 0xff) offset += 1;
+    // Only marker bytes may precede a valid SOF. Do not resynchronize on a
+    // forged FF C0 hidden inside unframed payload bytes.
+    if (bytes[offset] !== 0xff) return null;
     while (offset < bytes.byteLength && bytes[offset] === 0xff) offset += 1;
     if (offset >= bytes.byteLength) break;
     const marker = bytes[offset];
@@ -36,11 +38,17 @@ function jpeg(bytes: Uint8Array): OcrImageMetadata | null {
     // for FF C0 inside that data (or after EOI) can accept a corrupt upload
     // with forged image dimensions. A real SOF must precede SOS and EOI.
     if (marker === 0xda || marker === 0xd9) return null;
-    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    if (marker === 0xd8 || marker === 0x00) return null;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
     if (offset + 1 >= bytes.byteLength) break;
     const length = view.getUint16(offset, false);
     if (length < 2 || offset + length > bytes.byteLength) break;
-    if (startOfFrame.has(marker) && length >= 7) {
+    if (startOfFrame.has(marker)) {
+      // SOF length is exactly eight bytes of frame header plus three per
+      // component. A short or contradictory header is not JPEG geometry.
+      if (length < 11) return null;
+      const components = bytes[offset + 7];
+      if (components < 1 || components > 4 || length !== 8 + 3 * components) return null;
       const height = view.getUint16(offset + 3, false);
       const width = view.getUint16(offset + 5, false);
       return valid(width, height) ? { mimeType: "image/jpeg", width, height } : null;
