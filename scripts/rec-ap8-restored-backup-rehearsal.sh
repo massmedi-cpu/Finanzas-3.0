@@ -87,6 +87,16 @@ const newMarker = log.includes('REC_AP8_POST_DDL|status=ok|checked_points=384|da
   && log.includes('REC_AP8_POST_DDL_SYNTHETIC|status=ok|inserts=30|replay_skips=30|rollback=clean|original_digests_preserved=true');
 if (!((mode === 'pre_ddl' && oldMarker) || (mode === 'post_ddl' && newMarker))) process.exit(1);
 NODE
+# An isolated post-restore DDL check: apply the candidate actor_type
+# correction, resolve its audit columns, and ROLLBACK the function + ACL.
+# Never invoke deletion against customer documents or a live Supabase host.
+if ! psql "$local_db" -X -v ON_ERROR_STOP=1 -q \
+  -f supabase/tests/rec_document_delete_audit_migration_disposable.sql >"$private_log" 2>&1; then
+  fail document_delete_audit_migration_disposable
+fi
+grep -Fq 'REC_DOC_DELETE_AUDIT|status=ok|' "$private_log" ||
+  fail document_delete_audit_migration_marker_missing
+echo 'REC_DOC_DELETE_AUDIT|status=ok|isolated=true|audit_columns=verified|rollback=verified|live_production_writes=false'
 final_guard="$(psql "$local_db" -X -Atq -v ON_ERROR_STOP=1 -c \
  "select count(*) from pg_trigger where tgname='documents_private_original_rewrite_guard' and tgenabled='O' and not tgisinternal")"
 [[ "$final_guard" == "$baseline_guard" ]] || fail guard_baseline_changed
