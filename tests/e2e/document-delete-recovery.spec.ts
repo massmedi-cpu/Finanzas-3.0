@@ -1,11 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import * as tsPackage from "typescript";
-// Playwright's esbuild runtime may load the CommonJS TypeScript package as a
-// default-only namespace. Resolve either form before accessing enums such
-// as ScriptTarget; the preceding CI failed on desktop and mobile because the
-// wrapper itself, not the Edge source, had no ScriptTarget export.
-const ts = (tsPackage as unknown as { default?: typeof tsPackage }).default ?? tsPackage;
+import { createRequire } from "node:module";
+// Playwright transpiles spec imports through its runner; a normal TS namespace
+// import did not expose ScriptTarget, even after unwrapping .default. Load the
+// installed CommonJS TypeScript compiler with Node's native require instead.
+const ts = createRequire(process.cwd() + "/package.json")("typescript") as typeof import("typescript");
 
 const ID = "93000000-0000-4000-8000-000000000258";
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
