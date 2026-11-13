@@ -602,3 +602,79 @@ test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across 
   expect(sha256(await reloaded.body())).toBe(sha256(pdf));
   console.log('AUD_HTTP|case=owner_ui_original|synthetic_pdf=true|private_signed_open=true|sha_download=true|reload_persisted=true|personal_data=false');
 });
+
+
+test('REC-DOC-E2E-262 · deletion removes only disposable private original, retry cannot delete replacement', async ({ page }) => {
+  test.setTimeout(180_000);
+  // Entire suite is hard-gated to 127.0.0.1 disposable Supabase above.
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body><h1>RECIBO SINTÉTICO BORRABLE</h1><p>TOTAL 17,00 EUR</p></body></html>');
+  const original = await page.pdf({ format: 'A4', printBackground: true });
+  const digest = createHash('sha256').update(original).digest('hex');
+  const name = 'AUD-DELETE-262.pdf';
+  const signAndFinalize = async () => {
+    const signed = await api(page, '/api/documents', 'POST', {
+      action: 'upload_sign', type: 'invoice', originalFileName: name,
+      mimeType: 'application/pdf', sizeBytes: original.byteLength, expectedSha256: digest,
+    });
+    const signedUrl = new URL(signed.signedUrl);
+    expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+    const put = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search,
+      { method: 'PUT', headers: { 'content-type': 'application/pdf' }, body: original });
+    expect(put.status).toBe(200);
+    const saved = await api(page, '/api/documents', 'POST', {
+      action: 'upload_finalize', type: 'invoice', originalFileName: name,
+      mimeType: 'application/pdf', path: signed.path,
+      expectedSizeBytes: original.byteLength, expectedSha256: digest,
+    });
+    expect(saved.uploadIntegrity).toEqual({ sha256: digest, sizeBytes: original.byteLength, verified: true });
+    return saved.document.id as string;
+  };
+  const id = await signAndFinalize();
+  const originalUrl = new URL((await api(page, '/api/documents?id=' + id + '&mode=open')).url);
+  expect(originalUrl.origin).toBe(canonicalStorageOrigin);
+  const originalStorageUrl = localStorageOrigin + originalUrl.pathname + originalUrl.search;
+  expect((await fetch(originalStorageUrl)).status).toBe(200);
+  const preflight = await api(page, '/api/documents/delete?id=' + id);
+  expect(preflight.canDelete).toBe(true);
+
+  // A foreign signed-in workspace cannot preflight, delete or replay cleanup.
+  const foreign = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreign.status()).toBe(200);
+  for (const [method, path] of [
+    ['GET', '/api/documents/delete?id=' + id],
+    ['DELETE', '/api/documents/delete?id=' + id],
+    ['POST', '/api/documents/delete?id=' + id],
+  ] as const) {
+    const attempt = await page.request.fetch(path, { method });
+    const result = await attempt.json().catch(() => ({}));
+    expect(result.canDelete === true && attempt.ok()).toBe(false);
+    expect(result.deleted === true && attempt.ok()).toBe(false);
+  }
+  expect((await fetch(originalStorageUrl)).status).toBe(200);
+  expect((await page.request.post('/api/auth/login', { data: { email: c.owner.email, password: c.owner.password } })).status()).toBe(200);
+
+  const deleted = await api(page, '/api/documents/delete?id=' + id, 'DELETE');
+  expect(deleted).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+  expect((await page.request.get('/api/documents?id=' + id)).status()).toBe(404);
+  expect((await fetch(originalStorageUrl)).status).toBeGreaterThanOrEqual(400);
+  // Terminal cleanup audit makes repeated POST read-only once verified.
+  const retry = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(retry).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+
+  // Reuse the same SHA-derived private path for a new registered fixture.
+  const replacement = await signAndFinalize();
+  expect(replacement).not.toBe(id);
+  const before = await page.request.get('/api/documents/download?id=' + replacement);
+  expect(before.status()).toBe(200);
+  expect(createHash('sha256').update(await before.body()).digest('hex')).toBe(digest);
+  // A stale retry ID must never erase the replacement's Storage object.
+  const stale = await page.request.post('/api/documents/delete?id=' + id);
+  expect(stale.status()).toBe(409);
+  const after = await page.request.get('/api/documents/download?id=' + replacement);
+  expect(after.status()).toBe(200);
+  expect(createHash('sha256').update(await after.body()).digest('hex')).toBe(digest);
+  console.log('AUD_HTTP|case=doc_deletion|scope_denial=true|original_removed=true|terminal_retry=true|replacement_protected=true|data=synthetic_only');
+});
