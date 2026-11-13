@@ -702,6 +702,12 @@ test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers ex
     expectedSizeBytes: pdf.byteLength, expectedSha256: digest,
   });
   const id = finalized.document.id;
+  const signedOriginal = new URL((await api(page, '/api/documents?id=' + id + '&mode=open')).url);
+  expect(signedOriginal.origin).toBe(canonicalStorageOrigin);
+  const originalStorageUrl = localStorageOrigin + signedOriginal.pathname + signedOriginal.search;
+  const before = await fetch(originalStorageUrl);
+  expect(before.status).toBe(200);
+  expect(createHash('sha256').update(Buffer.from(await before.arrayBuffer())).digest('hex')).toBe(digest);
   // Use the real local PostgreSQL and Storage service, not a mocked response.
   // This executable is hard-gated by the suite's GITHUB_ACTIONS + 127.0.0.1
   // checks and the driver repeats the checks before any database command.
@@ -728,12 +734,12 @@ test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers ex
     expect(JSON.stringify(blocked)).not.toContain('storageKey');
     expect(JSON.stringify(blocked)).not.toContain('sourceDriveFileId');
     expect((await page.request.get('/api/documents?id=' + id)).status()).toBe(404);
-    // The failed deletion did not erase the Storage original.
-    const stillInStorage = await fetch(localStorageOrigin + signedUrl.pathname
-      .replace('/object/upload/sign/', '/object/sign/') + signedUrl.search);
-    // This URL is an upload token, never treated as a download token;
-    // use owner-scoped Storage listing readback after the retry instead.
-    expect([200, 400, 401, 403, 404]).toContain(stillInStorage.status);
+    // SQL has removed the registration but the authentic private original
+    // still exists: exercise the very same signed Storage GET, never invent
+    // a signed download URL from an upload token.
+    const stillInStorage = await fetch(originalStorageUrl);
+    expect(stillInStorage.status).toBe(200);
+    expect(createHash('sha256').update(Buffer.from(await stillInStorage.arrayBuffer())).digest('hex')).toBe(digest);
     const foreign = await page.request.post('/api/auth/login', {
       data: { email: c.foreign.email, password: c.foreign.password },
     });
@@ -751,6 +757,7 @@ test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers ex
   });
   expect(JSON.stringify(cleaned)).not.toContain(signed.path);
   expect(JSON.stringify(cleaned)).not.toContain('storageKey');
+  expect((await fetch(originalStorageUrl)).status).toBeGreaterThanOrEqual(400);
   // The terminal, auditable confirmation prevents a repeated remote deletion.
   const done = await api(page, '/api/documents/delete?id=' + id, 'POST');
   expect(done).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
