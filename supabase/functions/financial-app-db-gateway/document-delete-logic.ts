@@ -167,7 +167,5 @@ export async function handleDocumentDeleteAction({
     return json(cleaned);
   }
 
-  }
-
   return null;
 }
