@@ -79,6 +79,19 @@ async function cleanupFromDeleteReceipt(sql: any, id: string): Promise<Record<st
     if (existing[0]?.referenced !== false) {
       return { error: "document_delete_cleanup_referenced", status: 409 };
     }
+    // A completed cleanup is terminal. Never replay a destructive Storage
+    // delete if the same content-addressed path was uploaded again later.
+    const receiptDone = await tx`
+      select exists(
+        select 1 from financial_app.audit_changes
+         where workspace_id=${workspaceId}::uuid
+           and entity_type='document' and entity_id=${id}::uuid
+           and field_name='storage_cleanup_confirmed' and new_value='true'::jsonb
+      ) as verified
+    `;
+    if (receiptDone[0]?.verified === true) {
+      return { deleted: true, documentId: id, storageCleanupPending: false, sourceOriginalPreserved: false };
+    }
     const filename = path.slice(path.lastIndexOf("/") + 1);
     const folder = path.slice(0, path.lastIndexOf("/"));
     try {
@@ -92,6 +105,14 @@ async function cleanupFromDeleteReceipt(sql: any, id: string): Promise<Record<st
         if (removed.error) console.error("document-delete-cleanup-retry", removed.error.name ?? "unknown");
         return { deleted: true, documentId: id, storageCleanupPending: true, storageCleanupCode: "document_storage_cleanup_unverified" };
       }
+      // Store terminal confirmation in the same transaction that serialized
+      // concurrent retry requests; never record success before readback.
+      await tx`
+        insert into financial_app.audit_changes
+          (workspace_id, entity_type, entity_id, field_name, original_value, new_value, change_origin)
+        values (${workspaceId}::uuid, 'document', ${id}::uuid, 'storage_cleanup_confirmed',
+                null, 'true'::jsonb, 'user')
+      `;
       return { deleted: true, documentId: id, storageCleanupPending: false, sourceOriginalPreserved: false };
     } catch {
       return { deleted: true, documentId: id, storageCleanupPending: true, storageCleanupCode: "document_storage_cleanup_unavailable" };
