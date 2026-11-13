@@ -32,7 +32,11 @@ function jpeg(bytes: Uint8Array): OcrImageMetadata | null {
     if (offset >= bytes.byteLength) break;
     const marker = bytes[offset];
     offset += 1;
-    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    // After SOS, compressed scan bytes are not JPEG marker segments. Looking
+    // for FF C0 inside that data (or after EOI) can accept a corrupt upload
+    // with forged image dimensions. A real SOF must precede SOS and EOI.
+    if (marker === 0xda || marker === 0xd9) return null;
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
     if (offset + 1 >= bytes.byteLength) break;
     const length = view.getUint16(offset, false);
     if (length < 2 || offset + length > bytes.byteLength) break;

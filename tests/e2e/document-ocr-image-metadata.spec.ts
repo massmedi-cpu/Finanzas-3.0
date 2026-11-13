@@ -86,3 +86,28 @@ test("REC-OCR-META-005 unrelated bytes have no OCR metadata", () => {
   expect(readOcrImageMetadata(Buffer.alloc(34))).toBeNull();
   expect(readOcrImageMetadata(Buffer.from("%PDF-1.7"))).toBeNull();
 });
+
+test("REC-OCR-META-006 JPEG accepts SOF before SOS and rejects forged SOF in scan data", () => {
+  // The minimal SOF0 marker defines an 128x64 image. APP0 is a safe
+  // stand-in for camera EXIF / JPEG application metadata before SOF.
+  const sof = Buffer.from([0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x40, 0x00, 0x80, 0x01, 0x01, 0x11, 0x00]);
+  const valid = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00]),
+    sof, Buffer.from([0xff, 0xd9]),
+  ]);
+  expect(readOcrImageMetadata(valid))
+    .toEqual({ mimeType: "image/jpeg", width: 128, height: 64 });
+
+  // A shortened or corrupted JPEG cannot supply its dimensions by hiding
+  // a start-of-frame-looking byte sequence in entropy-coded scan data.
+  const scanOnly = Buffer.concat([
+    Buffer.from([0xff, 0xd8, 0xff, 0xda, 0x00, 0x08, 0, 0, 0, 0, 0, 0]),
+    sof, Buffer.from([0xff, 0xd9]),
+  ]);
+  expect(readOcrImageMetadata(scanOnly)).toBeNull();
+
+  // The decoder's end-of-image marker also terminates metadata scanning.
+  const trailing = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xd9]), sof]);
+  expect(readOcrImageMetadata(trailing)).toBeNull();
+  expect(readOcrImageMetadata(valid.subarray(0, 12))).toBeNull();
+});
