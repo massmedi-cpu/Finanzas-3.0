@@ -206,6 +206,7 @@ jobs:
           tests/e2e/release-document-scope.spec.ts
           tests/e2e/protected-preview-release-profile.spec.ts
           tests/e2e/document-test-designation.spec.ts
+          tests/e2e/logout-session-ui.spec.ts
           tests/e2e/private-document-content-address.spec.ts
           tests/e2e/private-document-replay.spec.ts
           tests/e2e/document-drive-authoritative-metadata.spec.ts
