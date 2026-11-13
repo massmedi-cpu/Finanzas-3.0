@@ -736,7 +736,11 @@ test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers ex
   const fault = (mode: 'install' | 'remove') => {
     const output = execFileSync('npx', [
       '--yes', 'deno@2.5.4', 'run',
-      '--allow-env=SUPABASE_DB_URL,SUPABASE_URL,GITHUB_ACTIONS,AUD_ISOLATED_DIR',
+      // postgres.js 3.4.7 probes every PG-prefixed option while parsing its
+      // local connection URL (including PGSSL); Deno needs explicit read
+      // permission even for variables that are not set. Never use
+      // unrestricted --allow-env in this destructive local-only fixture.
+      '--allow-env=SUPABASE_DB_URL,SUPABASE_URL,GITHUB_ACTIONS,AUD_ISOLATED_DIR,PGHOST,PGPORT,PGUSERNAME,PGUSER,PGDATABASE,PGPASSWORD,PGMAX,PGSSL,PGIDLE_TIMEOUT,PGCONNECT_TIMEOUT,PGMAX_LIFETIME,PGMAX_PIPELINE,PGBACKOFF,PGKEEP_ALIVE,PGPREPARE,PGDEBUG,PGFETCH_TYPES,PGPUBLICATIONS,PGTARGET_SESSION_ATTRS,PGTARGETSESSIONATTRS,PGAPPNAME',
       '--allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io',
       '--config', 'supabase/functions/financial-app-db-gateway/deno.json',
       'supabase/tests/aud_storage_delete_fault.ts', mode, signed.path,
