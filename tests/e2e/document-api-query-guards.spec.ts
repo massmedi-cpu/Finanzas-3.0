@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { GET as getDocuments } from "../../app/api/documents/route";
-import { GET as deletePreflight, DELETE as deleteOriginal } from "../../app/api/documents/delete/route";
+import { GET as deletePreflight, DELETE as deleteOriginal, POST as retryCleanup } from "../../app/api/documents/delete/route";
 import { errorResponse as ocrReviewError } from "../../app/api/documents/ocr-review/route";
 import { LimitedJsonRequestError, readLimitedJsonRequest } from "../../src/infrastructure/http/limited-json-request";
 
@@ -104,6 +104,7 @@ test("REC-DOC-DELETE-247 · duplicate IDs never reach preflight or destructive d
     for (const [method, handler] of [
       ["GET", deletePreflight],
       ["DELETE", deleteOriginal],
+      ["POST", retryCleanup],
     ] as const) {
       const response = await handler(new Request(url, { method }));
       expect(response.status, method + " " + code).toBe(400);
