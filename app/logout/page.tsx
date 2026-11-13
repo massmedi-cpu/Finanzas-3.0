@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export default function LogoutPage() {
@@ -39,7 +38,6 @@ export default function LogoutPage() {
             <button type="button" className="primary-button" onClick={() => void signOut()}>
               Reintentar cierre de sesión
             </button>
-            <p><Link href="/" prefetch={false}>Volver a Inicio sin cerrar sesión</Link></p>
           </>
         ) : (
           <p role="status" aria-live="polite">Cerrando la sesión de este navegador…</p>
