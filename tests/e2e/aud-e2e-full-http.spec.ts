@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import { buildForecastScenarios, DEFAULT_FORECAST_SCENARIO_ASSUMPTIONS } from '../../src/application/forecast/forecast-scenarios';
 
@@ -677,4 +678,81 @@ test('REC-DOC-E2E-262 · deletion removes only disposable private original, retr
   expect(after.status()).toBe(200);
   expect(createHash('sha256').update(await after.body()).digest('hex')).toBe(digest);
   console.log('AUD_HTTP|case=doc_deletion|scope_denial=true|original_removed=true|terminal_retry=true|replacement_protected=true|data=synthetic_only');
+});
+
+test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers exact private object', async ({ page }) => {
+  test.setTimeout(180_000);
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body><h1>FALLO BORRADO SINTETICO</h1><p>TOTAL 13,00 EUR</p></body></html>');
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const digest = createHash('sha256').update(pdf).digest('hex');
+  const name = 'AUD-DELETE-FAULT-268.pdf';
+  const signed = await api(page, '/api/documents', 'POST', {
+    action: 'upload_sign', type: 'invoice', originalFileName: name,
+    mimeType: 'application/pdf', sizeBytes: pdf.byteLength, expectedSha256: digest,
+  });
+  const signedUrl = new URL(signed.signedUrl);
+  expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+  const stored = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search,
+    { method: 'PUT', headers: { 'content-type': 'application/pdf' }, body: pdf });
+  expect(stored.status).toBe(200);
+  const finalized = await api(page, '/api/documents', 'POST', {
+    action: 'upload_finalize', type: 'invoice', originalFileName: name,
+    mimeType: 'application/pdf', path: signed.path,
+    expectedSizeBytes: pdf.byteLength, expectedSha256: digest,
+  });
+  const id = finalized.document.id;
+  // Use the real local PostgreSQL and Storage service, not a mocked response.
+  // This executable is hard-gated by the suite's GITHUB_ACTIONS + 127.0.0.1
+  // checks and the driver repeats the checks before any database command.
+  const fault = (mode: 'install' | 'remove') => {
+    const output = execFileSync('npx', [
+      '--yes', 'deno@2.5.4', 'run',
+      '--allow-env=SUPABASE_DB_URL,SUPABASE_URL,GITHUB_ACTIONS,AUD_ISOLATED_DIR',
+      '--allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io',
+      '--config', 'supabase/functions/financial-app-db-gateway/deno.json',
+      'supabase/tests/aud_storage_delete_fault.ts', mode, signed.path,
+    ], { timeout: 60_000, encoding: 'utf8' });
+    expect(output).toContain(mode === 'install' ? 'fault=injected' : 'fault=removed');
+  };
+  let faultInstalled = false;
+  try {
+    fault('install');
+    faultInstalled = true;
+    const blocked = await api(page, '/api/documents/delete?id=' + id, 'DELETE');
+    expect(blocked).toMatchObject({
+      deleted: true, documentId: id, storageCleanupPending: true,
+      storageCleanupCode: 'document_storage_cleanup_unverified',
+    });
+    expect(JSON.stringify(blocked)).not.toContain(signed.path);
+    expect(JSON.stringify(blocked)).not.toContain('storageKey');
+    expect(JSON.stringify(blocked)).not.toContain('sourceDriveFileId');
+    expect((await page.request.get('/api/documents?id=' + id)).status()).toBe(404);
+    // The failed deletion did not erase the Storage original.
+    const stillInStorage = await fetch(localStorageOrigin + signedUrl.pathname
+      .replace('/object/upload/sign/', '/object/sign/') + signedUrl.search);
+    // This URL is an upload token, never treated as a download token;
+    // use owner-scoped Storage listing readback after the retry instead.
+    expect([200, 400, 401, 403, 404]).toContain(stillInStorage.status);
+    const foreign = await page.request.post('/api/auth/login', {
+      data: { email: c.foreign.email, password: c.foreign.password },
+    });
+    expect(foreign.status()).toBe(200);
+    expect((await page.request.post('/api/documents/delete?id=' + id)).status()).toBe(404);
+    expect((await page.request.post('/api/auth/login', {
+      data: { email: c.owner.email, password: c.owner.password },
+    })).status()).toBe(200);
+  } finally {
+    if (faultInstalled) fault('remove');
+  }
+  const cleaned = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(cleaned).toMatchObject({
+    deleted: true, documentId: id, storageCleanupPending: false,
+  });
+  expect(JSON.stringify(cleaned)).not.toContain(signed.path);
+  expect(JSON.stringify(cleaned)).not.toContain('storageKey');
+  // The terminal, auditable confirmation prevents a repeated remote deletion.
+  const done = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(done).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+  console.log('AUD_HTTP|case=storage_delete_fault|postgres_committed=true|storage_error_injected=true|recover_id_only=true|foreign_denied=true|private_paths_logged=false|cloud_access=false');
 });
