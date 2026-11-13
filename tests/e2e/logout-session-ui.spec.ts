@@ -42,7 +42,9 @@ test("REC-AUTH-LOGOUT · sin confirmación del servidor permite reintento, sin f
     else await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
   });
   await page.goto("/logout");
-  await expect(page.getByRole("alert")).toContainText("No se ha podido confirmar");
+  // Next.js owns a separate, empty route-announcer with role="alert".
+  // Assert the message in this screen, not an unrelated framework live region.
+  await expect(page.locator("main#main-content [role=\"alert\"]")).toContainText("No se ha podido confirmar");
   await expect(page).toHaveURL(/\/logout$/);
   await page.getByRole("button", { name: "Reintentar cierre de sesión" }).click();
   await expect(page).toHaveURL(/\/login$/);
