@@ -33,7 +33,13 @@ test("REC-VIS-004 · manifiesto de páginas reales coincide con los 21 destinos 
     }
   };
   visit(root);
-  const actual = pages.filter((path) => path !== "/login" && !compatibilityRedirects.has(path)).sort();
+  // /logout is an authenticated session-ending action, not a destination
+  // in the 21-route financial product smoke matrix. Keep it explicitly
+  // inventoried so it cannot silently disappear or become a data page.
+  expect(pages, "The isolated sign-out page must exist").toContain("/logout");
+  const logoutSource = readFileSync(join(root, "logout", "page.tsx"), "utf8");
+  expect(logoutSource).toContain('fetch("/api/auth/logout"');
+  const actual = pages.filter((path) => !["/login", "/logout"].includes(path) && !compatibilityRedirects.has(path)).sort();
   const expected = destinations.map((route) => route.path).sort();
   expect(actual, "Every canonical authenticated Next.js page must belong to the smoke matrix").toEqual(expected);
   for (const [alias, destination] of compatibilityRedirects) {
