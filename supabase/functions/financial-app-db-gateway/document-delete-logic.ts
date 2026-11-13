@@ -17,7 +17,8 @@ function json(body: unknown, status = 200) {
 
 function uuid(value: unknown) {
   if (typeof value !== "string" || !UUID.test(value)) throw new Error("invalid_document_id");
-  return value;
+  // PostgreSQL normalizes UUID output; compare canonical IDs before any write.
+  return value.toLowerCase();
 }
 
 function storageClient() {
