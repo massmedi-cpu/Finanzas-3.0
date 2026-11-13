@@ -59,3 +59,18 @@ export async function DELETE(request: Request) {
     return apiError(error);
   }
 }
+
+
+// REC-DOC-DELETE-258: POST is an explicit owner-initiated retry of a deletion
+// already recorded in the immutable audit. It never accepts a Storage path.
+export async function POST(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
+  try {
+    const id = documentId(request);
+    const result = await callPersistenceGateway("document.delete_cleanup", { id });
+    return Response.json(result, { headers: HEADERS });
+  } catch (error) {
+    return apiError(error);
+  }
+}
