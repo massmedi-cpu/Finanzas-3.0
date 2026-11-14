@@ -68,6 +68,7 @@ requireText(read(".github/workflows/publish-verified-release.yml"), "node script
 requireText(read(".github/workflows/publish-verified-release.yml"), "production_url_must_be_official_clean_origin", "production_release_official_origin");
 requireText(read("scripts/verify-production-release-domains.mjs"), "PRODUCTION_ORIGINS", "production_release_origins");
 requireText(read("tests/unit/verify-production-release-domains.test.mjs"), "REC-REL-710", "production_release_two_domains_unit_test");
+requireText(read(".github/workflows/release-operations-contract.yml"), "node --experimental-strip-types --test tests/unit/verify-production-release-domains.test.mjs", "release_alias_unit_tests_executed_in_ci");
 requireText(readonlyVerifier, "default_transaction_read_only=on", "readonly_database_session");
 requireText(readonlyVerifier, 'snapshot.bankSourcePolicy !== "read_only"', "readonly_bank_source_policy");
 requireText(readonlyVerifier, 'snapshot.locale !== "es-ES"', "readonly_regional_contract");
