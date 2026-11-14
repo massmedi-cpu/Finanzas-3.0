@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildDocumentOcrResult, reconstructOcrPage } from "../../src/domain/document-ocr";
-import { summarizeDocumentOcrPageReview } from "../../src/application/document-ocr-review";
+import { summarizeDocumentOcrPageReview, summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 
 const documentId = "94000000-0000-4000-8000-000000000094";
 
@@ -219,6 +219,26 @@ test("REC-OCR-PAGE-EMPTY-329 · no evidence is an attention state even when a pr
   const withoutLines = summarizeDocumentOcrPageReview({ ...source, plainText: "raw text without OCR lines" });
   expect(withoutLines.emptyPage).toBe(true);
   expect(withoutLines.requiresAttention).toBe(true);
+});
+
+test("REC-OCR-PAGE-EMPTY-331 · partly blank multi-page PDF cannot report complete verified OCR", () => {
+  const readable = reconstructOcrPage(1, [{
+    text: "TOTAL 24,50", confidence: 0.99,
+    box: { x: 0.1, y: 0.1, width: 0.6, height: 0.05 },
+  }]);
+  const blank = reconstructOcrPage(2, []);
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-partly-empty",
+    extractedAt: "2026-10-22T12:00:00Z",
+    pages: [readable, blank],
+  });
+  expect(result.plainText).toContain("TOTAL 24,50");
+  expect(result.status).toBe("needs_review");
+  expect(result.warnings).toContain("ocr_document_incomplete");
+  expect(summarizeDocumentOcrPageReview(result.pages[1]).requiresAttention).toBe(true);
+  const review = summarizeDocumentOcrReview(result);
+  expect(review.emptyPages).toBe(1);
+  expect(review.nextAction).toBe("review");
 });
 
 test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confidence or enables confirmation", async ({ page }) => {
