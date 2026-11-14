@@ -59,6 +59,7 @@ export type DocumentOcrReviewSummary = {
 
 export type DocumentOcrPageReviewSummary = {
   lowConfidenceLines: DocumentOcrResult["pages"][number]["lines"];
+  emptyPage: boolean;
   candidateProductRows: number | null;
   structuredProductRows: number | null;
   unresolvedProductRows: number | null;
@@ -77,6 +78,8 @@ const HIGH_PRIORITY_FINANCIAL_FIELDS = new Set<DocumentOcrReviewField["key"]>([
 
 export function summarizeDocumentOcrPageReview(page: DocumentOcrResult["pages"][number]): DocumentOcrPageReviewSummary {
   const lowConfidenceLines = page.lines.filter((line) => line.confidence < DOCUMENT_OCR_REVIEW_CONFIDENCE);
+  // No recovered evidence is not the same as a verified high-confidence read.
+  const emptyPage = !page.plainText.trim() || !page.lines.some((line) => line.text.trim());
   const integrity = page.receiptIntegrity;
   const candidateProductRows = integrity?.candidateProductRows ?? null;
   const structuredProductRows = integrity?.productRows ?? null;
@@ -89,6 +92,7 @@ export function summarizeDocumentOcrPageReview(page: DocumentOcrResult["pages"][
 
   return {
     lowConfidenceLines,
+    emptyPage,
     candidateProductRows,
     structuredProductRows,
     unresolvedProductRows,
@@ -96,7 +100,7 @@ export function summarizeDocumentOcrPageReview(page: DocumentOcrResult["pages"][
     arithmeticRowsMatching,
     lineTotalMatchesDocumentTotal,
     basePlusTaxMatchesTotal,
-    requiresAttention: lowConfidenceLines.length > 0 || integrityNeedsAttention,
+    requiresAttention: emptyPage || lowConfidenceLines.length > 0 || integrityNeedsAttention,
   };
 }
 
