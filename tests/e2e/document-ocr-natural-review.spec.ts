@@ -233,6 +233,12 @@ test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confiden
     const request = route.request();
     const url = new URL(request.url());
     if (request.method() !== "GET") {
+      // Background Drive synchronization is explicitly rejected in this isolated
+      // OCR test. A rejected request must not be counted as a financial write.
+      if (url.pathname === "/api/documents/drive-sync" && request.method() === "POST") {
+        await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+        return;
+      }
       writes.push(`${request.method()} ${url.pathname}`);
       await route.fulfill(url.pathname === "/api/documents/ocr" && request.method() === "POST"
         ? { status: 200, json: result }
