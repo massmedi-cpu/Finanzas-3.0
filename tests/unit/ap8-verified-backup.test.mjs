@@ -141,7 +141,7 @@ test('queries only the trusted GitHub API, keeps its token off the production re
   const listUrl = new URL(calls[2].url);
   assert.equal(listUrl.searchParams.get('branch'), 'main');
   assert.equal(listUrl.searchParams.get('event'), 'workflow_dispatch');
-  assert.equal(listUrl.searchParams.get('status'), 'completed');
+  assert.equal(listUrl.searchParams.has('status'), false);
   assert.equal(listUrl.searchParams.get('created'), `>=${at(now - policy.maxAgeMs)}`);
 });
 
@@ -162,6 +162,38 @@ test('unavailable or changed production and GitHub metadata fail closed without 
     error => error.code === 'trusted_main_identity_drift');
   await assert.rejects(findVerifiedRecentBackup({ token: 'synthetic-secret', repository: 'other/repo', fetchImpl: badApi, now }),
     error => error.code === 'backup_context_untrusted');
+});
+
+test('a newer queued or running backup blocks fallback to an older success', async () => {
+  // GitHub must return ALL statuses: status=completed silently hides queued work.
+  for (const state of ['queued', 'in_progress', 'waiting', 'pending']) {
+    const calls = [];
+    const oldCompleted = run(71, now - 2 * 60 * 60 * 1000);
+    const newest = { ...run(72, now - 60 * 1000), status: state, conclusion: null };
+    const fetchImpl = async url => {
+      const location = String(url);
+      calls.push(location);
+      if (location.includes('financialapp-home.vercel.app')) return { status: 200, json: async () => build() };
+      if (location.endsWith('/branches/main')) return {
+        status: 200, json: async () => ({ commit: { sha: policy.trustedMainSha } }),
+      };
+      if (location.includes('/workflows/')) {
+        const request = new URL(location);
+        assert.equal(request.searchParams.has('status'), false);
+        return {
+          status: 200,
+          json: async () => ({ total_count: 2, workflow_runs: [oldCompleted, newest] }),
+        };
+      }
+      throw new Error('backup_selector_must_not_inspect_artifacts_from_old_run');
+    };
+    await assert.rejects(
+      findVerifiedRecentBackup({ token: 'synthetic-token', repository: policy.repository, fetchImpl, now }),
+      error => error instanceof BackupSelectionError && error.code === 'backup_run_untrusted',
+      state,
+    );
+    assert.equal(calls.length, 3, state);
+  }
 });
 
 test('a newer failed backup stops selection before any artifact is requested', async () => {

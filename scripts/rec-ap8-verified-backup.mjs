@@ -139,7 +139,9 @@ export async function findVerifiedRecentBackup({ token, repository, fetchImpl = 
   if (!Number.isFinite(now)) fail('backup_context_untrusted');
   const { base, headers } = await verifyReleaseIdentity({ token, repository, fetchImpl });
   const since = new Date(now - BACKUP_POLICY.maxAgeMs).toISOString();
-  const query = new URLSearchParams({ branch: 'main', event: 'workflow_dispatch', status: 'completed',
+  // Include queued/in-progress runs: selecting an older successful backup while
+  // a newer backup is still running would silently bypass the newest-run gate.
+  const query = new URLSearchParams({ branch: 'main', event: 'workflow_dispatch',
     created: `>=${since}`, per_page: '100' });
   const list = await getJson(fetchImpl, `${base}/actions/workflows/${BACKUP_POLICY.workflowId}/runs?${query}`,
     { headers }, 'backup_metadata_unavailable');
