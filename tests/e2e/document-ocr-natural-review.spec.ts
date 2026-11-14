@@ -245,7 +245,16 @@ test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confiden
   const result = buildDocumentOcrResult({
     documentId, source: "pdf_text", extractor: "synthetic-blank-page",
     extractedAt: "2026-10-22T12:00:00Z",
-    pages: [reconstructOcrPage(1, [])],
+    // Contradictory vendor metadata must not turn an unreadable page green.
+    pages: [{
+      ...reconstructOcrPage(1, []),
+      receiptIntegrity: {
+        status: "verified", productRows: 0, candidateProductRows: 0,
+        unresolvedProductRows: 0, arithmeticRowsChecked: 0,
+        arithmeticRowsMatching: 0, lineTotalMatchesDocumentTotal: true,
+        basePlusTaxMatchesTotal: true,
+      },
+    }],
   });
   expect(result.status).toBe("empty");
   const writes: string[] = [];
@@ -283,6 +292,8 @@ test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confiden
   await expect(workbench.getByTestId("ocr-empty-page-1")).toContainText("Comprueba el original");
   await expect(workbench).not.toContainText("Sin incidencias internas detectadas");
   await expect(workbench).not.toContainText("Sin líneas bajo umbral");
+  await expect(panel.getByTestId("receipt-integrity-1")).toContainText("Coherencia no comprobable");
+  await expect(panel.getByTestId("receipt-integrity-1")).not.toContainText("Coherencia numérica verificada");
   await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
   expect(writes).toEqual(["POST /api/documents/ocr"]);
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
-import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
+import { summarizeDocumentOcrPageReview, summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { documentOcrErrorMessage } from "../../src/application/document-ocr-error-messages";
 import { verifiedDocumentOriginalOpenUrl } from "../../src/application/document-original-open-url";
 import { OcrReviewHttpError, isDefinitelyRejectedOcrReview, sameConfirmedOcrValues, type OcrConfirmedValues } from "../../src/application/document-ocr-confirmation-integrity";
@@ -953,6 +953,7 @@ export function OcrReviewPanel({
           <div className={ocrStyles.pages}>
             {result.pages.map((page, index) => {
               const lowConfidence = page.lines.filter((line) => line.confidence < 0.65).length;
+              const emptyPage = summarizeDocumentOcrPageReview(page).emptyPage;
               return (
                 <details className={ocrStyles.page} key={page.pageNumber} open={index === 0}>
                   <summary className={ocrStyles.pageHeader}>
@@ -960,9 +961,9 @@ export function OcrReviewPanel({
                     <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}{lowConfidence ? ` · ${lowConfidence} a revisar` : ""}</span>
                   </summary>
                   {page.receiptIntegrity ? (
-                    <div className={page.receiptIntegrity.status === "issues" ? ocrStyles.warnings : ocrStyles.info} data-testid={`receipt-integrity-${page.pageNumber}`}>
-                      <strong>{page.receiptIntegrity.status === "verified" ? "Coherencia numérica verificada" : page.receiptIntegrity.status === "issues" ? "Incoherencias numéricas detectadas" : "Coherencia numérica parcial"}</strong>
-                      <span>{integrityLabel(page.receiptIntegrity)}</span>
+                    <div className={emptyPage || page.receiptIntegrity.status === "issues" ? ocrStyles.warnings : ocrStyles.info} data-testid={`receipt-integrity-${page.pageNumber}`}>
+                      <strong>{emptyPage ? "Coherencia no comprobable: página sin lectura OCR" : page.receiptIntegrity.status === "verified" ? "Coherencia numérica verificada" : page.receiptIntegrity.status === "issues" ? "Incoherencias numéricas detectadas" : "Coherencia numérica parcial"}</strong>
+                      <span>{emptyPage ? "Sin texto ni líneas OCR verificables no se pueden validar filas ni importes." : integrityLabel(page.receiptIntegrity)}</span>
                       <small>Comprueba el original igualmente: esta validación detecta contradicciones internas, no sustituye la revisión del documento.</small>
                     </div>
                   ) : null}
