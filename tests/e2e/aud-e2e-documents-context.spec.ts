@@ -3,10 +3,31 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 
+const PRINCIPLES = {
+  bankSource: "read_only",
+  ocrEnabled: false,
+  getHasSideEffects: false,
+  suggestionsPersisted: false,
+  associationsRequireConfirmation: true,
+  testDesignationSupported: false,
+};
+
+const fixtureDocument = <T extends Record<string, unknown>>(value: T) => ({
+  notes: "",
+  issuerName: null,
+  sizeBytes: 1_024,
+  createdAt: "2026-09-12T09:00:00Z",
+  updatedAt: "2026-09-12T09:00:00Z",
+  storageProvider: "supabase",
+  sourceModifiedAt: null,
+  sourceDriveFileId: null,
+  ...value,
+});
+
 const documents = [
-  { id: "93000000-0000-4000-8000-000000000091", originalFileName: "Justificante pendiente.pdf", type: "invoice", status: "pending_review", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 1000, associationCount: 0 },
-  { id: "93000000-0000-4000-8000-000000000092", originalFileName: "Justificante asociado.pdf", type: "invoice", status: "confirmed", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 2000, associationCount: 1 },
-  { id: "93000000-0000-4000-8000-000000000093", originalFileName: "Archivo archivado.pdf", type: "invoice", status: "archived", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 3000, associationCount: 0 },
+  fixtureDocument({ id: "93000000-0000-4000-8000-000000000091", originalFileName: "Justificante pendiente.pdf", type: "invoice", status: "pending_review", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 1000, associationCount: 0 }),
+  fixtureDocument({ id: "93000000-0000-4000-8000-000000000092", originalFileName: "Justificante asociado.pdf", type: "invoice", status: "confirmed", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 2000, associationCount: 1 }),
+  fixtureDocument({ id: "93000000-0000-4000-8000-000000000093", originalFileName: "Archivo archivado.pdf", type: "invoice", status: "archived", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 3000, associationCount: 0 }),
 ];
 
 test("AUD-E2E-NAV-001 · alertas documentales enlazan a estados propios", () => {
@@ -19,11 +40,13 @@ test("AUD-E2E-NAV-001 · sin asociar filtra todos los resultados y permite recup
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
     const url = new URL(route.request().url());
     const status = url.searchParams.get("status");
-    const filtered = status ? documents.filter((item) => item.status === status) : documents;
+    const unassociated = url.searchParams.get("unassociated") === "true";
+    const filtered = documents.filter((item) => (!status || item.status === status)
+      && (!unassociated || (item.status !== "archived" && item.associationCount === 0)));
     const offset = Number(url.searchParams.get("offset") || "0");
     const limit = Number(url.searchParams.get("limit") || "50");
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-      contractVersion: 1, total: filtered.length, limit, offset, items: filtered.slice(offset, offset + limit),
+      contractVersion: 3, total: filtered.length, testCount: 0, limit, offset, items: filtered.slice(offset, offset + limit), principles: PRINCIPLES,
     }) });
   });
   await page.goto("/documents?unassociated=true");
@@ -52,7 +75,7 @@ test("AUD-E2E-DOC-002 · la advertencia depende de notas confirmadas, no del nom
     id: "93000000-0000-4000-8000-000000000094",
     originalFileName: "F11_DRIVE_LIVE_OCR_TEST.png",
     notes: "Fixture sintético F11 para validar OCR live de Google Drive sobre imagen",
-    type: "other", status: "pending_review", mimeType: "image/png",
+    type: "other", status: "pending_review", mimeType: "image/png", issuerName: null,
     documentDate: "2026-09-12", totalCents: null, associationCount: 0,
     storageProvider: "google_drive", sizeBytes: 58000,
     createdAt: "2026-09-12T09:00:00Z", updatedAt: "2026-09-12T09:00:00Z",
@@ -77,11 +100,11 @@ test("AUD-E2E-DOC-002 · la advertencia depende de notas confirmadas, no del nom
     if (id) {
       const doc = [fixture, ordinary].find((item) => item.id === id);
       await route.fulfill({ status: doc ? 200 : 404, contentType: "application/json",
-        body: JSON.stringify({ contractVersion: 1, document: doc, associations: [] }) });
+        body: JSON.stringify({ contractVersion: 3, document: doc, associations: [], principles: PRINCIPLES }) });
       return;
     }
     await route.fulfill({ status: 200, contentType: "application/json",
-      body: JSON.stringify({ contractVersion: 1, total: 2, limit: 50, offset: 0, items: [fixture, ordinary] }) });
+      body: JSON.stringify({ contractVersion: 3, total: 2, testCount: 0, limit: 50, offset: 0, items: [fixture, ordinary], principles: PRINCIPLES }) });
   });
 
   await page.goto("/documents");

@@ -8,16 +8,25 @@ on:
     paths:
       - "src/domain/document-ocr.ts"
       - "src/application/document-ocr-service.ts"
+      - "src/infrastructure/ocr/image-metadata.ts"
       - "supabase/migrations/20260903200004_financial_app_foundations.sql"
       - "supabase/migrations/20260906194000_phase9_document_engine_core.sql"
       - "tests/e2e/document-ocr-edge-cases-10.0.33.spec.ts"
+      - "tests/e2e/document-ocr-image-metadata.spec.ts"
       - "tests/e2e/document-ocr-contract.spec.ts"
       - "tests/e2e/document-ocr-structured-review.spec.ts"
       - "tests/e2e/document-ocr-natural-review.spec.ts"
       - "tests/e2e/document-ocr-service.spec.ts"
       - "tests/e2e/documents.spec.ts"
       - "tests/e2e/document-test-designation.spec.ts"
+      - "src/application/document-drive-file-type.ts"
       - "tests/e2e/document-drive-sync-preflight.spec.ts"
+      - "tests/e2e/document-drive-folder-scope.spec.ts"
+      - "tests/e2e/document-drive-folder-recursive.spec.ts"
+      - "tests/e2e/document-drive-authoritative-metadata.spec.ts"
+      - "tests/e2e/document-download-byte-limit.spec.ts"
+      - "src/application/document-download-content-disposition.ts"
+      - "src/infrastructure/google/google-drive-document-downloader.ts"
       - "tests/e2e/document-pagination.spec.ts"
       - "tests/e2e/aud-e2e-documents-context.spec.ts"
       - "tests/e2e/aud-e2e-documents-stale-loads.spec.ts"
@@ -62,6 +71,7 @@ jobs:
         run: >-
           npx playwright test
           tests/e2e/document-ocr-edge-cases-10.0.33.spec.ts
+          tests/e2e/document-ocr-image-metadata.spec.ts
           tests/e2e/document-ocr-contract.spec.ts
           tests/e2e/document-ocr-structured-review.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts
@@ -69,6 +79,10 @@ jobs:
           tests/e2e/documents.spec.ts
           tests/e2e/document-test-designation.spec.ts
           tests/e2e/document-drive-sync-preflight.spec.ts
+          tests/e2e/document-drive-folder-scope.spec.ts
+          tests/e2e/document-drive-folder-recursive.spec.ts
+          tests/e2e/document-drive-authoritative-metadata.spec.ts
+          tests/e2e/document-download-byte-limit.spec.ts
           tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
           tests/e2e/aud-e2e-documents-context.spec.ts

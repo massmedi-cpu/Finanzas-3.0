@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import styles from "./login.module.css";
 
 const LOGIN_ERROR_ID = "login-error";
 
@@ -64,7 +65,16 @@ export default function LoginForm({ nextPath }: Props) {
   }
 
   return (
-    <form
+    <div>
+      <a
+        className={"primary-button " + styles.googleButton}
+        href={"/api/auth/google?next=" + encodeURIComponent(nextPath)}
+      >
+        Continuar con Google
+      </a>
+      <details className={styles.alternativeAccess}>
+        <summary>Acceso alternativo con contraseña</summary>
+        <form
       className="config-form"
       onSubmit={submit}
       noValidate
@@ -113,6 +123,8 @@ export default function LoginForm({ nextPath }: Props) {
           {pending ? "Comprobando…" : "Entrar"}
         </button>
       </div>
-    </form>
+        </form>
+      </details>
+    </div>
   );
 }

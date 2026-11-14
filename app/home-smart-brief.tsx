@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { formatBasisPoints, formatInteger } from "../src/core/formatters";
+import type { PeriodCoverageState } from "../src/application/data-coverage";
 import NumberExplanation from "./number-explanation";
 import styles from "./home-smart-brief.module.css";
 
@@ -11,6 +12,7 @@ type SyncState = "success" | "failed" | "pending";
 
 type Props = {
   month: string;
+  periodCoverage: PeriodCoverageState;
   loading: boolean;
   transactionTotalCount: number | null;
   latestTransactionId: string | null;
@@ -135,6 +137,7 @@ function signedPoints(deltaBps: number, valuesVisible: boolean) {
 
 export default function HomeSmartBrief({
   month,
+  periodCoverage,
   loading,
   transactionTotalCount,
   latestTransactionId,
@@ -155,6 +158,7 @@ export default function HomeSmartBrief({
   privacyActive,
 }: Props) {
   const [previousVisit, setPreviousVisit] = useState<HomeVisitSnapshot | null | undefined>(undefined);
+  const periodObserved = periodCoverage === "covered" || periodCoverage === "partial";
 
   useEffect(() => {
     try {
@@ -178,11 +182,11 @@ export default function HomeSmartBrief({
       transactionTotalCount,
       latestTransactionId,
       latestTransactionDate,
-      expenseCents,
-      operatingNetCents,
+      expenseCents: periodObserved ? expenseCents : null,
+      operatingNetCents: periodObserved ? operatingNetCents : null,
       activeBalanceCents,
-      budgetProgressBps,
-      budgetStatus,
+      budgetProgressBps: periodObserved ? budgetProgressBps : null,
+      budgetStatus: periodObserved ? budgetStatus : null,
       projectedNetCents: plannedItems !== null && plannedItems > 0 ? projectedNetCents : null,
       plannedItems,
     };
@@ -198,6 +202,7 @@ export default function HomeSmartBrief({
     plannedItems,
     projectedNetCents,
     transactionTotalCount,
+    periodObserved,
   ]);
 
   useEffect(() => {
@@ -225,7 +230,7 @@ export default function HomeSmartBrief({
     if (operatingNetCents !== null && expenseCents !== null) {
       const negative = operatingNetCents < 0;
       const positive = operatingNetCents > 0;
-      const movementInMonth = Boolean(latestTransactionDate?.startsWith(month));
+      const movementInMonth = periodObserved;
       const cutoff = latestTransactionDate ? formatBankDate(latestTransactionDate) : null;
       items.push({
         label: "MES",
@@ -237,7 +242,7 @@ export default function HomeSmartBrief({
               ? "Balance registrado en negativo"
               : positive
                 ? "Balance registrado en positivo"
-                : "Balance registrado: 0 €",
+                : "Balance registrado: 0,00 €",
         detail: !movementInMonth
           ? `${cutoff ? `Último movimiento ${cutoff}. ` : ""}No interpretamos la ausencia de movimientos como equilibrio o mejora.`
           : `${cutoff ? `Datos hasta ${cutoff} · ` : ""}neto ${displayMoney(operatingNetCents)} · gastos ${displayMoney(expenseCents)}${incomeCents !== null ? ` · ingresos ${displayMoney(incomeCents)}` : ""}.`,
@@ -248,14 +253,20 @@ export default function HomeSmartBrief({
 
     if (budgetStatus !== null) {
       const progress = valuesVisible && budgetProgressBps !== null ? `${formatBasisPoints(budgetProgressBps, 1, "%", 0)} usado` : null;
-      const title = budgetStatus === "over"
+      const title = !periodObserved
+        ? "Presupuesto pendiente de datos"
+        : budgetStatus === "over"
         ? "Presupuesto excedido"
         : budgetStatus === "unfunded"
           ? "Gasto sin límite configurado"
           : budgetStatus === "empty"
             ? "Presupuesto sin actividad"
-            : "Presupuesto dentro del límite";
-      const detail = overBudgetCount && overBudgetCount > 0
+            : periodCoverage === "partial"
+              ? "Presupuesto con datos parciales"
+              : "Presupuesto dentro del límite";
+      const detail = !periodObserved
+        ? "El gasto del mes no está confirmado. El límite configurado sigue disponible en Presupuestos."
+        : overBudgetCount && overBudgetCount > 0
         ? `${overBudgetCount} ${overBudgetCount === 1 ? "categoría supera" : "categorías superan"} su límite${progress ? ` · ${progress}` : ""}.`
         : progress ? `${progress}.` : valuesVisible ? "Sin porcentaje comparable todavía." : "Porcentaje oculto por privacidad.";
       items.push({
@@ -263,7 +274,9 @@ export default function HomeSmartBrief({
         title,
         detail,
         href: "/budgets",
-        tone: budgetStatus === "over" || budgetStatus === "unfunded" ? "danger" : "positive",
+        tone: !periodObserved || periodCoverage === "partial"
+          ? budgetStatus === "over" || budgetStatus === "unfunded" ? "danger" : "warning"
+          : budgetStatus === "over" || budgetStatus === "unfunded" ? "danger" : "positive",
       });
     }
 
@@ -312,6 +325,8 @@ export default function HomeSmartBrief({
     syncState,
     transactionTotalCount,
     valuesVisible,
+    periodCoverage,
+    periodObserved,
   ]);
 
   const changes = useMemo<ChangeItem[]>(() => {
@@ -419,10 +434,10 @@ export default function HomeSmartBrief({
           <h2>Ahora mismo</h2>
         </div>
         <small>{privacyActive
-          ? "Privacidad activa · referencia monetaria local eliminada"
+          ? "Importes ocultos"
           : previousVisit
             ? `Comparado con ${formatDateTime(previousVisit.savedAt)}`
-            : "Referencia local de indicadores agregados"}</small>
+            : "Mes, presupuesto y próximas fechas"}</small>
       </div>
 
       <div className={styles.currentGrid}>
@@ -462,7 +477,7 @@ export default function HomeSmartBrief({
               : previousVisit
                 ? "Qué ha cambiado"
                 : previousVisit === null
-                  ? "Primera referencia guardada"
+                  ? "Primera visita"
                   : "Preparando comparación…"}</strong>
           </div>
           {!privacyActive && previousVisit?.savedAt && <small>{formatDateTime(previousVisit.savedAt)}</small>}
@@ -473,7 +488,7 @@ export default function HomeSmartBrief({
         ) : previousVisit === undefined ? (
           <p className={styles.noChanges}>Comparando con la última referencia guardada en este dispositivo…</p>
         ) : previousVisit === null ? (
-          <p className={styles.noChanges}>A partir de la próxima visita compararemos indicadores agregados guardados solo en este dispositivo; no guardamos nombres de comercios ni conceptos bancarios.</p>
+          <p className={styles.noChanges}>La próxima visita mostrará los cambios en tus indicadores. Esta comparación se guarda en este dispositivo.</p>
         ) : changes.length > 0 ? (
           <div className={styles.changeGrid}>
             {changes.map((item) => (

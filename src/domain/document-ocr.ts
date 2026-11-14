@@ -602,8 +602,13 @@ export function buildDocumentOcrResult(input: {
   }
   if (!allLines.length) warnings.push("no_text_detected");
   if (confidence !== null && confidence < LOW_CONFIDENCE) warnings.push("low_confidence");
-  const uniqueWarnings = [...new Set(warnings)];
   const plainText = pages.map((page) => page.plainText).filter(Boolean).join("\n\n");
+  // A readable page cannot conceal another page with no verifiable OCR lines.
+  // Even where totals appear consistent, a missing page can omit financial data.
+  if (plainText && pages.some((page) => !page.plainText.trim() || !page.lines.some((line) => line.text.trim()))) {
+    warnings.push("ocr_document_incomplete");
+  }
+  const uniqueWarnings = [...new Set(warnings)];
   const status = !plainText ? "empty" : uniqueWarnings.length || confidence === null ? "needs_review" : "ready";
   const preservesGeometry = !uniqueWarnings.includes(GEOMETRY_WARNING);
 

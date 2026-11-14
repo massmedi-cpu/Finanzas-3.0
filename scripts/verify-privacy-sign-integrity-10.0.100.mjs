@@ -33,7 +33,7 @@ requireText(inicio, 'data-financial-sign={financial && currentPeriodObserved ? f
 requireText(inicio, 'data-budget-progress-privacy={revealAmounts ? "visible" : "hidden"}', "Inicio · progreso presupuestario protegido");
 requireText(inicio, 'data-budget-ranking-privacy="hidden"', "Inicio · ranking presupuestario protegido");
 requireText(inicio, '"Ahorro oculto por privacidad"', "Inicio · tasa de ahorro protegida");
-requireText(inicio, 'if (revealAmounts && (financial?.period.operatingNetCents ?? 0) < 0)', "Inicio · alerta de signo condicionada");
+requireText(inicio, 'if (revealAmounts && currentPeriodObserved && (financial?.period.operatingNetCents ?? 0) < 0)', "Inicio · alerta de signo exige privacidad y cobertura bancaria");
 requireText(smartBrief, "valuesVisible: boolean;", "Lectura rápida · contrato de privacidad");
 requireText(smartBrief, '"Balance del mes protegido"', "Lectura rápida · signo textual neutral");
 requireText(smartBrief, 'tone: !movementInMonth ? "warning" : !valuesVisible ? "neutral"', "Lectura rápida · tono neutral");
@@ -42,7 +42,7 @@ requireText(inicio, "privacyActive={privacyReady && !amountsVisible}", "Inicio �
 requireText(smartBrief, "privacyActive: boolean;", "Lectura rápida · estado explícito de privacidad");
 requireText(smartBrief, "localStorage.removeItem(HOME_VISIT_KEY)", "Lectura rápida · borrado de referencia local");
 requireText(smartBrief, "if (!valuesVisible || loading", "Lectura rápida · persistencia pausada");
-requireText(smartBrief, '"Privacidad activa · referencia monetaria local eliminada"', "Lectura rápida · disclosure local");
+requireText(smartBrief, '"Importes ocultos"', "Lectura rápida · disclosure local");
 requireText(smartBrief, "La comparación entre visitas está pausada mientras ocultas importes.", "Lectura rápida · comparación pausada");
 requireText(privacyTest, "Ocultar importes oculta también el signo visual del balance", "Regresión privacidad de signo");
 requireText(privacyTest, "data-balance-sign=\"hidden\"", "Regresión estado oculto");

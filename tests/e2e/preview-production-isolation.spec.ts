@@ -6,6 +6,7 @@ const gatewaySource = readFileSync(
   "utf8",
 );
 const vercelGateSource = readFileSync("scripts/verify-vercel-source-runtime.mjs", "utf8");
+const livePreviewTestSource = readFileSync("tests/e2e/preview-production-isolation-live.spec.ts", "utf8");
 
 function policySegment() {
   const start = gatewaySource.indexOf("const PREVIEW_READ_ONLY_ACTIONS");
@@ -82,4 +83,12 @@ test("PRE-003 Vercel postbuild valida la frontera de workspace sin abrir lectura
   ]) {
     expect(vercelGateSource).not.toContain(forbidden);
   }
+});
+
+test("PRE-003 el test remoto de la preview no puede intentar ninguna mutación", () => {
+  // This is a production-backed preview. Never use remote write requests
+  // to prove a broken write guard: such a test would mutate real data.
+  expect(livePreviewTestSource).not.toMatch(/\brequest\.(?:post|put|patch|delete)\s*\(/i);
+  expect(livePreviewTestSource).not.toMatch(/\bmethod\s*:\s*["'`](?:POST|PUT|PATCH|DELETE)["'`]/i);
+  expect(livePreviewTestSource).toContain('request.get("/api/configuration")');
 });

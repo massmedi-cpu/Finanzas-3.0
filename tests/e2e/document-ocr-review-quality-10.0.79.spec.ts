@@ -12,10 +12,15 @@ function source(path: string) {
   return readFileSync(resolve(process.cwd(), path), "utf8");
 }
 
-function reviewFixture(confidence = 0.72) {
+function reviewFixture(confidence = 0.72, explicitIssuer = false) {
+  const issuerWords = explicitIssuer
+    ? [word("Emisor:", 0.12, 0.08, 0.11, confidence),
+      word("BAR", 0.24, 0.08, 0.06, confidence),
+      word("CENTRAL", 0.31, 0.08, 0.14, confidence)]
+    : [word("BAR", 0.12, 0.08, 0.07, confidence),
+      word("CENTRAL", 0.20, 0.08, 0.14, confidence)];
   const page = reconstructOcrPage(1, [
-    word("BAR", 0.12, 0.08, 0.07, confidence),
-    word("CENTRAL", 0.20, 0.08, 0.14, confidence),
+    ...issuerWords,
     word("Fecha:", 0.12, 0.18, 0.10, confidence),
     word("03/10/2026", 0.24, 0.18, 0.18, confidence),
     word("Total", 0.58, 0.72, 0.09, confidence),
@@ -62,8 +67,23 @@ test("10.0.79 conserva evidencia literal y localizable junto al valor financiero
   expect(date?.evidence[0]?.lineId).toMatch(/^p1-l/);
 });
 
-test("10.0.79 deja de exigir revisión prioritaria cuando la evidencia crítica alcanza confianza alta", () => {
+test("REC-OCR-109 · confianza alta de lectura no acredita un emisor sin etiqueta", () => {
   const review = summarizeDocumentOcrReview(reviewFixture(0.95));
+  // A 95% character-recognition confidence cannot establish that an
+  // unlabelled header is the issuer rather than the recipient or a slogan.
+  expect(review.priorityReviewFields.map((field) => field.key)).toEqual(["issuer"]);
+  expect(review.financialFields.filter((field) => field.requiresAttention).map((field) => field.key)).toEqual(["issuer"]);
+  expect(review.financialFields.find((field) => field.key === "date")?.trust).toBe("reliable");
+  expect(review.financialFields.find((field) => field.key === "totalCents")?.trust).toBe("reliable");
+  expect(review.nextAction).toBe("review");
+  expect(review.nextActionLabel).toMatch(/comercio \/ emisor/i);
+});
+
+test("REC-OCR-110 · un emisor identificado explícitamente sí permite confirmar campos fiables", () => {
+  const review = summarizeDocumentOcrReview(reviewFixture(0.95, true));
+  expect(review.financialFields.find((field) => field.key === "issuer")).toEqual(
+    expect.objectContaining({ trust: "reliable", value: "BAR CENTRAL", requiresAttention: false }),
+  );
   expect(review.priorityReviewFields).toHaveLength(0);
   expect(review.financialFields.filter((field) => field.requiresAttention)).toHaveLength(0);
   expect(review.nextAction).toBe("confirm");

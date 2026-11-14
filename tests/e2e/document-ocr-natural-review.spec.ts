@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { buildDocumentOcrResult, reconstructOcrPage } from "../../src/domain/document-ocr";
+import { summarizeDocumentOcrPageReview, summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 
 const documentId = "94000000-0000-4000-8000-000000000094";
 
@@ -28,6 +30,54 @@ const principles = {
   suggestionsPersisted: false,
   associationsRequireConfirmation: true,
 };
+
+test("REC-OCR-326 · incomplete PDFs show doubtful aggregates and an actionable Spanish warning without automatic confirmation", async ({ page }) => {
+  const text = ["Emisor: TIENDA EJEMPLO", "Fecha: 01/10/2026", "Base imponible 100,00", "IVA 21 % 21,00", "TOTAL A PAGAR 121,00"];
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-page-limit", extractedAt: "2026-10-22T12:00:00Z",
+    pages: [reconstructOcrPage(1, text.map((value, i) => ({
+      text: value, confidence: 0.99, box: { x: 0.1, y: 0.1 + i * 0.12, width: 0.8, height: 0.04 },
+    })))],
+    warnings: ["pdf_page_limit_reached"],
+  });
+  const writes: string[] = [];
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (url.pathname === "/api/documents/drive-sync" && request.method() === "POST") {
+      await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+      return;
+    }
+    if (request.method() !== "GET") {
+      writes.push(request.method() + " " + url.pathname);
+      await route.fulfill(url.pathname === "/api/documents/ocr" && request.method() === "POST"
+        ? { status: 200, json: result }
+        : { status: 409, json: { error: "unexpected_write" } });
+      return;
+    }
+    if (url.pathname === "/api/documents/ocr-review") {
+      await route.fulfill({ status: 200, json: {
+        documentId, runs: [{ id: "98000000-0000-4000-8000-000000000326", extractor: result.extractor, extractedAt: result.extractedAt }], reviews: [],
+      } });
+      return;
+    }
+    await route.fulfill({ status: 200, json: url.searchParams.has("id")
+      ? { contractVersion: 1, document, associations: [], principles }
+      : { contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  for (const field of ["taxBaseCents", "taxesCents", "totalCents"]) {
+    await expect(panel.getByTestId("ocr-field-" + field)).toContainText("Dudoso");
+    await expect(panel.getByTestId("ocr-field-" + field)).not.toContainText("Fiable");
+  }
+  await expect(panel.getByText("Faltan páginas por leer o recuperar. La base, los impuestos y el total necesitan revisión con el original completo.", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Revisa primero total con el original", { exact: true }).last()).toBeVisible();
+  expect(writes).toEqual(["POST /api/documents/ocr"]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+});
 
 test("Documentos convierte OCR en un recorrido de revisión humana sin escrituras automáticas", async ({ page }) => {
   const writes: string[] = [];
@@ -65,8 +115,8 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
             basePlusTaxMatchesTotal: true,
           },
           lines: [
-            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center" },
-            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left" },
+            { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center", box: { x: 0.3, y: 0.05, width: 0.4, height: 0.04 }, words: [] },
+            { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left", box: { x: 0.1, y: 0.12, width: 0.5, height: 0.04 }, words: [] },
           ],
         }],
         warnings: ["low_confidence"],
@@ -125,12 +175,125 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await panel.getByRole("button", { name: /Analizar/ }).click();
   await expect.poll(() => ocrRuns).toBe(1);
   expect(ocrMethod).toBe("POST");
-  await expect(panel.getByText("Revisa primero total con el original", { exact: true }).last()).toBeVisible();
+  // The unlabelled "TIENDA PRUEBA" header cannot prove the issuer, even at
+  // confidence 0.91: the financial total AND issuer need original comparison.
+  await expect(panel.getByText("Revisa primero comercio / emisor y total con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
   await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
   await expect(panel.getByText(/5\/5 filas estructuradas · 5\/5 líneas cuadran · suma de líneas = total/)).toBeVisible();
   await expect(panel.getByText("Corrige y guarda solo lo comprobado en el formulario superior. La lectura OCR original permanece separada y sin sobrescribirse.", { exact: true })).toBeVisible();
+  // REC-OCR-UI-015 · The description input must not remount (lose focus)
+  // on each character, even after adding another product line.
+  const lines = panel.getByTestId("ocr-confirmation-lines");
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const firstDescription = lines.getByRole("textbox", { name: "Descripción" }).first();
+  await firstDescription.click();
+  await firstDescription.pressSequentially("CAFE", { delay: 20 });
+  await expect(firstDescription).toHaveValue("CAFE");
+  await expect(firstDescription).toBeFocused();
+  await lines.getByRole("button", { name: "Añadir línea" }).click();
+  const secondDescription = lines.getByRole("textbox", { name: "Descripción" }).nth(1);
+  await secondDescription.fill("AGUA");
+  await lines.getByRole("button", { name: "Quitar línea" }).first().click();
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveCount(1);
+  await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveValue("AGUA");
   expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-PAGE-EMPTY-329 · no evidence is an attention state even when a provider claims arithmetic success", () => {
+  const source = reconstructOcrPage(1, []);
+  const contradictory = summarizeDocumentOcrPageReview({
+    ...source,
+    receiptIntegrity: {
+      status: "verified", productRows: 0, candidateProductRows: 0,
+      unresolvedProductRows: 0, arithmeticRowsChecked: 0,
+      arithmeticRowsMatching: 0, lineTotalMatchesDocumentTotal: true,
+      basePlusTaxMatchesTotal: true,
+    },
+  });
+  expect(contradictory.emptyPage).toBe(true);
+  expect(contradictory.lowConfidenceLines).toHaveLength(0);
+  expect(contradictory.requiresAttention).toBe(true);
+  const withoutLines = summarizeDocumentOcrPageReview({ ...source, plainText: "raw text without OCR lines" });
+  expect(withoutLines.emptyPage).toBe(true);
+  expect(withoutLines.requiresAttention).toBe(true);
+});
+
+test("REC-OCR-PAGE-EMPTY-331 · partly blank multi-page PDF cannot report complete verified OCR", () => {
+  const readable = reconstructOcrPage(1, [{
+    text: "TOTAL 24,50", confidence: 0.99,
+    box: { x: 0.1, y: 0.1, width: 0.6, height: 0.05 },
+  }]);
+  const blank = reconstructOcrPage(2, []);
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-partly-empty",
+    extractedAt: "2026-10-22T12:00:00Z",
+    pages: [readable, blank],
+  });
+  expect(result.plainText).toContain("TOTAL 24,50");
+  expect(result.status).toBe("needs_review");
+  expect(result.warnings).toContain("ocr_document_incomplete");
+  expect(summarizeDocumentOcrPageReview(result.pages[1]).requiresAttention).toBe(true);
+  const review = summarizeDocumentOcrReview(result);
+  expect(review.emptyPages).toBe(1);
+  expect(review.nextAction).toBe("review");
+});
+
+test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confidence or enables confirmation", async ({ page }) => {
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-blank-page",
+    extractedAt: "2026-10-22T12:00:00Z",
+    // Contradictory vendor metadata must not turn an unreadable page green.
+    pages: [{
+      ...reconstructOcrPage(1, []),
+      receiptIntegrity: {
+        status: "verified", productRows: 0, candidateProductRows: 0,
+        unresolvedProductRows: 0, arithmeticRowsChecked: 0,
+        arithmeticRowsMatching: 0, lineTotalMatchesDocumentTotal: true,
+        basePlusTaxMatchesTotal: true,
+      },
+    }],
+  });
+  expect(result.status).toBe("empty");
+  const writes: string[] = [];
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== "GET") {
+      // Background Drive synchronization is explicitly rejected in this isolated
+      // OCR test. A rejected request must not be counted as a financial write.
+      if (url.pathname === "/api/documents/drive-sync" && request.method() === "POST") {
+        await route.fulfill({ status: 409, json: { code: "preview_drive_sync_read_only" } });
+        return;
+      }
+      writes.push(`${request.method()} ${url.pathname}`);
+      await route.fulfill(url.pathname === "/api/documents/ocr" && request.method() === "POST"
+        ? { status: 200, json: result }
+        : { status: 409, json: { code: "unexpected_financial_mutation" } });
+      return;
+    }
+    if (url.pathname === "/api/documents/ocr-review") {
+      await route.fulfill({ status: 200, json: { documentId, runs: [], reviews: [] } });
+      return;
+    }
+    await route.fulfill({ status: 200, json: url.searchParams.has("id")
+      ? { contractVersion: 1, document, associations: [], principles }
+      : { contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const workbench = panel.getByTestId("ocr-review-workbench-1");
+  await expect(workbench).toContainText("Página sin lectura OCR verificable");
+  await expect(workbench).toContainText("Sin texto OCR verificable");
+  await expect(workbench.getByTestId("ocr-empty-page-1")).toContainText("Comprueba el original");
+  await expect(workbench).not.toContainText("Sin incidencias internas detectadas");
+  await expect(workbench).not.toContainText("Sin líneas bajo umbral");
+  await expect(panel.getByTestId("receipt-integrity-1")).toContainText("Coherencia no comprobable");
+  await expect(panel.getByTestId("receipt-integrity-1")).not.toContainText("Coherencia numérica verificada");
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(writes).toEqual(["POST /api/documents/ocr"]);
 });

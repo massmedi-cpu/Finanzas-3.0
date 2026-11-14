@@ -145,6 +145,8 @@ export default function RulesClient() {
   const actionFeedback = useActionFeedback();
   const [data, setData] = useState<Payload>({ rules: [], accounts: [], categories: [], merchants: [] });
   const [loading, setLoading] = useState(true);
+  const [verified, setVerified] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -163,19 +165,25 @@ export default function RulesClient() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setLoadFailed(false);
     setError(null);
     try {
       const response = await fetch("/api/rules", { cache: "no-store" });
-      if (!response.ok) throw new Error("No se pudo leer el motor de reglas persistente.");
+      if (!response.ok) throw new Error("No se pudieron cargar las reglas. Inténtalo de nuevo.");
       const payload = (await response.json()) as Payload;
+      if (!Array.isArray(payload.rules) || !Array.isArray(payload.accounts) || !Array.isArray(payload.categories) || !Array.isArray(payload.merchants)) throw new Error("Respuesta de reglas incompleta.");
       setData({
-        rules: Array.isArray(payload.rules) ? payload.rules : [],
+        rules: payload.rules,
         accounts: Array.isArray(payload.accounts) ? payload.accounts : [],
         categories: Array.isArray(payload.categories) ? payload.categories : [],
-        merchants: Array.isArray(payload.merchants) ? payload.merchants : [],
+        merchants: payload.merchants,
       });
+      setVerified(true);
+      return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo cargar Reglas.");
+      setLoadFailed(true);
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar las reglas.");
+      return false;
     } finally {
       setLoading(false);
     }
@@ -191,6 +199,7 @@ export default function RulesClient() {
     return data.rules.filter((rule) => `${rule.name} ${describeCondition(rule)} ${describeTarget(rule)}`.toLocaleLowerCase("es-ES").includes(term));
   }, [data.rules, search]);
   const activeRuleCount = data.rules.filter((rule) => rule.status === "active").length;
+  const dataCurrent = verified && !loadFailed && !loading;
 
   function beginNew() {
     setEditingId(null);
@@ -400,9 +409,9 @@ export default function RulesClient() {
           <h1>Reglas de categorización</h1>
           <p className={styles.copy}>Las reglas se prueban por orden y combinan concepto, cuenta, importe, comercio y categoría. Los cambios manuales que tú confirmas tienen prioridad: por ejemplo, si corriges un comercio, una regla no lo sobrescribe. La fuente bancaria sigue siendo de solo lectura.</p>
         </div>
-        <div className={styles.summary} aria-label="Resumen de reglas">
-          <div><strong>{activeRuleCount}</strong><span>Activas</span></div>
-          <div><strong>{data.rules.length}</strong><span>Totales</span></div>
+        <div className={styles.summary} role="group" aria-label="Resumen de reglas">
+          <div><strong>{dataCurrent ? activeRuleCount : "—"}</strong><span>Activas</span></div>
+          <div><strong>{dataCurrent ? data.rules.length : "—"}</strong><span>Totales</span></div>
           <button type="button" onClick={() => void load()} disabled={loading || busy}>Actualizar</button>
         </div>
       </header>
@@ -410,16 +419,16 @@ export default function RulesClient() {
       {error && <div className={`${styles.message} ${styles.error}`} role="alert">{error}</div>}
       {notice && <div className={`${styles.message} ${styles.success}`} role="status">{notice}</div>}
 
-      <section className={styles.toolbar} aria-label="Herramientas de reglas">
+      {dataCurrent && <section className={styles.toolbar} aria-label="Herramientas de reglas">
         <label>
           <span>Buscar regla</span>
           <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Concepto, cuenta, comercio…" />
         </label>
         <button type="button" onClick={beginNew} disabled={busy}>+ Nueva regla</button>
         <button className={styles.applyButton} type="button" onClick={() => void applyAll()} disabled={busy || activeRuleCount === 0}>Aplicar reglas</button>
-      </section>
+      </section>}
 
-      {applyResult && (
+      {dataCurrent && applyResult && (
         <section className={styles.resultStrip} aria-label="Resultado de aplicación">
           <span><strong>{applyResult.evaluated ?? 0}</strong> evaluados</span>
           <span><strong>{applyResult.matched ?? 0}</strong> con regla</span>
@@ -428,7 +437,9 @@ export default function RulesClient() {
         </section>
       )}
 
-      {loading ? <section className={styles.panel}>Leyendo reglas persistentes…</section> : (
+      {loading ? <section className={styles.panel}>Leyendo reglas…</section> : !dataCurrent ? (
+        <section className={styles.panel} role="status"><h2>Reglas sin verificar</h2><p>No se ha podido comprobar si hay reglas guardadas. No se muestran ceros ni formularios de creación.</p><button type="button" onClick={() => void load()}>Reintentar lectura</button></section>
+      ) : (
         <div className={styles.layout}>
           <section className={styles.panel} aria-labelledby="rule-list-heading">
             <div className={styles.panelHeading}>
@@ -522,7 +533,7 @@ export default function RulesClient() {
                 </form>
               </div>
               {explanation && (
-                <div aria-label="Resultado de la simulación">
+                <div role="region" aria-label="Resultado de la simulación">
                   <p className={styles.helper}>Propuesta de la regla, sin modificar el movimiento. La aplicación real es una acción separada.</p>
                   <pre className={styles.explanation}>{JSON.stringify(explanation, null, 2)}</pre>
                 </div>

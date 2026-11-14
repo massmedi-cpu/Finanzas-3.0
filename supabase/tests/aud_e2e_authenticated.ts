@@ -17,6 +17,9 @@ const client = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { a
 const database = () => postgres(dbUrl, { max: 1, prepare: false, transform: { undefined: null } });
 const workspaceA = "a0e20000-0000-4000-8000-000000000001";
 const workspaceB = "a0e20000-0000-4000-8000-000000000002";
+// Deliberately isolated role=member fixture: it cannot share the owner's
+// workspace because this release is a *single-owner personal* application.
+const workspaceC = "a0e20000-0000-4000-8000-000000000005";
 const categoryA = "a0e20000-0000-4000-8000-000000000003";
 const categoryB = "a0e20000-0000-4000-8000-000000000004";
 
@@ -55,8 +58,8 @@ if (Deno.args[0] === "prepare") {
   const sql = database();
   const fixtureIds: Record<string, string> = { categoryA, categoryB };
   try {
-    await sql`insert into financial_app.workspaces(id,name) values (${workspaceA}::uuid,'AUD authenticated A'),(${workspaceB}::uuid,'AUD authenticated B')`;
-    for (const [account, workspace, role] of [[owner, workspaceA, "owner"], [member, workspaceA, "member"], [foreign, workspaceB, "owner"]] as const) {
+    await sql`insert into financial_app.workspaces(id,name) values (${workspaceA}::uuid,'AUD authenticated A'),(${workspaceB}::uuid,'AUD authenticated B'),(${workspaceC}::uuid,'AUD unauthorized member only')`;
+    for (const [account, workspace, role] of [[owner, workspaceA, "owner"], [member, workspaceC, "member"], [foreign, workspaceB, "owner"]] as const) {
       await sql`insert into financial_app.authorized_users(user_id,active) values (${account.id}::uuid,true)`;
       await sql`insert into financial_app.workspace_memberships(workspace_id,user_id,role,active,is_default) values (${workspace}::uuid,${account.id}::uuid,${role},true,true)`;
     }
@@ -100,12 +103,14 @@ if (Deno.args[0] === "prepare") {
     const classificationRows = await sql`select id,merchant_id,category_id,category_origin from financial_app.transactions order by id`;
     await Deno.writeTextFile(`${dir}/bank-baseline.json`, JSON.stringify({ ...baseline[0], classificationRows }), { mode: 0o600 });
   } finally { await sql.end(); }
-  const upload = await ok(owner.token, "document.upload_sign", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", sizeBytes: 1000 });
-  assert(new URL(upload.signedUrl).hostname === "127.0.0.1", "external_upload_forbidden");
-  const registered = await ok(owner.token, "document.register", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", storageProvider: "supabase", storageKey: upload.path, sourceDriveFileId: null, sizeBytes: null, sourceModifiedAt: null });
-  assert(registered.document?.id, "fixture_document_missing");
-  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, upload, documentId: registered.document.id, fixtureIds }), { mode: 0o600 });
-  console.log("AUD_AUTH|stage=prepared|users=4|workspaces=2|real_auth=true");
+  // The legacy document.register route is deliberately forbidden because
+  // it bypassed validation of private Storage bytes. The browser test below
+  // generates the actual PNG, obtains a SHA-aware upload signature and
+  // finalizes it through the current verified public HTTP contract.
+  // Serial Playwright workers ensure that the context is amended before the
+  // full HTTP suite and before the final cross-user SQL verification.
+  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, fixtureIds }), { mode: 0o600 });
+  console.log("AUD_AUTH|stage=prepared|users=4|workspaces=3|single_owner_per_working_workspace=true|real_auth=true");
 } else if (Deno.args[0] === "verify") {
   const c = JSON.parse(await Deno.readTextFile(contextPath));
   // The app logout test revokes actual sessions. Authenticate afresh for this phase.
@@ -118,7 +123,11 @@ if (Deno.args[0] === "prepare") {
   const id = c.documentId;
   assert((await operation("", "document.detail", { id })).status === 403, "anonymous_accepted");
   assert((await operation("invalid-token", "document.detail", { id })).status === 401, "invalid_token_accepted");
-  const finalized = await ok(c.owner.token, "document.upload_finalize", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", path: c.upload.path });
+  const finalized = await ok(c.owner.token, "document.upload_finalize", {
+    type: "ticket", originalFileName: "AUD-synthetic-ticket.png",
+    mimeType: "image/png", path: c.upload.path,
+    expectedSizeBytes: c.upload.sizeBytes, expectedSha256: c.upload.expectedSha256,
+  });
   assert(finalized.document.id === id && finalized.document.sizeBytes > 0, "real_storage_finalize_failed");
   await ok(c.owner.token, "document.update", { id, type: "ticket", documentDate: "2026-10-08", issuerName: "AUD synthetic issuer", totalCents: 1900, notes: "Synthetic isolated document, no personal data" });
   const original = (await ok(c.owner.token, "document.detail", { id })).document;
@@ -224,5 +233,62 @@ if (Deno.args[0] === "prepare") {
     const persisted = await finalSql`select raw_result from financial_app.document_ocr_runs where document_id=${httpEvidence.id}::uuid`;
     assert(persisted.length === 1 && isDeepStrictEqual(persisted[0].raw_result, httpEvidence.raw), 'next_http_ocr_not_persisted_exactly');
   } finally { await finalSql.end(); }
-  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
+  // A second active membership must lock the owner's workspace before any
+  // business role/GUC is granted; restoring a single owner must restore access.
+  // All fixtures are local disposable PG17 + GoTrue; never run against cloud.
+  const memberGateSql = database();
+  try {
+    await memberGateSql`insert into financial_app.workspace_memberships(
+      workspace_id,user_id,role,active,is_default
+    ) values (${workspaceA}::uuid,${c.member.id}::uuid,'member',true,false)`;
+    const locked = await operation(c.owner.token, "document.detail", { id });
+    assert(locked.status === 403, "multi_member_owner_still_allowed");
+    await memberGateSql`delete from financial_app.workspace_memberships
+      where workspace_id=${workspaceA}::uuid and user_id=${c.member.id}::uuid`;
+    const recovered = await operation(c.owner.token, "document.detail", { id });
+    assert(recovered.status === 200, "single_owner_access_not_recovered");
+  } finally { await memberGateSql.end(); }
+  // REC-DOC-DELETE-255: exercise the actual SQL deletion and audit INSERT on
+  // disposable PostgreSQL 17. Never call the cloud database or private Drive.
+  const deleteSql = database();
+  try {
+    const syntheticDriveId = "AUD-DELETE-" + crypto.randomUUID();
+    const testDocumentId = crypto.randomUUID();
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceA},false)`;
+    await deleteSql`insert into financial_app.documents (
+      id,workspace_id,type,status,original_file_name,mime_type,
+      storage_provider,storage_key,source_drive_file_id,size_bytes
+    ) values (
+      ${testDocumentId}::uuid,${workspaceA}::uuid,'invoice','pending_review',
+      'AUD disposable deletion fixture.pdf','application/pdf','google_drive',
+      ${"drive:" + syntheticDriveId},${syntheticDriveId},1234
+    )`;
+    const preflight = await deleteSql`select financial_app.document_delete_preflight(${testDocumentId}::uuid) as result`;
+    assert(preflight[0]?.result?.canDelete === true, 'synthetic_delete_preflight_denied');
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceB},false)`;
+    let denied = false;
+    try {
+      await deleteSql`select financial_app.delete_document_registration(${testDocumentId}::uuid)`;
+    } catch {
+      denied = true;
+    }
+    assert(denied, 'cross_workspace_delete_accepted');
+    await deleteSql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceA},false)`;
+    const deleted = await deleteSql`select financial_app.delete_document_registration(${testDocumentId}::uuid) as result`;
+    assert(deleted[0]?.result?.deleted === true
+      && deleted[0]?.result?.sourceOriginalPreserved === true, 'deletion_not_certified');
+    const persisted = await deleteSql`
+      select
+        (select count(*)::int from financial_app.documents
+          where id=${testDocumentId}::uuid) as documents,
+        (select count(*)::int from financial_app.audit_changes
+          where workspace_id=${workspaceA}::uuid and entity_type='document'
+            and entity_id=${testDocumentId}::uuid and field_name='deleted'
+            and original_value->>'storageProvider'='google_drive') as audit_events
+    `;
+    assert(persisted[0]?.documents === 0 && persisted[0]?.audit_events === 1,
+      'deletion_audit_missing_or_document_not_deleted');
+    console.log('REC_DOC_DELETE_SCHEMA|status=verified|disposable=true|scope_denial=true|audit_insert=true|drive_original_untouched=true');
+  } finally { await deleteSql.end(); }
+  console.log("AUD_AUTH|stage=verified|owner_only=true|member_denied=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
 } else { throw new Error("expected_prepare_or_verify"); }

@@ -12,6 +12,7 @@ function baselineSummary(): OfficialSourcePreflightSummary {
     sourceFileId: "verified-source",
     sourceRevision: "drive-version:baseline",
     schemaFingerprint: "a".repeat(64),
+    snapshotFingerprint: "c".repeat(64),
     totalAuthoritativeRows: 3172,
     accounts: [
       {
@@ -24,6 +25,7 @@ function baselineSummary(): OfficialSourcePreflightSummary {
         newestBankDate: "2026-09-04",
         oldestBankDate: "2018-11-22",
         latestBalanceAfterCents: 188827,
+        balanceContinuity: { comparablePairs: 0, consistentPairs: 0, discontinuousPairs: 0, unverifiablePairs: 3023 },
       },
       {
         accountExternalKey: "Cuenta ahorro Openbank · 2504",
@@ -35,6 +37,7 @@ function baselineSummary(): OfficialSourcePreflightSummary {
         newestBankDate: "2026-09-02",
         oldestBankDate: "2026-01-05",
         latestBalanceAfterCents: 18695772,
+        balanceContinuity: { comparablePairs: 0, consistentPairs: 0, discontinuousPairs: 0, unverifiablePairs: 14 },
       },
       {
         accountExternalKey: "Tarjeta prepago Openbank · 8403",
@@ -46,6 +49,7 @@ function baselineSummary(): OfficialSourcePreflightSummary {
         newestBankDate: "2023-01-01",
         oldestBankDate: "2019-01-01",
         latestBalanceAfterCents: null,
+        balanceContinuity: { comparablePairs: 0, consistentPairs: 0, discontinuousPairs: 0, unverifiablePairs: 132 },
       },
     ],
     cursors: [

@@ -113,8 +113,20 @@ test("AUD-E2E-NAV-001 · Gastos conserva fecha, comercio y búsqueda hasta limpi
   }).toEqual(["2026-09-25", "2026-09-25", MERCHANT_ID, "Mercadona", "expense"]);
   await expect(nav.getByRole("link", { name: "Gastos", exact: true })).toHaveAttribute("aria-current", "page");
   await expect.poll(() => seen.some((url) => url.searchParams.get("merchantId") === MERCHANT_ID && url.searchParams.get("kind") === "expense")).toBe(true);
+  // «Todos» resets only the quick preset while keeping owner-selected context.
   await nav.getByRole("link", { name: "Todos", exact: true }).click();
+  await expect.poll(() => {
+    const params = new URL(page.url()).searchParams;
+    return ["dateFrom", "dateTo", "merchantId", "q", "kind"].map((k) => params.get(k));
+  }).toEqual(["2026-09-25", "2026-09-25", MERCHANT_ID, "Mercadona", null]);
+  await expect(nav.getByRole("link", { name: "Todos", exact: true })).toHaveAttribute("aria-current", "page");
+  // «Limpiar» is the explicit action that clears search, dates and merchant.
+  await page.getByRole("button", { name: "Limpiar", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions$/);
+  await expect(page.getByLabel("Buscar", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("Hasta", { exact: true })).toHaveValue("");
+  await expect(page.getByRole("combobox", { name: "Comercio" })).toHaveValue("");
 });
 
 
@@ -129,21 +141,50 @@ test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores
   await expect(more).toHaveAttribute("aria-expanded", "false");
   const queryCount = seen.length;
   await more.click();
-  await expect(page.getByLabel("Comercio")).toBeVisible();
-  await page.getByLabel("Comercio").selectOption(MERCHANT_ID);
+  // The accessible merchant searchbox also contains “Comercio” in its name.
+  // Select the exact merchant combobox, not a substring-ambiguous label.
+  await expect(page.getByTestId("merchant-filter")).toBeVisible();
+  await page.getByTestId("merchant-filter").selectOption(MERCHANT_ID);
   await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("button", { name: /Ocultar filtros avanzados/ }).click();
   // Comercio es un filtro principal y permanece visible; lo que se pliega
   // es el panel avanzado, sin descartar los borradores.
   await expect(page.locator("#movement-advanced-filters")).toBeHidden();
-  await expect(page.getByLabel("Comercio")).toBeVisible();
+  await expect(page.getByTestId("merchant-filter")).toBeVisible();
   expect(seen.length).toBe(queryCount);
   await page.getByRole("button", { name: /Más filtros/ }).click();
-  await expect(page.getByLabel("Comercio")).toHaveValue(MERCHANT_ID);
+  await expect(page.getByTestId("merchant-filter")).toHaveValue(MERCHANT_ID);
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect.poll(() => seen.some((url) =>
     url.searchParams.get("merchantId") === MERCHANT_ID
     && url.searchParams.get("dateFrom") === "2026-09-01"
     && url.searchParams.get("kind") === "expense"
   )).toBe(true);
+});
+
+test("REC-UX-658 · filtros monetarios interpretan separadores españoles sin perder precisión", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Más filtros" }).click();
+
+  await page.getByLabel("Importe mínimo en euros").fill("1.234,56");
+  await page.getByLabel("Importe máximo en euros").fill("12.345");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("amountFromCents") === "123456" &&
+    url.searchParams.get("amountToCents") === "1234500",
+  )).toBe(true);
+
+  await page.getByLabel("Importe mínimo en euros").fill("-1.234");
+  await page.getByLabel("Importe máximo en euros").fill("1.234,56");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("amountFromCents") === "-123400" &&
+    url.searchParams.get("amountToCents") === "123456",
+  )).toBe(true);
+
+  await page.getByLabel("Importe mínimo en euros").fill("12.34,56");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Usa importes como 1.234,56" })).toContainText("Usa importes como 1.234,56");
 });

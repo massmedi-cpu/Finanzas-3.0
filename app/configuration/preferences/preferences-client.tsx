@@ -10,6 +10,8 @@ export default function PreferencesClient() {
     privacyOnBlur,
     homeDestination,
     lastAutomaticSyncAt,
+    persistenceUnavailable,
+    automaticSyncWarning,
     setBudgetFocus,
     setSyncOnOpen,
     setPrivacyOnBlur,
@@ -29,23 +31,33 @@ export default function PreferencesClient() {
         <div>
           <p className="eyebrow">Configuración · Preferencias</p>
           <h1>Preferencias generales</h1>
-          <p className="hero-copy">Solo se muestran ajustes con efecto real en Financial App. El formato regional permanece fijado en Español (España) y EUR por contrato del producto.</p>
+          <p className="hero-copy">Elige cómo quieres ver tus datos. Fechas e importes se muestran en español de España y euros.</p>
         </div>
       </section>
+
+      {persistenceUnavailable ? (
+        <p className="config-message error" role="alert">
+          El navegador no permite guardar las preferencias. Los cambios actuales se perderán al recargar la página.
+        </p>
+      ) : null}
+      {automaticSyncWarning ? (
+        <p className="config-message warning" role="alert">{automaticSyncWarning}</p>
+      ) : null}
 
       <div className="configuration-grid">
         <section className="config-panel">
           <p className="panel-kicker">Presupuestos</p>
-          <h2>Vista por defecto</h2>
-          <label><input type="radio" checked={budgetFocus === "all"} onChange={() => change(() => setBudgetFocus("all"), "Presupuestos mostrará todas las categorías.")} /> Todas las categorías</label>
-          <label><input type="radio" checked={budgetFocus === "attention"} onChange={() => change(() => setBudgetFocus("attention"), "Presupuestos priorizará categorías que requieren atención.")} /> Solo categorías con exceso o sin financiación</label>
+          <fieldset className="preference-radio-group"><legend>Vista por defecto</legend>
+          <label><input type="radio" name="budget-focus" value="all" checked={budgetFocus === "all"} onChange={() => change(() => setBudgetFocus("all"), "Presupuestos mostrará todas las categorías.")} /> Todas las categorías</label>
+          <label><input type="radio" name="budget-focus" value="attention" checked={budgetFocus === "attention"} onChange={() => change(() => setBudgetFocus("attention"), "Presupuestos priorizará categorías que requieren atención.")} /> Solo categorías con exceso o sin financiación</label>
+          </fieldset>
         </section>
 
         <section className="config-panel">
           <p className="panel-kicker">Sincronización</p>
           <h2>Fuente bancaria al abrir</h2>
-          <label><input type="checkbox" checked={syncOnOpen} onChange={(event) => change(() => setSyncOnOpen(event.currentTarget.checked), event.currentTarget.checked ? "Sincronización automática al abrir activada." : "Sincronización automática al abrir desactivada.")} /> Intentar sincronizar una vez por sesión</label>
-          <p>Usa el mismo endpoint oficial de Google y mantiene la fuente bancaria en solo lectura.</p>
+          <label><input type="checkbox" checked={syncOnOpen} onChange={(event) => change(() => setSyncOnOpen(event.currentTarget.checked), event.currentTarget.checked ? "Sincronización automática preparada para próximas aperturas; no se ejecuta ahora." : "Sincronización automática al abrir desactivada.")} /> Intentar sincronizar una vez por sesión</label>
+          <p>Actualiza los movimientos desde Google sin modificar el archivo original.</p>
           {lastAutomaticSyncAt ? <small>Última sincronización automática de esta sesión: {new Date(lastAutomaticSyncAt).toLocaleString("es-ES")}</small> : null}
         </section>
 
@@ -71,7 +83,7 @@ export default function PreferencesClient() {
       <section className="config-panel">
         <p className="panel-kicker">Formato regional</p>
         <h2>Español (España) · EUR</h2>
-        <p>Fechas, importes y números continúan gobernados por es-ES. No se ofrece un selector sin efecto real ni formatos incompatibles con el contrato actual.</p>
+        <p>Formato: día/mes/año e importes en euros.</p>
       </section>
 
       <div className="configuration-footer">

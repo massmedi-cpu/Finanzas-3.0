@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
+import { DOCUMENT_SIGNED_STORAGE_ORIGIN } from "../../src/application/document-original-open-url";
 
 function directive(csp: string, name: string) {
   return csp
@@ -30,7 +31,12 @@ test("G · CSP aplica una política estricta con nonce a las respuestas HTML", a
 
   const connectSrc = directive(csp, "connect-src");
   const connectSources = connectSrc.split(/\s+/);
-  expect(connectSources).toEqual(["connect-src", "'self'", SUPABASE_ORIGIN]);
+  // Exact-origin union: production has 2 entries; only isolated local Auth
+  // needs the additionally reviewed signed-Storage origin.
+  expect(connectSources).toEqual([
+    "connect-src", "'self'", SUPABASE_ORIGIN,
+    ...(SUPABASE_ORIGIN === DOCUMENT_SIGNED_STORAGE_ORIGIN ? [] : [DOCUMENT_SIGNED_STORAGE_ORIGIN]),
+  ]);
   expect(connectSources).not.toContain("*.supabase.co");
   expect(connectSources).not.toContain("https:");
 
@@ -52,4 +58,24 @@ test("G · CSP genera un nonce nuevo para cada documento HTML", async ({ request
   expect(firstNonce).not.toBeNull();
   expect(secondNonce).not.toBeNull();
   expect(firstNonce).not.toBe(secondNonce);
+});
+
+test("REC-THEME-671 · login CSP permits the first-paint theme script and serves actual JavaScript", async ({ request }) => {
+  const [login, asset] = await Promise.all([
+    request.get("/login"),
+    request.get("/theme-init.js"),
+  ]);
+  expect(login.status()).toBe(200);
+  const csp = login.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("'strict-dynamic'");
+  const nonce = nonceFrom(csp);
+  expect(nonce).not.toBeNull();
+
+  const html = await login.text();
+  const themeScript = html.match(/<script\b[^>]*\bsrc="\/theme-init\.js"[^>]*>/)?.[0] ?? "";
+  expect(themeScript).toContain(`nonce="${nonce}"`);
+
+  expect(asset.status()).toBe(200);
+  expect(asset.headers()["content-type"]).toMatch(/javascript/);
+  expect(await asset.text()).toContain("financial-app:visual-preferences-v1");
 });

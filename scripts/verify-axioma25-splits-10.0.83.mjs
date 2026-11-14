@@ -51,10 +51,21 @@ for (const token of [
   "overriddenFields.push(\"split\")",
 ]) requireText(query, token, "gateway-lectura");
 
-for (const token of [
-  '"transaction.split_detail"',
-  '"test.transaction_split_engine"',
-]) requireText(gateway, token, "preview-seguro");
+// REC-REL-490: PREVIEW_READ_ONLY_ACTIONS on the shared production DB must
+// never contain a probe which invokes save_transaction_split before rollback.
+// Preserve the genuine read-only split query and the mutating test engine in
+// the handler for DISPOSABLE PostgreSQL, but not in the preview allowlist.
+const previewAllowlist = gateway.match(/const PREVIEW_READ_ONLY_ACTIONS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+checks.push([
+  /"transaction\.split_detail"/.test(previewAllowlist),
+  "preview-seguro: consulta split autorizada",
+]);
+checks.push([
+  !/"test\.transaction_split_engine"/.test(previewAllowlist)
+    && gateway.includes('identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)')
+    && gateway.includes('preview_production_write_forbidden'),
+  "preview-seguro: bloquear test de DML temporal incluso si revierte",
+]);
 
 for (const token of [
   'mode === "split"',

@@ -1,5 +1,9 @@
 .wrapper {
   min-width: 0;
+  width: 100%;
+  /* The 12-month rail has an intrinsic width > 360px. Do not let implicit
+     auto-sized grid tracks expand the entire analysis document on phones. */
+  grid-template-columns: minmax(0, 1fr);
   display: grid;
   gap: clamp(0.75rem, 1.2vw, 1rem);
 }
@@ -86,6 +90,15 @@
   min-width: 0;
   width: 100%;
   overflow: hidden;
+}
+
+/* Keep every month focusable and touch-reachable instead of cropping the
+   remaining 12-month rail or expanding the page's scroll width. */
+.monthViewport {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
 }
 
 .accessibleTable {

@@ -1,10 +1,12 @@
 import type { NextResponse } from "next/server";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } from "./access-control";
+import { readLimitedResponseBody } from "../http/limited-response-body";
 
 export const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://btzukbfesxdratqnxuoj.supabase.co").replace(/\/+$/, "");
 export const SUPABASE_ORIGIN = new URL(SUPABASE_URL).origin;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_1lp5YHmItK1HHayW8mcchg_xwuUrgo2";
 const AUTH_TIMEOUT_MS = 5_000;
+const AUTH_RESPONSE_MAX_BYTES = 64 * 1024;
 const REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
 
 type AuthSession = {
@@ -45,8 +47,18 @@ async function supabaseFetch(path: string, init: RequestInit) {
   return fetch(`${SUPABASE_URL}${path}`, {
     ...init,
     cache: "no-store",
+    // Auth requests carry passwords or tokens. Never replay them at a redirect
+    // destination, including a different path on the same provider.
+    redirect: "error",
     signal: AbortSignal.timeout(AUTH_TIMEOUT_MS),
   });
+}
+
+async function readAuthPayload(response: Response): Promise<unknown> {
+  // Bound the actual stream, not the provider's optional Content-Length.
+  // Failed/oversized responses propagate only as generic unavailability.
+  const bytes = await readLimitedResponseBody(response, AUTH_RESPONSE_MAX_BYTES);
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
 }
 
 export async function validateAccessToken(accessToken: string): Promise<TokenValidationResult> {
@@ -58,7 +70,7 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
     });
     if (response.status === 401 || response.status === 403) return "invalid";
     if (!response.ok) return "unavailable";
-    const payload: unknown = await response.json().catch(() => null);
+    const payload = await readAuthPayload(response);
     return payload === true ? "valid" : "invalid";
   } catch {
     return "unavailable";
@@ -77,7 +89,30 @@ export async function signInWithPassword(email: string, password: string): Promi
       return { status: "invalid" };
     }
     if (!response.ok) return { status: "unavailable" };
-    const payload: unknown = await response.json().catch(() => null);
+    const payload = await readAuthPayload(response);
+    if (!isAuthSession(payload)) return { status: "unavailable" };
+    return { status: "ok", session: payload };
+  } catch {
+    return { status: "unavailable" };
+  }
+}
+
+export async function exchangeGoogleOAuthCode(authCode: string, codeVerifier: string): Promise<SessionResult> {
+  // Supabase Auth PKCE: the verifier is server-only and never sent to Google
+  // or stored in browser-accessible storage.
+  if (!authCode || authCode.length > 2048 || !codeVerifier || codeVerifier.length > 128) {
+    return { status: "invalid" };
+  }
+  try {
+    const response = await supabaseFetch("/auth/v1/token?grant_type=pkce", {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({ auth_code: authCode, code_verifier: codeVerifier }),
+    });
+    if (response.status === 429) return { status: "rate_limited" };
+    if ([400, 401, 403, 422].includes(response.status)) return { status: "invalid" };
+    if (!response.ok) return { status: "unavailable" };
+    const payload = await readAuthPayload(response);
     if (!isAuthSession(payload)) return { status: "unavailable" };
     return { status: "ok", session: payload };
   } catch {
@@ -97,7 +132,7 @@ export async function refreshAuthSession(refreshToken: string): Promise<SessionR
       return { status: "invalid" };
     }
     if (!response.ok) return { status: "unavailable" };
-    const payload: unknown = await response.json().catch(() => null);
+    const payload = await readAuthPayload(response);
     if (!isAuthSession(payload)) return { status: "unavailable" };
     return { status: "ok", session: payload };
   } catch {

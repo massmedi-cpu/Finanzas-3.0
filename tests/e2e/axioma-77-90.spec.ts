@@ -14,8 +14,11 @@ async function isolateData(page: Page) {
         latestMovementDate: "2026-10-01",
         sync: {
           status: "success",
-          finishedAt: "2026-10-01T19:30:00.000Z",
-          startedAt: "2026-10-01T19:29:00.000Z",
+          // PRE-036 validates offline snapshot retention, not a stale sync.
+          // Keep the financial movement date historical while the successful
+          // synchronization receipt itself is valid and recent.
+          finishedAt: new Date(Date.now() - 60_000).toISOString(),
+          startedAt: new Date(Date.now() - 120_000).toISOString(),
           rowsSeen: 100,
           rowsFailed: 0,
           rowsMissing: 0,

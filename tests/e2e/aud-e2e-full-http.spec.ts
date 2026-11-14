@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { expect, test, type Page } from '@playwright/test';
 import { buildForecastScenarios, DEFAULT_FORECAST_SCENARIO_ASSUMPTIONS } from '../../src/application/forecast/forecast-scenarios';
 
@@ -16,7 +17,36 @@ async function login(page: Page, account = 'owner') {
   await page.context().route('**/*', async route => {
     const url = new URL(route.request().url());
     if (url.origin === canonicalStorageOrigin && url.pathname.startsWith('/storage/v1/')) {
-      return route.continue({ url: localStorageOrigin + url.pathname + url.search });
+      // Playwright cannot route.continue() an HTTPS request to HTTP local
+      // Storage (scheme changes are rejected). Proxy ONLY this trusted
+      // Storage path in the disposable test runner, never a cloud endpoint.
+      const storageRequest = route.request();
+      const method = storageRequest.method();
+      const cors = {
+        'access-control-allow-origin': '*',
+        'access-control-allow-methods': 'GET,HEAD,PUT,POST,OPTIONS',
+        'access-control-allow-headers': '*',
+      };
+      if (method === 'OPTIONS') {
+        await route.fulfill({ status: 204, headers: cors });
+        return;
+      }
+      const safeHeaders: Record<string, string> = {};
+      for (const key of ['content-type', 'x-upsert', 'cache-control']) {
+        const value = storageRequest.headers()[key];
+        if (value) safeHeaders[key] = value;
+      }
+      const upstream = await fetch(localStorageOrigin + url.pathname + url.search, {
+        method, headers: safeHeaders,
+        body: method === 'GET' || method === 'HEAD' ? undefined : storageRequest.postDataBuffer() ?? undefined,
+        redirect: 'manual',
+      });
+      const body = Buffer.from(await upstream.arrayBuffer());
+      const headers = Object.fromEntries(upstream.headers.entries());
+      delete headers['content-length'];
+      delete headers['content-encoding'];
+      await route.fulfill({ status: upstream.status, headers: { ...headers, ...cors }, body });
+      return;
     }
     if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)) return route.abort();
     return route.continue();
@@ -41,6 +71,19 @@ async function transaction(page: Page, id: string) {
   expect(row).toBeTruthy();
   return row;
 }
+
+// REC-PUB-FULL-273: HTTP proves the actual optimized Next build exposes all
+// three launch capabilities while tests run against real local Auth + Storage.
+test('REC-PUB-FULL-273 · actual isolated Next build exposes complete release features', async ({ page }) => {
+  const response = await page.request.get('/api/build');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toContain('no-store');
+  const build = await response.json();
+  expect(build.releaseFeatures).toEqual({
+    documents: true, documentOcr: true, documentDriveSync: true,
+  });
+  console.log('AUD_HTTP|case=full_release_profile|documents=true|ocr=true|drive_sync=true|local_only=true');
+});
 
 test('HTTP boundary verifies signature/claims, Preview read-only and actual user isolation', async ({ page }) => {
   const c = await login(page);
@@ -207,6 +250,29 @@ test('document original, genuine OCR, human review, associations, owner designat
   expect((await api(page, `/api/documents?id=${id}`)).document.lineItems).toHaveLength(2);
   await api(page, '/api/documents', 'PATCH', { action: 'associate', documentId: id, transactionId: ids.rule, method: 'manual' });
   expect((await api(page, `/api/documents?id=${id}`)).associations.some((r: any) => r.transactionId === ids.rule)).toBe(true);
+  // REC-DOC-E2E-253: a repeated association must not create another bank link.
+  const duplicateAssociation = await page.request.patch('/api/documents', {
+    data: { action: 'associate', documentId: id, transactionId: ids.rule, method: 'manual' },
+  });
+  expect([200, 409]).toContain(duplicateAssociation.status());
+  expect((await api(page, `/api/documents?id=${id}`)).associations
+    .filter((r: any) => r.transactionId === ids.rule)).toHaveLength(1);
+  // An authenticated account belonging to another workspace cannot remove
+  // this owner's association; then re-authenticate as the owner and re-read.
+  const foreignLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreignLogin.status()).toBe(200);
+  const foreignUnassociate = await page.request.patch('/api/documents', {
+    data: { action: 'unassociate', documentId: id, transactionId: ids.rule },
+  });
+  expect([403, 404]).toContain(foreignUnassociate.status());
+  const ownerLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.owner.email, password: c.owner.password },
+  });
+  expect(ownerLogin.status()).toBe(200);
+  expect((await api(page, `/api/documents?id=${id}`)).associations
+    .filter((r: any) => r.transactionId === ids.rule)).toHaveLength(1);
   expect((await api(page, `/api/documents?id=${c.documentId}`)).associations).toHaveLength(0);
   await api(page, '/api/documents', 'PATCH', { action: 'unassociate', documentId: id, transactionId: ids.rule });
   expect((await api(page, `/api/documents?id=${id}`)).associations).toHaveLength(0);
@@ -347,7 +413,12 @@ test('real authenticated preferences, keyboard navigation, privacy, PWA and offl
   await page.setViewportSize({ width: 390, height: 780 });
   await page.goto('/');
   const more = page.getByRole('navigation', { name: 'Navegación móvil' }).getByRole('button', { name: 'Más', exact: true });
-  await more.focus(); await page.keyboard.press('Enter');
+  // An SSR control must be hydrated before keyboard activation; disabled
+  // initially to avoid a silently ignored first Enter on a real device.
+  await expect(more).toBeEnabled();
+  await more.focus(); await expect(more).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByRole('button', { name: 'Cerrar más secciones' })).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('navigation', { name: 'Más secciones' }).getByRole('link').first()).toBeFocused();
@@ -364,4 +435,357 @@ test('real authenticated preferences, keyboard navigation, privacy, PWA and offl
   await expect(page.getByTestId('offline-status')).toHaveCount(0);
   expect((await api(page, '/api/transactions?limit=1')).rows).toHaveLength(1);
   console.log('AUD_HTTP|case=preferences_pwa|reload_persists=true|keyboard_focus=true|privacy_on_blur=true|service_worker_real=true|offline_private_cache_absent=true|recovery_real=true');
+});
+
+
+test('REC-DOC-E2E-252 · real isolated Storage round-trip checks all four MIME types and tenant ACL', async ({ page }) => {
+  // This test is ONLY reachable in the disposable CI runtime validated above:
+  // it must never connect to the live account, personal Drive or production.
+  test.setTimeout(240_000);
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body style="font-family:Arial;padding:36px;background:white;color:black"><main><h1>DOCUMENTO SINTÉTICO</h1><p>09/10/2026</p><p>TOTAL 19,00 EUR</p><p>SIN DATOS PERSONALES</p></main></body></html>');
+  const png = await page.locator('main').screenshot({ type: 'png' });
+  const jpeg = await page.locator('main').screenshot({ type: 'jpeg', quality: 88 });
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const webpBase64 = await page.evaluate(async (base64: string) => {
+    const image = new Image();
+    image.src = 'data:image/png;base64,' + base64;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('synthetic_canvas_missing');
+    ctx.drawImage(image, 0, 0);
+    const encoded = canvas.toDataURL('image/webp', 0.88);
+    if (!encoded.startsWith('data:image/webp;base64,')) throw new Error('synthetic_webp_missing');
+    return encoded.slice('data:image/webp;base64,'.length);
+  }, png.toString('base64'));
+  const webp = Buffer.from(webpBase64, 'base64');
+
+  const cases = [
+    { kind: 'invoice', mime: 'application/pdf', ext: 'pdf', data: pdf },
+    { kind: 'ticket', mime: 'image/jpeg', ext: 'jpg', data: jpeg },
+    { kind: 'other', mime: 'image/webp', ext: 'webp', data: webp },
+    { kind: 'ticket', mime: 'image/png', ext: 'png', data: png },
+  ] as const;
+  const sha256 = (value: Uint8Array) => createHash('sha256').update(value).digest('hex');
+  const registered: Array<{ id: string; mime: string; original: Buffer; hash: string }> = [];
+
+  for (const item of cases) {
+    const name = 'AUD-MIME-' + item.ext + '.' + item.ext;
+    const digest = sha256(item.data);
+    const signed = await api(page, '/api/documents', 'POST', {
+      action: 'upload_sign', type: item.kind, originalFileName: name,
+      mimeType: item.mime, sizeBytes: item.data.byteLength, expectedSha256: digest,
+    });
+    const signedUrl = new URL(signed.signedUrl);
+    expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+    expect(signedUrl.pathname).toContain('/storage/v1/object/upload/sign/financial-app-documents/uploads/');
+    // The local signed PUT is intentionally redirected ONLY to ephemeral Storage.
+    const put = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search, {
+      method: 'PUT', headers: { 'content-type': item.mime }, body: item.data,
+    });
+    expect(put.status).toBe(200);
+    const saved = await api(page, '/api/documents', 'POST', {
+      action: 'upload_finalize', type: item.kind, originalFileName: name,
+      mimeType: item.mime, path: signed.path, expectedSizeBytes: item.data.byteLength,
+      expectedSha256: digest,
+    });
+    expect(saved.document.id).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(saved.document.mimeType).toBe(item.mime);
+    expect(saved.uploadIntegrity).toEqual({
+      sha256: digest, sizeBytes: item.data.byteLength, verified: true,
+    });
+    const detail = await api(page, '/api/documents?id=' + saved.document.id);
+    expect(detail.document.mimeType).toBe(item.mime);
+    expect(detail.document.originalFileName).toBe(name);
+    const download = await page.request.get('/api/documents/download?id=' + saved.document.id);
+    expect(download.status()).toBe(200);
+    expect(download.headers()['content-type']).toContain(item.mime);
+    expect(sha256(await download.body())).toBe(digest);
+    registered.push({ id: saved.document.id, mime: item.mime, original: item.data, hash: digest });
+  }
+
+  // A second real GoTrue identity must never list/read/download an owner's
+  // document. No signed original, document id or token is printed in logs.
+  const foreignLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreignLogin.status()).toBe(200);
+  for (const item of registered) {
+    expect((await page.request.get('/api/documents?id=' + item.id)).status()).toBe(404);
+    expect((await page.request.get('/api/documents/download?id=' + item.id)).status()).toBe(404);
+  }
+  const ownerLogin = await page.request.post('/api/auth/login', {
+    data: { email: c.owner.email, password: c.owner.password },
+  });
+  expect(ownerLogin.status()).toBe(200);
+  for (const item of registered) {
+    const response = await page.request.get('/api/documents/download?id=' + item.id);
+    expect(response.status()).toBe(200);
+    expect(sha256(await response.body())).toBe(item.hash);
+  }
+  console.log('AUD_HTTP|case=original_mime_acl|types=pdf,jpeg,webp,png|signed_storage=true|sha_roundtrip=4|foreign_detail_denied=4|foreign_download_denied=4|owner_reauth=true|personal_data=false');
+});
+
+
+test('REC-DOC-E2E-254 · owner UI uploads and reopens a real private PDF across reload', async ({ page }) => {
+  test.setTimeout(180_000);
+  await login(page);
+  await page.setContent('<html lang="es"><body style="font:28px Arial;padding:32px"><main><h1>FACTURA SINTÉTICA</h1><p>15/10/2026</p><p>TOTAL 29,00 EUR</p><p>SIN DATOS PERSONALES</p></main></body></html>');
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const sha256 = (input: Uint8Array) => createHash('sha256').update(input).digest('hex');
+  const name = 'AUD-UI-CYCLE-254.pdf';
+  const sanitizedHttp: string[] = [];
+  page.on('response', response => {
+    const url = new URL(response.url());
+    // Strictly omit all URLs, querystrings, signed tokens and response bodies.
+    const area = url.pathname.startsWith('/storage/v1/object/upload/sign/')
+      ? 'storage_put'
+      : url.pathname === '/api/documents' ? 'documents_api' : null;
+    if (area) sanitizedHttp.push(area + ':' + response.request().method() + ':' + response.status());
+  });
+  await page.goto('/documents');
+  // Fail early if CSP blocks canonical signed Storage in isolated local Auth.
+  const csp = (await page.request.get('/documents')).headers()['content-security-policy'] ?? '';
+  expect(csp).toContain('connect-src');
+  expect(csp).toContain(canonicalStorageOrigin);
+  await page.getByLabel('Galería o archivo').setInputFiles({
+    name, mimeType: 'application/pdf', buffer: pdf,
+  });
+  await page.getByRole('button', { name: 'Guardar original' }).click();
+  try {
+    await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 22_000 });
+  } catch (error) {
+    const alert = await page.getByTestId('documents-alert').textContent().catch(() => '');
+    const recovery = await page.getByTestId('document-upload-unverified').count();
+    const button = await page.getByRole('button', { name: /Guardar original|Guardando/ }).textContent().catch(() => '');
+    const safeCategory = !alert ? 'missing' : /almacenamiento privado autorizado/.test(alert) ? 'unsafe_storage'
+      : /subida anterior|subida sin confirmar|Recupera primero/.test(alert) ? 'pending_upload'
+      : /sin confirmar|confirmar|recuperación|comprobar/i.test(alert) ? 'uncertain_upload'
+      : /sesión|inicia sesión/.test(alert) ? 'auth'
+      : /bloqueo|pestañas/.test(alert) ? 'lock'
+      : /carga|datos|error/i.test(alert) ? 'generic' : 'other';
+    console.log('AUD_HTTP|diagnostic=upload_ui|alert=' + safeCategory
+      + '|recovery=' + recovery
+      + '|button=' + (button?.trim() === 'Guardar original' ? 'idle' : 'busy')
+      + '|events=' + sanitizedHttp.join(','));
+    throw error;
+  }
+
+  const documentList = await api(page, '/api/documents?scope=ordinary&limit=100');
+  const saved = documentList.items.find((item: any) => item.originalFileName === name);
+  expect(saved?.id).toMatch(/^[0-9a-f-]{36}$/i);
+  const downloaded = await page.request.get('/api/documents/download?id=' + saved.id);
+  expect(downloaded.status()).toBe(200);
+  expect(sha256(await downloaded.body())).toBe(sha256(pdf));
+
+  const isSignedOriginal = (rawUrl: string) => {
+    const url = new URL(rawUrl);
+    return url.origin === canonicalStorageOrigin
+      && url.pathname.startsWith('/storage/v1/object/sign/financial-app-documents/uploads/')
+      && url.pathname.endsWith('.pdf');
+  };
+  // Headless Chromium can leave PDF viewer popups at about:blank. Require
+  // the actual signed request and successful Storage response, not a
+  // browser-specific visible PDF address or synthetic Navigation success.
+  const signedRequest = page.context().waitForEvent('request', {
+    predicate: request => request.method() === 'GET' && isSignedOriginal(request.url()),
+    timeout: 20_000,
+  });
+  const signedResponse = page.context().waitForEvent('response', {
+    predicate: response => isSignedOriginal(response.url()),
+    timeout: 20_000,
+  });
+  const [popup, originalRequest, originalResponse] = await Promise.all([
+    page.waitForEvent('popup'),
+    signedRequest,
+    signedResponse,
+    page.getByTestId('ocr-review-panel').getByRole('button', { name: 'Abrir', exact: true }).click(),
+  ]);
+  expect(originalRequest.method()).toBe('GET');
+  expect(originalResponse.status()).toBe(200);
+  expect(originalResponse.headers()['content-type']).toContain('application/pdf');
+  await popup.close();
+  await page.reload();
+  await page.getByRole('button', { name: new RegExp(name) }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible();
+  const reloaded = await page.request.get('/api/documents/download?id=' + saved.id);
+  expect(reloaded.status()).toBe(200);
+  expect(sha256(await reloaded.body())).toBe(sha256(pdf));
+  console.log('AUD_HTTP|case=owner_ui_original|synthetic_pdf=true|private_signed_open=true|sha_download=true|reload_persisted=true|personal_data=false');
+});
+
+
+test('REC-DOC-E2E-262 · deletion removes only disposable private original, retry cannot delete replacement', async ({ page }) => {
+  test.setTimeout(180_000);
+  // Entire suite is hard-gated to 127.0.0.1 disposable Supabase above.
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body><h1>RECIBO SINTÉTICO BORRABLE</h1><p>TOTAL 17,00 EUR</p></body></html>');
+  const original = await page.pdf({ format: 'A4', printBackground: true });
+  const digest = createHash('sha256').update(original).digest('hex');
+  const name = 'AUD-DELETE-262.pdf';
+  const signAndFinalize = async () => {
+    const signed = await api(page, '/api/documents', 'POST', {
+      action: 'upload_sign', type: 'invoice', originalFileName: name,
+      mimeType: 'application/pdf', sizeBytes: original.byteLength, expectedSha256: digest,
+    });
+    const signedUrl = new URL(signed.signedUrl);
+    expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+    const put = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search,
+      { method: 'PUT', headers: { 'content-type': 'application/pdf' }, body: original });
+    expect(put.status).toBe(200);
+    const saved = await api(page, '/api/documents', 'POST', {
+      action: 'upload_finalize', type: 'invoice', originalFileName: name,
+      mimeType: 'application/pdf', path: signed.path,
+      expectedSizeBytes: original.byteLength, expectedSha256: digest,
+    });
+    expect(saved.uploadIntegrity).toEqual({ sha256: digest, sizeBytes: original.byteLength, verified: true });
+    return saved.document.id as string;
+  };
+  const id = await signAndFinalize();
+  // Archiving is reversible, and an archived original must never be deleted.
+  await api(page, '/api/documents', 'PATCH', { action: 'status', id, status: 'archived' });
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('archived');
+  expect((await api(page, '/api/documents/delete?id=' + id)).canDelete).toBe(false);
+  const deniedArchiveDelete = await page.request.delete('/api/documents/delete?id=' + id);
+  expect(deniedArchiveDelete.status()).toBe(409);
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('archived');
+  await api(page, '/api/documents', 'PATCH', { action: 'status', id, status: 'imported' });
+  expect((await api(page, '/api/documents?id=' + id)).document.status).toBe('imported');
+  const originalUrl = new URL((await api(page, '/api/documents?id=' + id + '&mode=open')).url);
+  expect(originalUrl.origin).toBe(canonicalStorageOrigin);
+  const originalStorageUrl = localStorageOrigin + originalUrl.pathname + originalUrl.search;
+  expect((await fetch(originalStorageUrl)).status).toBe(200);
+  const preflight = await api(page, '/api/documents/delete?id=' + id);
+  expect(preflight.canDelete).toBe(true);
+
+  // A foreign signed-in workspace cannot preflight, delete or replay cleanup.
+  const foreign = await page.request.post('/api/auth/login', {
+    data: { email: c.foreign.email, password: c.foreign.password },
+  });
+  expect(foreign.status()).toBe(200);
+  for (const [method, path] of [
+    ['GET', '/api/documents/delete?id=' + id],
+    ['DELETE', '/api/documents/delete?id=' + id],
+    ['POST', '/api/documents/delete?id=' + id],
+  ] as const) {
+    const attempt = await page.request.fetch(path, { method });
+    const result = await attempt.json().catch(() => ({}));
+    expect(result.canDelete === true && attempt.ok()).toBe(false);
+    expect(result.deleted === true && attempt.ok()).toBe(false);
+  }
+  expect((await fetch(originalStorageUrl)).status).toBe(200);
+  expect((await page.request.post('/api/auth/login', { data: { email: c.owner.email, password: c.owner.password } })).status()).toBe(200);
+
+  const deleted = await api(page, '/api/documents/delete?id=' + id, 'DELETE');
+  expect(deleted).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+  expect((await page.request.get('/api/documents?id=' + id)).status()).toBe(404);
+  expect((await fetch(originalStorageUrl)).status).toBeGreaterThanOrEqual(400);
+  // Terminal cleanup audit makes repeated POST read-only once verified.
+  const retry = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(retry).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+
+  // Reuse the same SHA-derived private path for a new registered fixture.
+  const replacement = await signAndFinalize();
+  expect(replacement).not.toBe(id);
+  const before = await page.request.get('/api/documents/download?id=' + replacement);
+  expect(before.status()).toBe(200);
+  expect(createHash('sha256').update(await before.body()).digest('hex')).toBe(digest);
+  // A stale retry ID must never erase the replacement's Storage object.
+  const stale = await page.request.post('/api/documents/delete?id=' + id);
+  expect(stale.status()).toBe(409);
+  const after = await page.request.get('/api/documents/download?id=' + replacement);
+  expect(after.status()).toBe(200);
+  expect(createHash('sha256').update(await after.body()).digest('hex')).toBe(digest);
+  console.log('AUD_HTTP|case=doc_deletion|scope_denial=true|original_removed=true|terminal_retry=true|replacement_protected=true|data=synthetic_only');
+});
+
+test('REC-DOC-E2E-268 · Storage failure survives DB deletion, retry recovers exact private object', async ({ page }) => {
+  test.setTimeout(180_000);
+  const c = await login(page);
+  await page.setContent('<html lang="es"><body><h1>FALLO BORRADO SINTETICO</h1><p>TOTAL 13,00 EUR</p></body></html>');
+  const pdf = await page.pdf({ format: 'A4', printBackground: true });
+  const digest = createHash('sha256').update(pdf).digest('hex');
+  const name = 'AUD-DELETE-FAULT-268.pdf';
+  const signed = await api(page, '/api/documents', 'POST', {
+    action: 'upload_sign', type: 'invoice', originalFileName: name,
+    mimeType: 'application/pdf', sizeBytes: pdf.byteLength, expectedSha256: digest,
+  });
+  const signedUrl = new URL(signed.signedUrl);
+  expect(signedUrl.origin).toBe(canonicalStorageOrigin);
+  const stored = await fetch(localStorageOrigin + signedUrl.pathname + signedUrl.search,
+    { method: 'PUT', headers: { 'content-type': 'application/pdf' }, body: pdf });
+  expect(stored.status).toBe(200);
+  const finalized = await api(page, '/api/documents', 'POST', {
+    action: 'upload_finalize', type: 'invoice', originalFileName: name,
+    mimeType: 'application/pdf', path: signed.path,
+    expectedSizeBytes: pdf.byteLength, expectedSha256: digest,
+  });
+  const id = finalized.document.id;
+  const signedOriginal = new URL((await api(page, '/api/documents?id=' + id + '&mode=open')).url);
+  expect(signedOriginal.origin).toBe(canonicalStorageOrigin);
+  const originalStorageUrl = localStorageOrigin + signedOriginal.pathname + signedOriginal.search;
+  const before = await fetch(originalStorageUrl);
+  expect(before.status).toBe(200);
+  expect(createHash('sha256').update(Buffer.from(await before.arrayBuffer())).digest('hex')).toBe(digest);
+  // Use the real local PostgreSQL and Storage service, not a mocked response.
+  // This executable is hard-gated by the suite's GITHUB_ACTIONS + 127.0.0.1
+  // checks and the driver repeats the checks before any database command.
+  const fault = (mode: 'install' | 'remove') => {
+    const output = execFileSync('npx', [
+      '--yes', 'deno@2.5.4', 'run',
+      // postgres.js 3.4.7 probes every PG-prefixed option while parsing its
+      // local connection URL (including PGSSL); Deno needs explicit read
+      // permission even for variables that are not set. Never use
+      // unrestricted --allow-env in this destructive local-only fixture.
+      '--allow-env=SUPABASE_DB_URL,SUPABASE_URL,GITHUB_ACTIONS,AUD_ISOLATED_DIR,PGHOST,PGPORT,PGUSERNAME,PGUSER,PGDATABASE,PGPASSWORD,PGMAX,PGSSL,PGIDLE_TIMEOUT,PGCONNECT_TIMEOUT,PGMAX_LIFETIME,PGMAX_PIPELINE,PGBACKOFF,PGKEEP_ALIVE,PGPREPARE,PGDEBUG,PGFETCH_TYPES,PGPUBLICATIONS,PGTARGET_SESSION_ATTRS,PGTARGETSESSIONATTRS,PGAPPNAME',
+      '--allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io',
+      '--config', 'supabase/functions/financial-app-db-gateway/deno.json',
+      'supabase/tests/aud_storage_delete_fault.ts', mode, signed.path,
+    ], { timeout: 60_000, encoding: 'utf8' });
+    expect(output).toContain(mode === 'install' ? 'fault=injected' : 'fault=removed');
+  };
+  let faultInstalled = false;
+  try {
+    fault('install');
+    faultInstalled = true;
+    const blocked = await api(page, '/api/documents/delete?id=' + id, 'DELETE');
+    expect(blocked).toMatchObject({
+      deleted: true, documentId: id, storageCleanupPending: true,
+      storageCleanupCode: 'document_storage_cleanup_unverified',
+    });
+    expect(JSON.stringify(blocked)).not.toContain(signed.path);
+    expect(JSON.stringify(blocked)).not.toContain('storageKey');
+    expect(JSON.stringify(blocked)).not.toContain('sourceDriveFileId');
+    expect((await page.request.get('/api/documents?id=' + id)).status()).toBe(404);
+    // SQL has removed the registration but the authentic private original
+    // still exists: exercise the very same signed Storage GET, never invent
+    // a signed download URL from an upload token.
+    const stillInStorage = await fetch(originalStorageUrl);
+    expect(stillInStorage.status).toBe(200);
+    expect(createHash('sha256').update(Buffer.from(await stillInStorage.arrayBuffer())).digest('hex')).toBe(digest);
+    const foreign = await page.request.post('/api/auth/login', {
+      data: { email: c.foreign.email, password: c.foreign.password },
+    });
+    expect(foreign.status()).toBe(200);
+    expect((await page.request.post('/api/documents/delete?id=' + id)).status()).toBe(404);
+    expect((await page.request.post('/api/auth/login', {
+      data: { email: c.owner.email, password: c.owner.password },
+    })).status()).toBe(200);
+  } finally {
+    if (faultInstalled) fault('remove');
+  }
+  const cleaned = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(cleaned).toMatchObject({
+    deleted: true, documentId: id, storageCleanupPending: false,
+  });
+  expect(JSON.stringify(cleaned)).not.toContain(signed.path);
+  expect(JSON.stringify(cleaned)).not.toContain('storageKey');
+  expect((await fetch(originalStorageUrl)).status).toBeGreaterThanOrEqual(400);
+  // The terminal, auditable confirmation prevents a repeated remote deletion.
+  const done = await api(page, '/api/documents/delete?id=' + id, 'POST');
+  expect(done).toMatchObject({ deleted: true, documentId: id, storageCleanupPending: false });
+  console.log('AUD_HTTP|case=storage_delete_fault|postgres_committed=true|storage_error_injected=true|recover_id_only=true|foreign_denied=true|private_paths_logged=false|cloud_access=false');
 });

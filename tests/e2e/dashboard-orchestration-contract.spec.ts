@@ -1,3 +1,4 @@
+import { syntheticSourcePreflight, syntheticSourceSyncReceipt } from "../helpers/verified-source-fixture";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const financial = {
@@ -155,8 +156,13 @@ async function installDashboardMocks(
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
+    if (url.pathname === "/api/source/google/preflight") {
+      await fulfillJson(route, syntheticSourcePreflight(10));
+      return;
+    }
+
     if (url.pathname === "/api/source/google/sync") {
-      await fulfillJson(route, { run: null });
+      await fulfillJson(route, route.request().method() === "POST" ? syntheticSourceSyncReceipt(10) : { run: null });
       return;
     }
 
@@ -270,4 +276,90 @@ test("Inicio oculta saldo, mes y presupuesto incongruentes sin perder la activid
   await expect(page.getByText("El presupuesto recibido corresponde a otro mes.", { exact: false })).toBeVisible();
   await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/ }).getByRole("button", { name: /sep.*ingresos/i })).toHaveCount(0);
   await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
+});
+
+test("Inicio preserves newer activity after a delayed older refresh", async ({ page }) => {
+  await installDashboardMocks(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let calls = 0;
+  await page.route("**/api/dashboard?scope=activity", async (route) => {
+    const call = ++calls;
+    if (call === 1) await gate;
+    const payload = call === 1 ? transactions : {
+      ...transactions,
+      rows: [{ ...transactions.rows[0], merchant: { effectiveName: "Actividad actualizada" } }],
+    };
+    await fulfillJson(route, envelope("activity", { transactions: payload }, ["transactions"]));
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Actualizar datos" }).click();
+  await expect(page.getByText("Actividad actualizada", { exact: true })).toBeVisible();
+  release();
+  await page.waitForTimeout(150);
+  await expect(page.getByText("Actividad actualizada", { exact: true })).toBeVisible();
+  await expect(page.getByText("Carrefour", { exact: true })).toHaveCount(0);
+});
+
+
+test("REC-HOME-SCOPE-006 · HTTP 200 from another scope never replaces the real account balance", async ({ page }) => {
+  await installDashboardMocks(page);
+  let independentReads = 0;
+  // The browser can receive a structurally valid but wrongly scoped envelope
+  // from a cache/proxy. Do not trust its money: use the independent read.
+  await page.route("**/api/dashboard?scope=critical", async (route) => {
+    const altered = { ...financial, balances: { ...financial.balances, activeBalanceCents: 99999 } };
+    await fulfillJson(route, envelope("activity", { financial: altered }, ["financial"]));
+  });
+  await page.route("**/api/financial?*", async (route) => {
+    const mode = new URL(route.request().url()).searchParams.get("mode");
+    if (mode !== "snapshot") return route.fallback();
+    independentReads++;
+    await fulfillJson(route, financial);
+  });
+
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(summary.getByText("999,99 €", { exact: true })).toHaveCount(0);
+  expect(independentReads).toBe(1);
+});
+
+
+test("REC-HOME-DATA-005 · an HTTP 200 with malformed balances is independently recovered", async ({ page }) => {
+  await installDashboardMocks(page);
+  let recovered = 0;
+  await page.route("**/api/dashboard?scope=critical", async (route) => {
+    const broken = { ...financial, balances: { ...financial.balances, accounts: null } };
+    await fulfillJson(route, envelope("critical", { financial: broken }, ["financial"]));
+  });
+  await page.route("**/api/financial?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "snapshot") return route.fallback();
+    recovered += 1;
+    await fulfillJson(route, financial);
+  });
+  await page.goto("/");
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
+  expect(recovered).toBe(1);
+  await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
+});
+
+test("REC-HOME-DATA-009 · malformed activity metadata is recovered without crashing Inicio", async ({ page }) => {
+  await installDashboardMocks(page);
+  let recovered = 0;
+  await page.route("**/api/dashboard?scope=activity", async (route) => {
+    const unsafeRow = { ...transactions.rows[0], category: null, merchant: { effectiveName: 42 } };
+    await fulfillJson(route, envelope("activity", {
+      transactions: { ...transactions, rows: [unsafeRow] },
+    }, ["transactions"]));
+  });
+  await page.route("**/api/transactions?*", async (route) => {
+    recovered += 1;
+    await fulfillJson(route, transactions);
+  });
+  await page.goto("/");
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
+  await expect(page.getByText("Alimentación · Cuenta principal", { exact: true })).toBeVisible();
+  expect(recovered).toBe(1);
 });

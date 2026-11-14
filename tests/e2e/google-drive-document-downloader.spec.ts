@@ -98,9 +98,10 @@ test("F11 Drive downloader validates metadata before reading bounded original by
     mimeType: "application/pdf",
     sizeBytes: bytes.byteLength,
   });
-  expect(calls).toHaveLength(2);
+  expect(calls).toHaveLength(3);
   expect(calls[0]).toContain(`/drive/v3/files/${fileId}?fields=`);
   expect(calls[1]).toBe(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`);
+  expect(calls[2]).toBe(calls[0]);
 });
 
 test("F11 Drive downloader accepts chunked media when Google omits content-length", async () => {

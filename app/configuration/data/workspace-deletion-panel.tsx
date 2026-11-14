@@ -178,7 +178,7 @@ export default function WorkspaceDeletionPanel() {
     <div className={styles.deletionPanel} data-testid="workspace-deletion-panel">
       <div className={styles.deletionHeading}>
         <div>
-          <strong>Borrado de datos del workspace</strong>
+          <strong>Borrado definitivo de mis datos</strong>
           <p>
             El proceso elimina únicamente datos gestionados por Financial App. La fuente bancaria oficial y los archivos externos de Google Drive no forman parte del borrado.
           </p>
@@ -256,7 +256,7 @@ export default function WorkspaceDeletionPanel() {
         </div>
       ) : null}
 
-      <div className={styles.preservedSources} aria-label="Fuentes externas preservadas">
+      <div className={styles.preservedSources} role="group" aria-label="Fuentes externas preservadas">
         <span data-verified={preservedBank ? "true" : "false"}>Fuente bancaria: {preservedBank ? "preservada" : "verificación pendiente"}</span>
         <span data-verified={preservedDrive ? "true" : "false"}>Google Drive externo: {preservedDrive ? "preservado" : "verificación pendiente"}</span>
       </div>

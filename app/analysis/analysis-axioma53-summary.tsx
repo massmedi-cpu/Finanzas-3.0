@@ -1,26 +1,49 @@
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import type { PeriodCoverage } from "../../src/application/data-coverage";
 import { buildAccumulatedDailySpend } from "../../src/application/analysis/analysis-calendar-series";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import styles from "./analysis-axioma53-summary.module.css";
 
 const compactDate = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "Europe/Madrid",
 });
 
 function formatDate(value: string) {
-  return compactDate.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+  return compactDate.format(new Date(`${value}T12:00:00Z`));
 }
 
-export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const rows = buildAccumulatedDailySpend(
+export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapshot: AnalysisSnapshot; coverage: PeriodCoverage | null }) {
+  const observed = coverage?.state === "covered" || coverage?.state === "partial";
+  const partial = coverage?.state === "partial";
+  // Never draw a flat zero into days beyond the last imported movement.
+  const throughDate = observed && coverage?.throughDate ? coverage.throughDate : null;
+  // A legacy gateway exposes no lower banking boundary. In that case the
+  // first actual expense is a safe start for the observed chart; earlier
+  // calendar days must not be silently rendered as confirmed zero spending.
+  const firstObservedSpendDate = snapshot.dailySpend
+    .filter((row) => row.date >= snapshot.selection.dateFrom && row.date <= snapshot.selection.dateTo)
+    .map((row) => row.date)
+    .sort()[0] ?? null;
+  const chartStart = coverage?.fromDate && coverage.fromDate > snapshot.selection.dateFrom
+    ? coverage.fromDate
+    : !coverage?.fromDate && firstObservedSpendDate && firstObservedSpendDate > snapshot.selection.dateFrom
+      ? firstObservedSpendDate
+      : snapshot.selection.dateFrom;
+  const startsLate = observed && chartStart > snapshot.selection.dateFrom;
+  const startIsOnlyExpenseObservation = startsLate && !coverage?.fromDate;
+  const chartEnd = throughDate && throughDate < snapshot.selection.dateTo
+    ? throughDate
+    : snapshot.selection.dateTo;
+  const rows = observed && throughDate ? buildAccumulatedDailySpend(
     snapshot.dailySpend,
-    snapshot.selection.dateFrom,
-    snapshot.selection.dateTo,
-  );
+    chartStart,
+    chartEnd,
+  ) : [];
 
-  if (snapshot.dailySpend.length === 0 || rows.length === 0) {
+  if (!observed || snapshot.dailySpend.length === 0 || rows.length === 0) {
     return (
       <section className={styles.shell} aria-labelledby="axioma53-accumulated-heading">
         <article className={styles.card}>
@@ -30,32 +53,51 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
               <h2 id="axioma53-accumulated-heading">Gasto acumulado del periodo</h2>
             </div>
           </div>
-          <p className={styles.empty}>No hay gastos elegibles en el periodo seleccionado.</p>
+          <p className={styles.empty}>{!observed
+            ? "No hay cobertura bancaria confirmada: todavía no se puede calcular el gasto acumulado."
+            : partial
+              ? "No se han observado gastos elegibles en los datos disponibles. El periodo sigue incompleto."
+              : "No hay gastos elegibles en el periodo seleccionado."}</p>
         </article>
       </section>
     );
   }
 
   const width = 820;
-  const height = 240;
-  const left = 58;
-  const right = 18;
-  const top = 22;
-  const bottom = 36;
+  const height = 260;
+  const right = 24;
+  const top = 26;
+  const bottom = 46;
+  // The last known accumulated amount is a financial total, NOT the visual
+  // maximum. A later refund can lower it; a real zero must remain 0,00 €.
+  const finalCents = rows.at(-1)?.accumulatedCents ?? 0;
+  const domainMin = Math.min(0, ...rows.map((row) => row.accumulatedCents));
+  const domainMax = Math.max(0, ...rows.map((row) => row.accumulatedCents));
+  const domainSpan = Math.max(1, domainMax - domainMin);
+  const flatZero = domainMin === domainMax;
+  const tickValues = flatZero
+    ? [0]
+    : [...new Set([domainMin, Math.round((domainMin + domainMax) / 2), domainMax])];
+  // Preserve two monetary decimals and give the longest label room in the SVG.
+  const longestLabel = Math.max(...tickValues.map((value) => formatMoney(value).length), 0);
+  const left = Math.max(96, Math.min(240, Math.ceil(longestLabel * 9.5 + 18)));
   const innerWidth = width - left - right;
   const innerHeight = height - top - bottom;
-  const maximum = Math.max(1, rows.at(-1)?.accumulatedCents ?? 0);
+  const yFor = (value: number) => flatZero
+    ? top + innerHeight
+    : top + ((domainMax - value) / domainSpan) * innerHeight;
+  const baselineY = yFor(0);
   const step = rows.length > 1 ? innerWidth / (rows.length - 1) : 0;
   const points = rows.map((row, index) => ({
     x: rows.length > 1 ? left + (step * index) : left + (innerWidth / 2),
-    y: top + (1 - row.accumulatedCents / maximum) * innerHeight,
+    y: yFor(row.accumulatedCents),
     row,
   }));
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const area = points.length > 1
-    ? `${path} L ${points.at(-1)?.x} ${height - bottom} L ${points[0].x} ${height - bottom} Z`
+  const area = points.length > 1 && !flatZero
+    ? `${path} L ${points.at(-1)?.x} ${baselineY} L ${points[0].x} ${baselineY} Z`
     : "";
-  const tickValues = [0, 0.5, 1].map((ratio) => Math.round(maximum * ratio));
+  const hasNegativeDailyAdjustment = rows.some((row) => row.expenseCents < 0);
 
   return (
     <section className={styles.shell} aria-labelledby="axioma53-accumulated-heading">
@@ -66,15 +108,21 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
             <h2 id="axioma53-accumulated-heading">Gasto acumulado del periodo</h2>
           </div>
           <div className={styles.total}>
-            <span>Total reconciliado</span>
-            <strong>{formatMoney(maximum)}</strong>
+            <span>{partial ? "Gasto observado · parcial" : "Total reconciliado"}</span>
+            <strong>{formatMoney(finalCents)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye únicamente con el gasto diario elegible que ya cuadra con Movimientos. Los días sin gasto permanecen planos en su posición real del calendario; no introduce un segundo cálculo financiero.</p>
+        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {startsLate
+          ? startIsOnlyExpenseObservation
+            ? `Primer gasto observado el ${formatDate(chartStart)}. No está verificado el inicio del histórico bancario; los días anteriores no se representan como ceros confirmados.`
+            : `Datos registrados desde el ${formatDate(chartStart)} hasta el ${formatDate(chartEnd)}. Los días anteriores no se representan como ceros confirmados.`
+          : partial
+            ? `Datos observados hasta el ${formatDate(chartEnd)}: la cobertura del periodo no está completamente verificada.`
+            : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}{hasNegativeDailyAdjustment ? " Los ajustes o devoluciones pueden reducir el acumulado; la escala conserva los máximos y mínimos observados." : ""}</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
-          <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(maximum)}`}>
+          <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(finalCents)}`}>
             {tickValues.map((value) => {
-              const y = top + (1 - value / maximum) * innerHeight;
+              const y = yFor(value);
               return (
                 <g className={styles.grid} key={value}>
                   <line x1={left} x2={width - right} y1={y} y2={y} />

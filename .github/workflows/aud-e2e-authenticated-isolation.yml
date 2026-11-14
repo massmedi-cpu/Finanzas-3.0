@@ -2,7 +2,7 @@ name: AUD E2E Authenticated Isolation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, chat/twenty-one-routes-responsive-shell-20261010]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/functions/financial-app-db-gateway/**'
@@ -16,7 +16,9 @@ on:
       - 'scripts/aud-e2e-local-network.cjs'
       - 'tests/e2e/aud-e2e-authenticated-isolation.spec.ts'
       - 'tests/e2e/aud-e2e-full-http.spec.ts'
-      - 'app/api/**'
+      - 'app/**'
+      - 'src/design/**'
+      - 'tests/e2e/product-recovery*'
       - 'playwright.authenticated-isolation.config.ts'
       - '.github/workflows/aud-e2e-authenticated-isolation.yml'
 
@@ -30,6 +32,12 @@ concurrency:
 jobs:
   local-supabase-auth-storage-ocr:
     runs-on: ubuntu-latest
+    # The real Auth/Postgres/Storage E2E certifies the COMPLETE product, not
+    # the restricted 10.0.104 cut. Public flags are frozen before Next build.
+    env:
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DOCUMENTS: enabled
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_OCR: enabled
+      NEXT_PUBLIC_FINANCIAL_APP_LAUNCH_DRIVE_SYNC: enabled
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

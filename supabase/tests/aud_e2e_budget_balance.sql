@@ -12,11 +12,16 @@ set local role financial_app_gateway;
 
 create temp table aud_ids(key text primary key,id uuid not null) on commit drop;
 with inserted as (
-  insert into financial_app.accounts(name,type,opening_balance_cents) values
-    ('AUD bank explicit','checking',2000000),('AUD valid zero','checking',0)
+  insert into financial_app.accounts(name,type,opening_balance_cents,lifecycle) values
+    ('AUD bank explicit','checking',2000000,'active'),
+    ('AUD valid zero','checking',0,'active'),
+    ('AUD archived nonzero','savings',123456,'archived')
   returning id,name
 )
-insert into aud_ids select case name when 'AUD bank explicit' then 'account' else 'zero_account' end,id from inserted;
+insert into aud_ids select case name
+  when 'AUD bank explicit' then 'account'
+  when 'AUD valid zero' then 'zero_account'
+  else 'archived_account' end,id from inserted;
 
 with inserted as (
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order) values
@@ -163,6 +168,29 @@ begin
   if v_row->>'asOfDate'<>'2026-10-18' or (v_row->>'balanceCents')::bigint<>0
     or (v_row->>'explicitBalanceAccounts')::int<>1 or (v_row->>'reconstructedBalanceAccounts')::int<>1 then
     raise exception 'AUD_BALANCE_VALID_ZERO_FAILED:%',v_row;
+  end if;
+
+  -- REC-REL-430: a selected archived account must NOT be graphed as zero.
+  -- By contrast, the consolidated view continues to include ACTIVE only.
+  v_series := financial_app.financial_balance_series(
+    '2026-09-01','2026-10-18',
+    (select id from aud_ids where key='archived_account')
+  );
+  v_snapshot := financial_app.financial_account_balances(
+    '2026-10-18',false,(select id from aud_ids where key='archived_account')
+  );
+  if jsonb_array_length(v_series->'rows')<>2
+    or (v_series->'rows'->0->>'balanceCents')::bigint<>123456
+    or (v_series->'rows'->1->>'balanceCents')::bigint<>123456
+    or (v_snapshot->>'totalBalanceCents')::bigint<>123456
+    or (v_snapshot->>'activeBalanceCents')::bigint<>0 then
+    raise exception 'AUD_ARCHIVED_SELECTED_BALANCE_FALSE_ZERO';
+  end if;
+  v_series := financial_app.financial_balance_series('2026-10-01','2026-10-18',null);
+  v_snapshot := financial_app.financial_account_balances('2026-10-18',false,null);
+  if (v_series->'rows'->0->>'balanceCents')::bigint
+    <> (v_snapshot->>'activeBalanceCents')::bigint then
+    raise exception 'AUD_ARCHIVED_LEAKED_TO_CONSOLIDATED_BALANCE';
   end if;
   begin
     perform financial_app.financial_balance_series('2026-10-18','2026-07-15',null);

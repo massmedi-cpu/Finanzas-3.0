@@ -6,6 +6,7 @@ const requireText = (source, token, label) => checks.push([source.includes(token
 
 const pkg = JSON.parse(read("package.json"));
 const preferences = read("app/product-preferences.tsx");
+const syncClient = read("src/application/source-sync-client.ts");
 const privacyCss = read("app/product-preferences.css");
 const budgetCss = read("app/budget-focus-preference.css");
 const layout = read("app/layout.tsx");
@@ -27,10 +28,16 @@ for (const token of [
   "homeDestination",
   "financial-app:product-preferences-v1",
   "financial-app:auto-sync-attempted-v1",
-  'fetch("/api/source/google/sync"',
+  "synchronizeOfficialSource()",
   "visibilitychange",
   "financial-privacy-shield",
 ]) requireText(preferences, token, "runtime-preferencias");
+
+for (const token of [
+  '"/api/source/google/preflight"', '"/api/source/google/sync"',
+  "isConfirmedSourcePreflight(preflight)", "sourcePreflightConfirmation(preflight)",
+  "isConfirmedSourceSyncResponse(payload, preflight)",
+]) requireText(syncClient, token, "protocolo-sincronizacion-verificada");
 
 for (const token of [
   "ProductPreferencesProvider",

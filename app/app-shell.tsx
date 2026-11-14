@@ -15,16 +15,6 @@ import SourceTrustStatus from "./source-trust-status";
 import connectivityStyles from "./connectivity-status.module.css";
 import styles from "./app-shell.module.css";
 
-const HIGH_VALUE_PREFETCH_ROUTES = [
-  "/transactions",
-  "/analysis",
-  "/cash-flow",
-  "/accounts",
-  "/net-worth",
-  "/budgets",
-  "/forecast",
-  "/alerts",
-] as const;
 const STARTUP_DESTINATION_RESOLVED = "financial-app:startup-destination-resolved-v1";
 
 const AppShellBoundaryContext = createContext(false);
@@ -33,7 +23,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const alreadyInsideSharedShell = useContext(AppShellBoundaryContext);
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/logout") {
     return <>{children}</>;
   }
 
@@ -105,13 +95,6 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [pathname, updateNavigationScrollState]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      HIGH_VALUE_PREFETCH_ROUTES.forEach((href) => router.prefetch(href));
-    }, 850);
-    return () => window.clearTimeout(timer);
-  }, [router]);
 
   function scrollNavigation(direction: -1 | 1) {
     const navigation = navigationRef.current;
@@ -218,9 +201,13 @@ function AppShellFrame({ children }: { children: ReactNode }) {
               <ProductIcon name="chevron-right" size="1.1em" />
             </button>
           </div>
+          <Link prefetch={false} href="/logout" className={styles.sessionExit} aria-label="Cerrar sesión de Financial App">
+            Cerrar sesión
+          </Link>
         </div>
         {pendingHref && <span className={styles.navigationProgress} aria-hidden="true" />}
       </div>
+      <div id="main-content" tabIndex={-1} className={styles.content}>
       {!online && (
         <div className={connectivityStyles.offlineBanner} role="status" aria-live="polite" data-testid="offline-status">
           <strong>Sin conexión</strong>
@@ -228,7 +215,8 @@ function AppShellFrame({ children }: { children: ReactNode }) {
         </div>
       )}
       <SourceTrustStatus pathname={pathname} />
-      <div id="main-content" tabIndex={-1} className={styles.content}>{children}</div>
+      {children}
+      </div>
       <MobileNavigation />
     </div>
   );

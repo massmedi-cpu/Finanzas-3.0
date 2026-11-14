@@ -57,6 +57,8 @@ test("el JWT de servicio solicita solo los scopes read-only y reutiliza el token
     expect(String(input)).toBe(GOOGLE_SERVICE_ACCOUNT_TOKEN_URI);
     expect(init?.method).toBe("POST");
     expect(init?.cache).toBe("no-store");
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect(init?.signal?.aborted).toBe(false);
 
     const body = init?.body as URLSearchParams;
     expect(body.get("grant_type")).toBe("urn:ietf:params:oauth:grant-type:jwt-bearer");
@@ -93,6 +95,19 @@ test("el JWT de servicio solicita solo los scopes read-only y reutiliza el token
   nowMs += 3_541_000;
   expect(await provider.getAccessToken()).toBe("service-token-2");
   expect(calls).toBe(2);
+});
+
+test("REC-DOC-NET-010 · un fallo de red al renovar el token no bloquea la lectura ni revela credenciales", async () => {
+  const credentials = parseGoogleServiceAccountCredentials(generateCredentials().raw);
+  const fetcher: typeof fetch = async (_input, init) => {
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    throw new DOMException("network timeout", "TimeoutError");
+  };
+  const provider = new GoogleServiceAccountAccessTokenProvider(credentials, fetcher);
+  await expect(provider.getAccessToken()).rejects.toMatchObject({
+    code: "service_account_token_request_failed",
+    message: "No se ha podido obtener a tiempo el token de lectura de Google.",
+  });
 });
 
 test("la cuenta de servicio sustituye OAuth operativamente sin selección manual de archivo", async () => {

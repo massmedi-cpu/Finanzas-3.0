@@ -8,6 +8,23 @@ const secondId = "60000000-0000-4000-8000-000000000112";
 const duplicatePeerId = "60000000-0000-4000-8000-000000000113";
 const transferCandidateId = "60000000-0000-4000-8000-000000000114";
 
+const splitEmpty = {
+  exists: false, active: false, stale: false, canSplit: true,
+  bankAmountCents: -1234, sourceAmountCents: null,
+  personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  effectiveKind: "expense", baseCategoryId: categoryId, allocations: [],
+};
+const splitSaved = {
+  ...splitEmpty, exists: true, active: true, sourceAmountCents: -1234,
+  personalAmountCents: -734, otherAmountCents: -500, allocationCount: 2, categoryCount: 1,
+  allocations: [
+    { id: "80000000-0000-4000-8000-000000000111", position: 0, scope: "personal", amountCents: -734,
+      categoryId: null, effectiveCategoryId: categoryId, categoryName: "Alimentación", inheritsCategory: true, label: "Parte personal" },
+    { id: "80000000-0000-4000-8000-000000000112", position: 1, scope: "other", amountCents: -500,
+      categoryId: null, effectiveCategoryId: categoryId, categoryName: "Alimentación", inheritsCategory: true, label: "Otra persona" },
+  ],
+};
+
 const firstRow = {
   id: firstId,
   bankDate: "2026-09-05",
@@ -97,10 +114,23 @@ async function mockTransactionApi(
     if (request.method() === "POST") {
       const body = request.postDataJSON() as ReviewBody;
       reviewBodies.push(body);
+      // Match the actual SQL receipt shape, including the exact action.
+      const result = body.action === "duplicate-review"
+        ? {
+            transactionId: body.transactionId, decision: body.decision,
+            duplicateState: body.decision === "confirmed" ? "confirmed" : "none",
+            candidateCount: 2, reviewedSourceRecordId: firstRow.source.sourceRecordId,
+          }
+        : body.action === "transfer-pair"
+          ? {
+              transactionId: body.transactionId, pairId: body.pairId,
+              balanced: true, changed: true, dayGap: 1,
+            }
+          : { transactionId: body.transactionId, pairId: transferCandidateId, changed: true };
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ result: { changed: true, transactionId: body.transactionId } }),
+        body: JSON.stringify({ result }),
       });
       return;
     }
@@ -112,7 +142,10 @@ async function mockTransactionApi(
         body: JSON.stringify({
           accounts: [{ id: accountId, name: "Cuenta corriente Openbank · 3967", lifecycle: "active", sort_order: 0 }],
           categories: [{ id: categoryId, name: "Alimentación", kind: "expense", lifecycle: "active", parent_category_id: null, sort_order: 0 }],
-          merchants: [{ id: merchantId, name: "Supermercado Demo", lifecycle: "active" }],
+          merchants: [
+            { id: merchantId, name: "Supermercado Demo", lifecycle: "active" },
+            { id: "30000000-0000-4000-8000-000000000112", name: "Café Índigo", lifecycle: "active" },
+          ],
           channels: ["Tarjeta"],
           reconciliationStates: ["Sí"],
           years: [2026],
@@ -246,6 +279,71 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   expect(controlsTooSmall).toBe(0);
 });
 
+test("FA-UI-002 · Editar activo contrasta y es distinguible de disabled en móvil/escritorio", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    for (const width of [360, 820, 1366]) {
+      await page.setViewportSize({ width, height: 950 });
+      await page.goto("/transactions");
+      const edit = page.getByTestId(`edit-${firstId}`);
+      await expect(edit).toBeVisible();
+      await expect(edit).toBeEnabled();
+      const colors = await edit.evaluate((node) => {
+        const css = getComputedStyle(node);
+        const rgb = (text: string) => (text.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+        const luminance = (color: string) => {
+          const channels = rgb(color).map(value => {
+            const normalized = value / 255;
+            return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+          });
+          return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+        };
+        const fg = luminance(css.color);
+        const bg = luminance(css.backgroundColor);
+        const clone = node.cloneNode(true) as HTMLButtonElement;
+        clone.disabled = true;
+        node.parentElement!.appendChild(clone);
+        const disabledOpacity = Number(getComputedStyle(clone).opacity);
+        clone.remove();
+        return { contrast: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05),
+          enabledOpacity: Number(css.opacity), disabledOpacity, background: css.backgroundColor };
+      });
+      expect(colors.background, `fondo de control ${theme}/${width}`).toMatch(/^rgba?\(/);
+      expect(colors.contrast, `contraste botón activo ${theme}/${width}`).toBeGreaterThanOrEqual(4.5);
+      expect(colors.enabledOpacity).toBe(1);
+      expect(colors.disabledOpacity).toBeLessThanOrEqual(0.55);
+      await edit.focus();
+      const outline = await edit.evaluate((node) => getComputedStyle(node).outlineStyle);
+      expect(outline).not.toBe("none");
+      await edit.click();
+      await expect(page.getByRole("button", { name: "Cancelar", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Cancelar", exact: true }).click();
+      expect(patches).toHaveLength(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    }
+  }
+});
+
+test.describe("Fechas de Movimientos con navegador en inglés", () => {
+  test.use({ locale: "en-US" });
+
+  test("REC-DATE-004 · los filtros muestran día/mes/año y aplican fechas ISO", async ({ page }) => {
+    await mockTransactionApi(page);
+    await page.goto("/transactions?dateFrom=2026-09-01&dateTo=2026-09-09");
+    const form = page.getByRole("form", { name: "Filtros de movimientos" });
+    const from = form.getByLabel("Desde", { exact: true });
+    const to = form.getByLabel("Hasta", { exact: true });
+    await expect(from.locator("..")).toContainText("01/09/2026");
+    await expect(to.locator("..")).toContainText("09/09/2026");
+    await from.fill("2026-09-02");
+    await expect(from.locator("..")).toContainText("02/09/2026");
+    await form.getByRole("button", { name: "Aplicar filtros" }).click();
+    await expect(page).toHaveURL(/dateFrom=2026-09-02/);
+  });
+});
+
 test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas", async ({ page }) => {
   await mockTransactionApi(page);
   await page.goto("/transactions");
@@ -271,6 +369,34 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await expect(summary.locator("div").nth(0).getByText("1", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(1).getByText("2", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(2).getByText("0", { exact: true })).toBeVisible();
+});
+
+test("Movimientos busca comercios por nombre y conserva el ID seleccionado aunque cambie la búsqueda", async ({ page }) => {
+  await mockTransactionApi(page);
+  await page.goto("/transactions");
+
+  const search = page.getByRole("searchbox", { name: "Buscar comercio por nombre" });
+  const filter = page.getByTestId("merchant-filter");
+  await expect(filter).toBeEnabled();
+  await expect(filter.locator("option")).toHaveCount(3);
+  await search.fill("CAFE");
+  await expect(filter.locator("option")).toHaveCount(2);
+  await expect(filter.locator("option", { hasText: "Café Índigo" })).toHaveCount(1);
+  await expect(filter.locator("option", { hasText: "Supermercado Demo" })).toHaveCount(0);
+
+  const cafeMerchantId = "30000000-0000-4000-8000-000000000112";
+  await filter.selectOption(cafeMerchantId);
+  await search.fill("nombre inexistente");
+  await expect(filter).toHaveValue(cafeMerchantId);
+  await expect(filter.locator(`option[value="${cafeMerchantId}"]`)).toHaveCount(1);
+  const requestPromise = page.waitForRequest((request) =>
+    request.method() === "GET"
+      && new URL(request.url()).pathname === "/api/transactions"
+      && new URL(request.url()).searchParams.get("merchantId") === cafeMerchantId
+  );
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await requestPromise;
+  await expect(page).toHaveURL(new RegExp(`merchantId=${cafeMerchantId}`));
 });
 
 test("Movimientos filtra sin categoría por el valor efectivo", async ({ page }) => {
@@ -457,18 +583,32 @@ test("Preview protegido real expone el histórico persistido y revisiones en lec
   }
 });
 
-test("10.0.21 · paginación solapada no duplica filas ni selección", async ({ page }) => {
+test("10.0.21 · solapamiento se rechaza y la relectura conserva la selección", async ({ page }) => {
   await mockTransactionApi(page);
-  await page.route('**/api/transactions?*cursorBankDate*', route => route.fulfill({
-    json: { rows: [firstRow, secondRow], totalCount: 2, hasMore: false, nextCursor: null },
-  }));
+  let cursorReads = 0;
+  await page.route('**/api/transactions?*cursorBankDate*', async route => {
+    cursorReads += 1;
+    await route.fulfill({
+      json: {
+        rows: cursorReads === 1 ? [firstRow, secondRow] : [secondRow],
+        totalCount: 2, hasMore: false, nextCursor: null,
+      },
+    });
+  });
   await page.goto('/transactions');
   await page.getByTestId(`select-${firstId}`).check();
   await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toContainText('movimientos repetidos');
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
+  await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
   await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByText('2 movimientos', { exact: true }).first()).toBeVisible();
   await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
   await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toContainText('2 seleccionados');
+  expect(cursorReads).toBe(2);
 });
 
 test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sola operación", async ({ page }) => {
@@ -506,4 +646,521 @@ test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sol
   await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
   await page.getByRole('button', { name: 'Quitar selección' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
+});
+
+test("REC-TXN-041 · HTTP 200 sin candidatos no simula ausencia de duplicados", async ({ page }) => {
+  await mockTransactionApi(page);
+  let reads = 0;
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "POST") writes += 1;
+    if (url.searchParams.get("mode") === "duplicate-group") {
+      reads += 1;
+      return route.fulfill({ status: 200, json: { rows: null } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Los candidatos de revisión están incompletos");
+  await expect(page.getByTestId("duplicate-group")).toHaveCount(0);
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(reads).toBe(1);
+  expect(writes).toBe(0);
+});
+
+test("REC-TXN-041 · HTTP 200 con contraparte mal formada no permite emparejar", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST") writes += 1;
+    if (new URL(req.url()).searchParams.get("mode") === "transfer-candidates") {
+      return route.fulfill({ status: 200, json: { rows: [{
+        id: transferCandidateId, account_name: "Cuenta ahorro", concept_normalized: "TRASPASO",
+        bank_date: "2026-09-05", amount_cents: null, day_gap: 1, transfer_pair_id: null,
+      }] } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await page.getByTestId(`review-transfer-${secondId}`).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Los candidatos de revisión están incompletos");
+  await expect(page.getByTestId("transfer-candidates")).toHaveCount(0);
+  expect(writes).toBe(0);
+});
+
+test("REC-TXN-042 · PATCH 200 sin recibo contable acreditado no anuncia modificación", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes += 1;
+      return route.fulfill({ status: 200, json: { result: { changedTransactions: 1 } } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Cambio no acreditado");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("save-edit")).toBeDisabled();
+  await expect(page.getByText(/Movimiento actualizado/)).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-042 · PATCH válido sin relectura no da un éxito engañoso", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writeCount = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "PATCH") writeCount += 1;
+    if (writeCount && req.method() === "GET" && !new URL(req.url()).searchParams.has("mode")) {
+      return route.fulfill({ status: 503, json: { error: "temporary_unavailable" } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Cambio sin lectura posterior");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "el listado no se pudo volver a verificar" })).toBeVisible();
+  await expect(page.getByText(/Movimiento actualizado/)).toHaveCount(0);
+  expect(writeCount).toBe(1);
+});
+
+test("REC-TXN-042 · revisión POST sin relectura no anuncia duplicado confirmado", async ({ page }) => {
+  await mockTransactionApi(page);
+  let writes = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST") writes += 1;
+    if (writes && req.method() === "GET" && !new URL(req.url()).searchParams.has("mode")) {
+      return route.fulfill({ status: 503, json: { error: "temporary_unavailable" } });
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.locator("main").getByRole("alert").filter({ hasText: "el listado no se pudo volver a verificar" })).toBeVisible();
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+for (const scenario of [
+  { method: "PATCH", label: "edición", success: "Movimiento actualizado" },
+  { method: "POST", label: "revisión", success: "Duplicado confirmado y auditado." },
+] as const) {
+  test(`REC-TXN-016 · ${scenario.label} no anuncia éxito mientras la lectura de confirmación está pendiente`, async ({ page }) => {
+    await mockTransactionApi(page);
+    let writes = 0;
+    let beginRead!: () => void;
+    let finishRead!: () => void;
+    const readStarted = new Promise<void>((resolve) => { beginRead = resolve; });
+    const delayedRead = new Promise<void>((resolve) => { finishRead = resolve; });
+
+    await page.route("**/api/transactions**", async (route) => {
+      const request = route.request();
+      const mode = new URL(request.url()).searchParams.get("mode");
+      if (request.method() === scenario.method) {
+        writes += 1;
+        return route.fallback();
+      }
+      if (writes > 0 && request.method() === "GET" && mode === null) {
+        beginRead();
+        await delayedRead;
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/transactions");
+    await expect(page.getByTestId(`edit-${firstId}`)).toBeVisible();
+    if (scenario.method === "PATCH") {
+      await page.getByTestId(`edit-${firstId}`).click();
+      await page.getByTestId("edit-concept").fill("Compra comprobada tras lectura");
+      await page.getByTestId("save-edit").click();
+    } else {
+      await page.getByTestId(`review-duplicate-${firstId}`).click();
+      await page.getByTestId("duplicate-confirm").click();
+    }
+
+    await readStarted;
+    try {
+      // Give React time to commit while the server read is deliberately held.
+      // The old implementation flashed a success notification during this gap.
+      await page.waitForTimeout(200);
+      await expect(page.getByText(scenario.success, { exact: false })).toHaveCount(0);
+      expect(writes).toBe(1);
+    } finally {
+      finishRead();
+    }
+    await expect(page.getByText(scenario.success, { exact: false })).toBeVisible();
+    expect(writes).toBe(1);
+  });
+}
+
+test("REC-TXN-004 · PATCH con 503 bloquea escrituras hasta nueva lectura comprobable", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  let reads = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PATCH") {
+      writes.push(req.postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "backend_timeout" }) });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") !== "facets") reads += 1;
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Posiblemente guardado");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toContainText("podría haberse aplicado");
+  await expect(page.getByTestId("save-edit")).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  const readCount = reads;
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(reads).toBe(readCount + 1);
+  expect(writes).toHaveLength(1);
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+});
+
+test("REC-TXN-005 · rechazo de validación 400 no bloquea el editor ni induce un segundo PATCH", async ({ page }) => {
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes += 1;
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "invalid_payload", code: "invalid_patch" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Texto corregible");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  await expect(page.getByTestId("save-edit")).toBeEnabled();
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-006 · revisión POST con respuesta incierta no se duplica", async ({ page }) => {
+  let postCount = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "POST") {
+      postCount += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "gateway_timeout" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.getByTestId("duplicate-confirm")).toBeEnabled();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("duplicate-confirm")).toBeDisabled();
+  expect(postCount).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(postCount).toBe(1);
+});
+
+test("REC-TXN-010 · POST 200 con recibo de otro movimiento no anuncia éxito", async ({ page }) => {
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "POST") {
+      writes += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            transactionId: secondId, decision: "confirmed", duplicateState: "confirmed",
+            candidateCount: 2, reviewedSourceRecordId: firstRow.source.sourceRecordId,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toHaveCount(0);
+  expect(writes).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo envío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PUT") {
+      writes += 1;
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "gateway_timeout" }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") === "split") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && !url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await page.getByTestId("split-amount-0").fill("7,34");
+  await page.getByTestId("split-amount-1").fill("5,00");
+  await expect(page.getByTestId("save-split")).toBeEnabled();
+  await page.getByTestId("save-split").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  expect(writes).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-009 · reparto con PUT confirmado pero relectura fallida bloquea otro envío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let writes = 0;
+  let failListRead = false;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() === "PUT") {
+      writes += 1;
+      // A valid persistence receipt may precede a failed independent read.
+      failListRead = true;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ result: { ...splitSaved, changed: true, auditChanges: 1 } }),
+      });
+      return;
+    }
+    if (request.method() === "GET" && url.searchParams.get("mode") === "split") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(failListRead ? splitSaved : { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (request.method() === "GET" && !url.searchParams.has("mode")) {
+      await route.fulfill(failListRead
+        ? { status: 503, json: { error: "temporary_read_unavailable" } }
+        : { status: 200, json: { rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null } });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/transactions");
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await page.getByTestId("split-amount-0").fill("7,34");
+  await page.getByTestId("split-amount-1").fill("5,00");
+  await page.getByTestId("save-split").click();
+
+  const unverified = page.getByTestId("transactions-write-unverified");
+  await expect(unverified).toBeVisible();
+  await expect(unverified).toContainText("Las escrituras están bloqueadas hasta volver a leer los movimientos");
+  await expect(page.getByText("Reparto guardado y aplicado a la analítica personal.")).toHaveCount(0);
+  expect(writes).toBe(1);
+
+  // A successful recovery read removes the uncertainty without retrying PUT.
+  failListRead = false;
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(unverified).toHaveCount(0);
+  expect(writes).toBe(1);
+});
+
+for (const scenario of ["incomplete receipt", "incorrect receipt", "stale independent read", "failed independent read", "successful save", "successful removal", "unchanged split"] as const) {
+  test(`REC-TXN-011 · split verification: ${scenario}`, async ({ page }) => {
+    const removing = scenario === "successful removal";
+    const alreadySaved = scenario === "unchanged split";
+    let writes = 0;
+    let verificationReads = 0;
+    let saved = false;
+    await mockTransactionApi(page);
+    await page.route("**/api/transactions**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+      if (request.method() === "PUT") {
+        writes += 1;
+        saved = true;
+        const result = scenario === "incomplete receipt"
+          ? { exists: true, bankAmountCents: -1234 }
+          : scenario === "incorrect receipt"
+            ? { ...splitSaved, otherAmountCents: -499, changed: true, auditChanges: 1 }
+            : { ...(removing ? splitEmpty : splitSaved), changed: !alreadySaved, auditChanges: alreadySaved ? 0 : 1 };
+        await route.fulfill({ status: 200, json: { result } });
+        return;
+      }
+      if (request.method() === "GET" && url.searchParams.get("mode") === "split") {
+        expect(url.searchParams.get("transactionId")).toBe(firstId);
+        if (saved) verificationReads += 1;
+        if (saved && scenario === "failed independent read") {
+          await route.fulfill({ status: 503, json: { error: "temporary_read_unavailable" } });
+          return;
+        }
+        const result = !saved ? (removing || alreadySaved ? splitSaved : splitEmpty)
+          : scenario === "stale independent read" ? splitEmpty
+            : removing ? splitEmpty : splitSaved;
+        await route.fulfill({ status: 200, json: result });
+        return;
+      }
+      if (request.method() === "GET" && !url.searchParams.has("mode")) {
+        const split = saved && (scenario === "successful save" || alreadySaved) ? splitSaved
+          : (removing || alreadySaved) && !saved ? splitSaved : splitEmpty;
+        await route.fulfill({ status: 200, json: { rows: [{ ...firstRow, split }], totalCount: 1, hasMore: false, nextCursor: null } });
+        return;
+      }
+      await route.fallback();
+    });
+
+    await page.goto("/transactions");
+    await page.getByTestId(`split-${firstId}`).click();
+    if (removing) {
+      await page.getByRole("button", { name: "Eliminar reparto" }).click();
+    } else if (alreadySaved) {
+      await expect(page.getByTestId("split-amount-0")).toHaveValue("7,34");
+      await page.getByTestId("save-split").click();
+    } else {
+      await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+      await page.getByTestId("split-amount-0").fill("7,34");
+      await page.getByTestId("split-amount-1").fill("5,00");
+      await page.getByTestId("save-split").click();
+    }
+
+    if (["incomplete receipt", "incorrect receipt", "stale independent read", "failed independent read"].includes(scenario)) {
+      await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+      await expect(page.getByText("Reparto guardado y aplicado a la analítica personal.")).toHaveCount(0);
+      await expect(page.getByTestId("save-split")).toBeDisabled();
+    } else {
+      await expect(page.getByText(removing
+        ? "Reparto eliminado. El movimiento vuelve a usar el importe bancario completo."
+        : "Reparto guardado y aplicado a la analítica personal.", { exact: true })).toBeVisible();
+      await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+    }
+    expect(writes).toBe(1);
+    expect(verificationReads).toBe(scenario === "incomplete receipt" || scenario === "incorrect receipt" ? 0 : 1);
+  });
+}
+
+test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin inventar un reparto vacío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let reads = 0;
+  let recoveryRequested = false;
+  let recoveryReads = 0;
+  const mutations: string[] = [];
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() !== "GET") {
+      mutations.push(req.method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+      return;
+    }
+    if (url.searchParams.get("mode") === "split") {
+      reads += 1;
+      if (recoveryRequested) recoveryReads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(!recoveryRequested ? {} :
+          { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (!url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("La información del reparto está incompleta");
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  recoveryRequested = true;
+  await page.getByRole("button", { name: "Reintentar lectura del reparto" }).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await expect(page.getByRole("button", { name: "Reintentar lectura del reparto" })).toHaveCount(0);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(recoveryReads).toBe(1);
+  expect(mutations).toEqual([]);
+});
+
+test("REC-REL-555 · la conciliación no es un filtro visible ni se aplica desde URL antiguas", async ({ page }) => {
+  await mockTransactionApi(page);
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/transactions" && url.searchParams.has("limit")) {
+      requests.push(url.search);
+    }
+  });
+  await page.goto("/transactions?reconciliation=Sí");
+  await page.getByRole("button", { name: "Más filtros", exact: true }).click();
+  await expect(page.getByText("Conciliación", { exact: true })).toHaveCount(0);
+  await expect.poll(() => requests.length).toBeGreaterThan(0);
+  for (const query of requests) {
+    expect(new URLSearchParams(query).has("reconciliation")).toBe(false);
+  }
 });

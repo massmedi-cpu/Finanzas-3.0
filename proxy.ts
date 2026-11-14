@@ -8,6 +8,7 @@ import {
   shouldEnforceAppAuth,
 } from "./src/infrastructure/auth/access-control";
 import { shouldRejectCrossSiteMutation } from "./src/infrastructure/auth/mutation-origin";
+import { DOCUMENT_SIGNED_STORAGE_ORIGIN } from "./src/application/document-original-open-url";
 import {
   clearSessionCookies,
   refreshAuthSession,
@@ -26,6 +27,13 @@ function createContentSecurityPolicy(nonce: string) {
   const isDev = process.env.NODE_ENV === "development";
   const scriptSources = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   const styleSources = ["'self'", `'nonce-${nonce}'`];
+  // In production Auth and private signed Storage share one strict origin.
+  // Disposable isolated CI has local Auth but uses only the canonical
+  // HTTPS signed Storage origin; never a wildcard.
+  const connectSources = ["'self'", SUPABASE_ORIGIN];
+  if (!connectSources.includes(DOCUMENT_SIGNED_STORAGE_ORIGIN)) {
+    connectSources.push(DOCUMENT_SIGNED_STORAGE_ORIGIN);
+  }
 
   if (isDev) {
     scriptSources.push("'unsafe-eval'");
@@ -38,7 +46,7 @@ function createContentSecurityPolicy(nonce: string) {
     `style-src ${styleSources.join(" ")}`,
     "img-src 'self' blob: data:",
     "font-src 'self' data:",
-    `connect-src 'self' ${SUPABASE_ORIGIN}`,
+    `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
     "object-src 'none'",
@@ -225,6 +233,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest\\.webmanifest|sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|manifest\\.webmanifest|sw\\.js|theme-init\\.js$|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

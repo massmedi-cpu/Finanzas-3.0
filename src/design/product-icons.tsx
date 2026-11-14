@@ -25,6 +25,7 @@ export type ProductIconName =
   | "spark"
   | "category"
   | "refresh"
+  | "calendar"
   | "warning"
   | "search"
   | "close"
@@ -60,6 +61,7 @@ const iconPaths: Record<ProductIconName, ReactNode> = {
   spark: <><path d="m12 2 1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/></>,
   category: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.4 6.4L4 9"/><path d="M5.5 15A7 7 0 0 0 17.6 17.6L20 15"/></>,
+  calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h3M8 17h3"/></>,
   warning: <><path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
   search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>,
   close: <><path d="M6 6l12 12"/><path d="M18 6 6 18"/></>,

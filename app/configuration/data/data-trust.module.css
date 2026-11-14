@@ -24,7 +24,7 @@
 }
 
 .hero h1 {
-  font-size: clamp(2rem, 5vw, 3.2rem);
+  font-size: var(--font-page-title);
   line-height: 1.05;
 }
 
@@ -41,7 +41,7 @@
   padding: 0.9rem 1rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: rgba(31, 107, 255, 0.07);
+  background: color-mix(in srgb, var(--color-primary-bright) 7%, transparent);
   color: var(--color-text-secondary);
   line-height: 1.5;
 }
@@ -71,7 +71,7 @@
 }
 
 .sectionHeading h2 {
-  font-size: clamp(1.25rem, 2.5vw, 1.65rem);
+  font-size: var(--font-section-title);
 }
 
 .sectionHeading p {
@@ -91,7 +91,7 @@
   padding: 1rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: rgba(8, 15, 31, 0.72);
+  background: var(--surface-card);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.14);
 }
 
@@ -128,17 +128,17 @@
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   white-space: nowrap;
 }
 
 .badge[data-state="verified"] {
-  background: rgba(42, 197, 116, 0.11);
+  background: color-mix(in srgb, var(--color-success) 11%, transparent);
 }
 
 .badge[data-state="operator_only"] {
-  background: rgba(255, 183, 77, 0.1);
+  background: color-mix(in srgb, var(--color-warning) 10%, transparent);
 }
 
 .badge[data-state="not_available"] {
@@ -160,7 +160,7 @@
   justify-content: center;
   padding: 0.65rem 0.9rem;
   border-radius: 0.85rem;
-  color: white;
+  color: var(--color-text);
   font-size: var(--font-button);
   font-weight: 800;
   text-decoration: none;
@@ -168,14 +168,14 @@
 }
 
 .action {
-  border: 1px solid rgba(77, 141, 255, 0.42);
-  background: linear-gradient(135deg, rgba(31, 107, 255, 0.72), rgba(43, 217, 247, 0.24));
-  box-shadow: 0 12px 28px rgba(31, 107, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 42%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 72%, transparent), color-mix(in srgb, var(--color-cyan) 24%, transparent));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-primary-bright) 16%, transparent);
 }
 
 .action:hover:not(:disabled) {
-  border-color: rgba(77, 141, 255, 0.68);
-  background: linear-gradient(135deg, rgba(31, 107, 255, 0.86), rgba(43, 217, 247, 0.3));
+  border-color: color-mix(in srgb, var(--color-primary-bright) 68%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 86%, transparent), color-mix(in srgb, var(--color-cyan) 30%, transparent));
 }
 
 .secondaryAction {
@@ -184,9 +184,9 @@
 }
 
 .dangerAction {
-  border: 1px solid rgba(248, 113, 113, 0.5);
-  background: linear-gradient(135deg, rgba(185, 28, 28, 0.88), rgba(239, 68, 68, 0.55));
-  box-shadow: 0 12px 28px rgba(185, 28, 28, 0.16);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 50%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-danger) 88%, transparent), color-mix(in srgb, var(--color-danger) 55%, transparent));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--color-danger) 16%, transparent);
 }
 
 .action:disabled,
@@ -237,16 +237,16 @@
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   font-weight: 800;
 }
 
 .deletionStatus[data-ready="true"] {
-  background: rgba(42, 197, 116, 0.11);
+  background: color-mix(in srgb, var(--color-success) 11%, transparent);
 }
 
 .deletionStatus[data-ready="false"] {
-  background: rgba(248, 113, 113, 0.08);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 
 .blockedNotice,
@@ -259,8 +259,8 @@
 }
 
 .blockedNotice {
-  border: 1px solid rgba(245, 158, 11, 0.28);
-  background: rgba(245, 158, 11, 0.07);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 28%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 7%, transparent);
 }
 
 .blockedNotice ul {
@@ -271,14 +271,14 @@
 }
 
 .confirmationBox {
-  border: 1px solid rgba(245, 158, 11, 0.3);
-  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 6%, transparent);
 }
 
 .confirmationBox label {
   display: block;
   margin-top: 0.8rem;
-  font-size: 0.85rem;
+  font-size: var(--font-helper);
   font-weight: 700;
 }
 
@@ -287,22 +287,22 @@
   min-height: 2.75rem;
   margin-top: 0.35rem;
   padding: 0.65rem 0.75rem;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-control);
   border-radius: 0.75rem;
-  background: rgba(2, 6, 23, 0.5);
+  background: var(--surface-control-strong);
   color: inherit;
   font: inherit;
 }
 
 .finalWarning,
 .errorNotice {
-  border: 1px solid rgba(248, 113, 113, 0.34);
-  background: rgba(185, 28, 28, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 34%, transparent);
+  background: color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 
 .receiptBox {
-  border: 1px solid rgba(42, 197, 116, 0.3);
-  background: rgba(42, 197, 116, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-success) 30%, transparent);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
 }
 
 .deletionActions {
@@ -317,7 +317,7 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
+  font-size: var(--font-helper);
 }
 
 .preservedSources span {
@@ -327,7 +327,7 @@
 }
 
 .preservedSources span[data-verified="true"] {
-  background: rgba(42, 197, 116, 0.08);
+  background: color-mix(in srgb, var(--color-success) 8%, transparent);
 }
 
 @media (max-width: 520px) {

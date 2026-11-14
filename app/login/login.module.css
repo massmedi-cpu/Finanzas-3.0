@@ -12,3 +12,26 @@
 .installWrap:empty {
   display: none;
 }
+
+.googleButton {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  text-decoration: none;
+  text-align: center;
+  min-height: 2.75rem;
+}
+
+.alternativeAccess {
+  margin-top: 1.25rem;
+}
+
+.alternativeAccess > summary {
+  cursor: pointer;
+  padding: 0.5rem 0;
+}
+
+.alternativeAccess > form {
+  margin-top: 1rem;
+}

@@ -1,3 +1,4 @@
+import { deferredDocumentResponse } from "../../../../src/infrastructure/http/deferred-document-response";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -30,12 +31,14 @@ function apiError(error: unknown) {
 function documentId(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  if (!id || !UUID.test(id)) throw new Error("invalid_document_id");
+  if (searchParams.getAll("id").length !== 1 || !id || !UUID.test(id)) throw new Error("invalid_document_id");
   if ([...searchParams.keys()].some((key) => key !== "id")) throw new Error("invalid_document_delete_query");
   return id;
 }
 
 export async function GET(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const id = documentId(request);
     const result = await callPersistenceGateway("document.delete_preflight", { id });
@@ -46,9 +49,26 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
   try {
     const id = documentId(request);
     const result = await callPersistenceGateway("document.delete", { id });
+    return Response.json(result, { headers: HEADERS });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+
+// REC-DOC-DELETE-258: POST is an explicit owner-initiated retry of a deletion
+// already recorded in the immutable audit. It never accepts a Storage path.
+export async function POST(request: Request) {
+  const deferred = deferredDocumentResponse();
+  if (deferred) return deferred;
+  try {
+    const id = documentId(request);
+    const result = await callPersistenceGateway("document.delete_cleanup", { id });
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

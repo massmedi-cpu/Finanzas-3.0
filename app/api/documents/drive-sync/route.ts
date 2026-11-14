@@ -1,8 +1,9 @@
+import { isDocumentDriveSyncDeferred } from "../../../../src/application/release-ocr-scope";
+import { classifyVerifiedDriveName, inferDocumentType } from "../../../../src/application/document-drive-file-type";
 import {
   FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
   GoogleDriveDocumentDiscovery,
   GoogleDriveDocumentDiscoveryError,
-  type DiscoveredDriveDocument,
 } from "../../../../src/infrastructure/google/google-drive-document-discovery";
 import {
   GoogleDriveDocumentDownloader,
@@ -17,6 +18,20 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { publicRemoteGatewayCode } from "../../../../src/infrastructure/http/gateway-public-error";
+import { requireVerifiedSourceWorkspace } from "../../../../src/infrastructure/auth/source-metadata-access";
+import {
+  DocumentDriveInventoryError,
+  loadDocumentDriveInventory,
+  type DocumentDriveInventoryRow,
+  type DocumentDriveInventoryPage,
+} from "../../../../src/application/document-drive-inventory";
+import {
+  DocumentDriveFolderScopeError,
+  discoverAuthorizedDocumentFolders,
+  resolveAuthorizedDocumentFolders,
+  type ScopedDiscoveredDriveDocument,
+} from "../../../../src/application/document-drive-folder-scope";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -26,19 +41,10 @@ const PAGE_SIZE = 100;
 const MAX_IMPORTS_PER_RUN = 200;
 const DOWNLOAD_CONCURRENCY = 4;
 
-type ExistingDocument = {
-  sourceDriveFileId: string | null;
-  sourceModifiedAt: string | null;
-  mimeType: string;
-  sizeBytes: number | null;
-};
+type ExistingDocument = DocumentDriveInventoryRow;
+type DocumentList = DocumentDriveInventoryPage;
 
-type DocumentList = {
-  items: ExistingDocument[];
-  total: number;
-};
-
-type SyncCandidate = DiscoveredDriveDocument & {
+type SyncCandidate = ScopedDiscoveredDriveDocument & {
   type: "ticket" | "invoice" | "other";
 };
 
@@ -60,23 +66,13 @@ function googleReaders() {
   return { discovery, downloader };
 }
 
-function inferDocumentType(name: string): SyncCandidate["type"] {
-  const normalized = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-  if (/\b(factura|invoice)\b/.test(normalized)) return "invoice";
-  if (/\b(ticket|tique|recibo)\b/.test(normalized)) return "ticket";
-  return "other";
-}
-
 function timestamp(value: string | null) {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | undefined) {
+function changed(file: ScopedDiscoveredDriveDocument, previous: ExistingDocument | undefined) {
   if (!previous) return true;
   return (
     previous.mimeType.toLowerCase() !== file.mimeType ||
@@ -86,34 +82,25 @@ function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | und
 }
 
 async function existingDriveDocuments() {
-  const result = new Map<string, ExistingDocument>();
-  let offset = 0;
-  let total = 0;
-
-  do {
-    const page = await callPersistenceGateway<DocumentList>("document.list", {
+  return loadDocumentDriveInventory((offset, limit) =>
+    callPersistenceGateway<DocumentList>("document.list", {
       status: null,
       query: null,
-      limit: PAGE_SIZE,
+      limit,
       offset,
       scope: "all",
-    });
-    total = page.total;
-    for (const item of page.items) {
-      if (item.sourceDriveFileId) result.set(item.sourceDriveFileId, item);
-    }
-    offset += page.items.length;
-    if (page.items.length === 0) break;
-  } while (offset < total);
-
-  return result;
+    }),
+    PAGE_SIZE,
+  );
 }
 
 async function verifyCandidates(
   candidates: SyncCandidate[],
   driveDownloader: GoogleDriveDocumentDownloader,
+  authorizedRoots: readonly string[],
 ) {
-  const verified: SyncCandidate[] = [];
+  // Workers finish in arbitrary order; retain discovery order for deterministic batches.
+  const verified: Array<SyncCandidate | undefined> = new Array(candidates.length);
   let failed = 0;
   let cursor = 0;
 
@@ -127,13 +114,24 @@ async function verifyCandidates(
         const downloaded = await driveDownloader.download({
           fileId: candidate.fileId,
           expectedMimeType: candidate.mimeType,
+          expectedModifiedTime: candidate.modifiedTime,
+          expectedSizeBytes: candidate.sizeBytes,
+          // Recheck Drive's authoritative parent before AND after reading bytes.
+          // A file moved outside its enumerated folder must never be ingested.
+          expectedAuthorizedFolderId: candidate.authorizedParentFolderId,
+          expectedAuthorizedRootFolderIds: authorizedRoots,
         });
-        verified.push({
+        if (!downloaded.modifiedTime) {
+          throw new Error("drive_verified_modified_time_missing");
+        }
+        verified[position] = {
           ...candidate,
-          name: downloaded.fileName ?? candidate.name,
+          // The authoritative Drive name and inferred type must agree.
+          ...classifyVerifiedDriveName(candidate.name, downloaded.fileName),
           mimeType: downloaded.mimeType,
           sizeBytes: downloaded.sizeBytes,
-        });
+          modifiedTime: downloaded.modifiedTime, // Verified server revision only.
+        };
       } catch {
         failed += 1;
       }
@@ -143,10 +141,22 @@ async function verifyCandidates(
   await Promise.all(
     Array.from({ length: Math.min(DOWNLOAD_CONCURRENCY, candidates.length) }, () => worker()),
   );
-  return { verified, failed };
+  return { verified: verified.filter((item): item is SyncCandidate => item !== undefined), failed };
 }
 
 function apiError(error: unknown) {
+  if (error instanceof DocumentDriveFolderScopeError) {
+    return Response.json(
+      { error: "drive_auto_detection_scope_incomplete", code: error.code },
+      { status: 503, headers: HEADERS },
+    );
+  }
+  if (error instanceof DocumentDriveInventoryError) {
+    return Response.json(
+      { error: "drive_auto_detection_persistence_failed", code: error.message },
+      { status: 503, headers: HEADERS },
+    );
+  }
   if (error instanceof GoogleDriveDocumentDiscoveryError) {
     const status = error.code === "google_drive_document_discovery_access_denied" ? 409 : 503;
     return Response.json(
@@ -161,8 +171,14 @@ function apiError(error: unknown) {
     );
   }
   if (error instanceof PersistenceGatewayError) {
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "drive_auto_detection_persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     return Response.json(
-      { error: "drive_auto_detection_persistence_failed", code: error.code ?? null },
+      { error: "drive_auto_detection_persistence_failed", code: publicRemoteGatewayCode(error.code) },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
@@ -174,11 +190,38 @@ function apiError(error: unknown) {
 }
 
 export async function POST() {
+  if (isDocumentDriveSyncDeferred()) {
+    return Response.json({ error: "feature_deferred", code: null }, { status: 404, headers: HEADERS });
+  }
+  // The canonical gateway deliberately blocks Preview writes to production.
+  // Refuse before contacting Drive or the persistence gateway; reporting the
+  // barrier as an ordinary sync error would invite unsafe retries.
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" },
+      { status: 409, headers: HEADERS },
+    );
+  }
   try {
+    // A service account must never list or download private Drive documents
+    // on behalf of an anonymous or non-member browser, even if the final
+    // persistence gateway would reject the eventual write.
+    const accessDenied = await requireVerifiedSourceWorkspace();
+    if (accessDenied) return accessDenied;
+
     const readers = googleReaders();
-    const existingPromise = existingDriveDocuments();
-    const discoveredPromise = readers.discovery.listAuthorizedFolder(
+    const folderIds = resolveAuthorizedDocumentFolders(
+      process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS,
       FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+    );
+    const existingPromise = existingDriveDocuments();
+    const explicitFolderScope = Boolean(process.env.FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_IDS?.trim());
+    const discoveredPromise = discoverAuthorizedDocumentFolders(
+      folderIds,
+      (folderId) => readers.discovery.listAuthorizedFolder(folderId),
+      explicitFolderScope
+        ? (folderId) => readers.discovery.listAuthorizedChildFolders(folderId)
+        : undefined,
     );
     const [existing, discovered] = await Promise.all([existingPromise, discoveredPromise]);
 
@@ -187,7 +230,7 @@ export async function POST() {
       .map((file) => ({ ...file, type: inferDocumentType(file.name) }));
     const candidates = changedFiles.slice(0, MAX_IMPORTS_PER_RUN);
     const pending = Math.max(0, changedFiles.length - candidates.length);
-    const { verified, failed } = await verifyCandidates(candidates, readers.downloader);
+    const { verified, failed } = await verifyCandidates(candidates, readers.downloader, folderIds);
 
     let imported = 0;
     if (verified.length > 0) {
@@ -201,6 +244,9 @@ export async function POST() {
           modifiedTime: file.modifiedTime,
         })),
       });
+      if (!Number.isSafeInteger(result.imported) || result.imported !== verified.length) {
+        throw new Error("document_drive_import_count_mismatch");
+      }
       imported = result.imported;
     }
 
@@ -209,7 +255,8 @@ export async function POST() {
         contractVersion: 1,
         source: "google_drive",
         mode: "automatic_incremental_read_only",
-        folderId: FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
+        folderId: folderIds.length === 1 ? folderIds[0] : null,
+        foldersScanned: folderIds.length,
         scanned: discovered.files.length,
         detectedChanges: changedFiles.length,
         imported,

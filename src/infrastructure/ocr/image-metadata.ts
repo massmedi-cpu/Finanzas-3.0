@@ -9,10 +9,13 @@ function valid(width: number, height: number) {
 }
 
 function png(bytes: Uint8Array): OcrImageMetadata | null {
-  if (bytes.byteLength < 24) return null;
+  // Signature and arbitrary bytes at 16/20 are not an IHDR: reject truncated
+  // camera/gallery uploads before their forged dimensions can reach Tesseract.
+  if (bytes.byteLength < 33) return null;
   const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
   if (!signature.every((value, index) => bytes[index] === value)) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (view.getUint32(8, false) !== 13 || ascii(bytes, 12, 16) !== "IHDR") return null;
   const width = view.getUint32(16, false);
   const height = view.getUint32(20, false);
   return valid(width, height) ? { mimeType: "image/png", width, height } : null;
@@ -24,16 +27,28 @@ function jpeg(bytes: Uint8Array): OcrImageMetadata | null {
   const startOfFrame = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
   let offset = 2;
   while (offset + 3 < bytes.byteLength) {
-    while (offset < bytes.byteLength && bytes[offset] !== 0xff) offset += 1;
+    // Only marker bytes may precede a valid SOF. Do not resynchronize on a
+    // forged FF C0 hidden inside unframed payload bytes.
+    if (bytes[offset] !== 0xff) return null;
     while (offset < bytes.byteLength && bytes[offset] === 0xff) offset += 1;
     if (offset >= bytes.byteLength) break;
     const marker = bytes[offset];
     offset += 1;
-    if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
+    // After SOS, compressed scan bytes are not JPEG marker segments. Looking
+    // for FF C0 inside that data (or after EOI) can accept a corrupt upload
+    // with forged image dimensions. A real SOF must precede SOS and EOI.
+    if (marker === 0xda || marker === 0xd9) return null;
+    if (marker === 0xd8 || marker === 0x00) return null;
+    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) continue;
     if (offset + 1 >= bytes.byteLength) break;
     const length = view.getUint16(offset, false);
     if (length < 2 || offset + length > bytes.byteLength) break;
-    if (startOfFrame.has(marker) && length >= 7) {
+    if (startOfFrame.has(marker)) {
+      // SOF length is exactly eight bytes of frame header plus three per
+      // component. A short or contradictory header is not JPEG geometry.
+      if (length < 11) return null;
+      const components = bytes[offset + 7];
+      if (components < 1 || components > 4 || length !== 8 + 3 * components) return null;
       const height = view.getUint16(offset + 3, false);
       const width = view.getUint16(offset + 5, false);
       return valid(width, height) ? { mimeType: "image/jpeg", width, height } : null;
@@ -55,6 +70,13 @@ function webp(bytes: Uint8Array): OcrImageMetadata | null {
   if (bytes.byteLength < 30 || ascii(bytes, 0, 4) !== "RIFF" || ascii(bytes, 8, 12) !== "WEBP") return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const chunk = ascii(bytes, 12, 16);
+  // Never read VP8X / VP8 / VP8L dimensions beyond the declared RIFF and
+  // first-chunk bounds. The decoder will validate the remaining image data.
+  const riffEnd = view.getUint32(4, true) + 8;
+  const chunkSize = view.getUint32(16, true);
+  const minimumSize = chunk === "VP8X" ? 10 : chunk === "VP8 " ? 10 : chunk === "VP8L" ? 5 : 0;
+  if (!minimumSize || chunkSize < minimumSize || (chunk === "VP8X" && chunkSize !== 10)
+    || riffEnd > bytes.byteLength || 20 + chunkSize + (chunkSize % 2) > riffEnd) return null;
   let width = 0;
   let height = 0;
   if (chunk === "VP8X") {

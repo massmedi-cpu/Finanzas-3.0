@@ -11,6 +11,8 @@ test.describe("Financial App 10.0.66 · continuidad UX", () => {
     });
 
     await page.goto("/login");
+    await expect(page.getByRole("link", { name: "Continuar con Google" })).toBeVisible();
+    await page.getByText("Acceso alternativo con contraseña").click();
     await page.getByLabel("Correo electrónico").fill("persona@example.com");
     await page.getByLabel("Contraseña").fill("credencial-no-valida");
     await page.getByRole("button", { name: "Entrar" }).click();
@@ -36,6 +38,8 @@ test.describe("Financial App 10.0.66 · continuidad UX", () => {
     });
 
     await page.goto("/login");
+    await expect(page.getByRole("link", { name: "Continuar con Google" })).toBeVisible();
+    await page.getByText("Acceso alternativo con contraseña").click();
     await page.getByLabel("Correo electrónico").fill("persona@example.com");
     await page.getByLabel("Contraseña").fill("cualquier-valor");
     await page.getByRole("button", { name: "Entrar" }).click();

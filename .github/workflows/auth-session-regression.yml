@@ -4,11 +4,32 @@ on:
   pull_request:
     branches:
       - main
+      - chat/twenty-one-routes-responsive-shell-20261010
     paths:
       - "proxy.ts"
       - "src/infrastructure/auth/**"
+      - "app/api/auth/login/route.ts"
+      - "app/api/auth/google/**"
+      - "app/login/**"
+      - "tests/e2e/google-sign-in-auth.spec.ts"
+      - "src/infrastructure/http/limited-json-request.ts"
+      - "tests/e2e/auth-login-json-byte-limit.spec.ts"
+      - "tests/e2e/auth-provider-response-safety.spec.ts"
       - "tests/e2e/production-auth.spec.ts"
+      - "tests/e2e/content-security-policy.spec.ts"
+      - "app/layout.tsx"
+      - "public/theme-init.js"
+      - "scripts/verify-theme-system.mjs"
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - "tests/e2e/source-metadata-auth-boundary.spec.ts"
+      - "tests/e2e/source-overview-10.0.53.spec.ts"
+      - "app/api/source/google/connect/route.ts"
+      - "app/api/source/google/callback/route.ts"
+      - "app/api/source/google/status/route.ts"
+      - "app/api/source/google/sync/route.ts"
+      - "app/api/health/source-runtime/route.ts"
+      - "app/configuration/source/source-client.tsx"
+      - "app/configuration/source/source-overview-client.tsx"
       - ".github/workflows/auth-session-regression.yml"
   push:
     branches:
@@ -16,8 +37,28 @@ on:
     paths:
       - "proxy.ts"
       - "src/infrastructure/auth/**"
+      - "app/api/auth/login/route.ts"
+      - "app/api/auth/google/**"
+      - "app/login/**"
+      - "tests/e2e/google-sign-in-auth.spec.ts"
+      - "src/infrastructure/http/limited-json-request.ts"
+      - "tests/e2e/auth-login-json-byte-limit.spec.ts"
+      - "tests/e2e/auth-provider-response-safety.spec.ts"
       - "tests/e2e/production-auth.spec.ts"
+      - "tests/e2e/content-security-policy.spec.ts"
+      - "app/layout.tsx"
+      - "public/theme-init.js"
+      - "scripts/verify-theme-system.mjs"
       - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - "tests/e2e/source-metadata-auth-boundary.spec.ts"
+      - "tests/e2e/source-overview-10.0.53.spec.ts"
+      - "app/api/source/google/connect/route.ts"
+      - "app/api/source/google/callback/route.ts"
+      - "app/api/source/google/status/route.ts"
+      - "app/api/source/google/sync/route.ts"
+      - "app/api/health/source-runtime/route.ts"
+      - "app/configuration/source/source-client.tsx"
+      - "app/configuration/source/source-overview-client.tsx"
       - ".github/workflows/auth-session-regression.yml"
   workflow_dispatch:
 
@@ -27,13 +68,17 @@ permissions:
 jobs:
   auth-session-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # Browser dependencies + build exhausted the old 12-min ceiling before tests.
+    timeout-minutes: 22
     steps:
       - name: Checkout exact commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
@@ -54,12 +99,18 @@ jobs:
         run: >-
           npm run test:e2e --
           tests/e2e/production-auth.spec.ts
+          tests/e2e/content-security-policy.spec.ts
+          tests/e2e/google-sign-in-auth.spec.ts
+          tests/e2e/auth-login-json-byte-limit.spec.ts
+          tests/e2e/auth-provider-response-safety.spec.ts
           tests/e2e/auth-refresh-request-propagation.spec.ts
+          tests/e2e/source-metadata-auth-boundary.spec.ts
+          tests/e2e/source-overview-10.0.53.spec.ts
           --project=chromium-desktop
 
       - name: Upload Playwright report on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: auth-session-regression-${{ github.sha }}
           path: playwright-report/

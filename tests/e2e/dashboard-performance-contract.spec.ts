@@ -16,6 +16,7 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   const route = readFileSync(join(root, "app/api/dashboard/route.ts"), "utf8");
   const home = readFileSync(join(root, "app/page.tsx"), "utf8");
   const client = readFileSync(join(root, "app/inicio-overview.tsx"), "utf8");
+  const sourceSyncClient = readFileSync(join(root, "src/application/source-sync-client.ts"), "utf8");
   const css = readFileSync(join(root, "app/inicio-overview.module.css"), "utf8");
   const chartCss = readFileSync(join(root, "src/design/financial-bar-chart.module.css"), "utf8");
 
@@ -42,8 +43,27 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(client).toContain("/api/dashboard?scope=");
   expect(client).toContain("Ocultar importes");
   expect(client).toContain("merchant?.effectiveName");
-  expect(client).toContain('fetch("/api/source/google/sync"');
-  expect(client).toContain('method: "POST"');
+  // REC-SYNC-275: Inicio no debe hacer un POST bancario directo.
+  // Todos los puntos de entrada comparten el preflight y la confirmación
+  // de snapshot en el cliente verificado, que valida también el recibo.
+  // The shared client must verify the exact persisted run after the POST.
+  // Mentioning these helper names in comments is not sufficient proof.
+  expect(client).toMatch(
+    /import\s*\{\s*synchronizeOfficialSource\s*,\s*verifyPersistedSourceSyncReceipt\s*\}\s*from\s*["']\.\.\/src\/application\/source-sync-client["']/,
+  );
+  expect(client).toMatch(
+    /const payload = await synchronizeOfficialSource\(\);\s*const runVerified = await verifyPersistedSourceSyncReceipt\(payload\);/,
+  );
+  expect(client).toContain("setSyncFeedback(runVerified");
+  expect(client).toContain("Puede haberse aplicado");
+  expect(client).not.toContain('fetch("/api/source/google/sync"');
+  expect(sourceSyncClient).toContain('("/api/source/google/preflight"');
+  expect(sourceSyncClient).toContain('("/api/source/google/sync"');
+  expect(sourceSyncClient.match(/method: "POST"/g) ?? []).toHaveLength(2);
+  expect(sourceSyncClient).toContain("await readOfficialSourcePreflight(options)");
+  expect(sourceSyncClient).toContain("sourcePreflightConfirmation(preflight)");
+  expect(sourceSyncClient).toContain("isConfirmedSourceSyncResponse(payload, preflight)");
+  expect(sourceSyncClient).toContain('throw new SourceSyncClientError("google_source_sync_unconfirmed", true)');
   expect(client).toContain("Últimos 12 meses");
   expect(client).toContain("Gasto medio mensual");
   expect(client).toContain("row.monthStart !== currentMonthStart).slice(-12)");
@@ -81,6 +101,6 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(css).not.toContain("backdrop-filter");
   expect(css).not.toContain("!important");
   expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-  expect(chartCss).toContain("repeat(12, minmax(0, 1fr))");
+  expect(chartCss).toContain("repeat(var(--chart-columns, 12), minmax(0, 1fr))");
   expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
 });
