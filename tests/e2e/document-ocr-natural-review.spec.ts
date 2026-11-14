@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildDocumentOcrResult, reconstructOcrPage } from "../../src/domain/document-ocr";
+import { summarizeDocumentOcrPageReview } from "../../src/application/document-ocr-review";
 
 const documentId = "94000000-0000-4000-8000-000000000094";
 
@@ -199,4 +200,63 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveCount(1);
   await expect(lines.getByRole("textbox", { name: "Descripción" })).toHaveValue("AGUA");
   expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-PAGE-EMPTY-329 · no evidence is an attention state even when a provider claims arithmetic success", () => {
+  const source = reconstructOcrPage(1, []);
+  const contradictory = summarizeDocumentOcrPageReview({
+    ...source,
+    receiptIntegrity: {
+      status: "verified", productRows: 0, candidateProductRows: 0,
+      unresolvedProductRows: 0, arithmeticRowsChecked: 0,
+      arithmeticRowsMatching: 0, lineTotalMatchesDocumentTotal: true,
+      basePlusTaxMatchesTotal: true,
+    },
+  });
+  expect(contradictory.emptyPage).toBe(true);
+  expect(contradictory.lowConfidenceLines).toHaveLength(0);
+  expect(contradictory.requiresAttention).toBe(true);
+  const withoutLines = summarizeDocumentOcrPageReview({ ...source, plainText: "raw text without OCR lines" });
+  expect(withoutLines.emptyPage).toBe(true);
+  expect(withoutLines.requiresAttention).toBe(true);
+});
+
+test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confidence or enables confirmation", async ({ page }) => {
+  const result = buildDocumentOcrResult({
+    documentId, source: "pdf_text", extractor: "synthetic-blank-page",
+    extractedAt: "2026-10-22T12:00:00Z",
+    pages: [reconstructOcrPage(1, [])],
+  });
+  expect(result.status).toBe("empty");
+  const writes: string[] = [];
+  await page.route("**/api/documents*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== "GET") {
+      writes.push(`${request.method()} ${url.pathname}`);
+      await route.fulfill(url.pathname === "/api/documents/ocr" && request.method() === "POST"
+        ? { status: 200, json: result }
+        : { status: 409, json: { code: "unexpected_financial_mutation" } });
+      return;
+    }
+    if (url.pathname === "/api/documents/ocr-review") {
+      await route.fulfill({ status: 200, json: { documentId, runs: [], reviews: [] } });
+      return;
+    }
+    await route.fulfill({ status: 200, json: url.searchParams.has("id")
+      ? { contractVersion: 1, document, associations: [], principles }
+      : { contractVersion: 1, items: [document], total: 1, limit: 50, offset: 0, principles } });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-prueba.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const workbench = panel.getByTestId("ocr-review-workbench-1");
+  await expect(workbench).toContainText("Página sin lectura OCR verificable");
+  await expect(workbench).toContainText("Sin texto OCR verificable");
+  await expect(workbench.getByTestId("ocr-empty-page-1")).toContainText("Comprueba el original");
+  await expect(workbench).not.toContainText("Sin incidencias internas detectadas");
+  await expect(workbench).not.toContainText("Sin líneas bajo umbral");
+  await expect(panel.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(writes).toEqual(["POST /api/documents/ocr"]);
 });
