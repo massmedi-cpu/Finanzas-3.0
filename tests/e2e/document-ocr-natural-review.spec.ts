@@ -229,7 +229,7 @@ test("REC-OCR-PAGE-EMPTY-330 · blank PDF page never displays green OCR confiden
   });
   expect(result.status).toBe("empty");
   const writes: string[] = [];
-  await page.route("**/api/documents*", async (route) => {
+  await page.route(/\/api\/documents(?:\/[^?]*)?(?:\?.*)?$/, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     if (request.method() !== "GET") {
