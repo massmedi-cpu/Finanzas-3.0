@@ -46,6 +46,9 @@ function fixture(dateFrom: string, dateTo: string, selectedAccount: string | nul
   };
 }
 
+// The forecast can contain other date fields. Keep the user-editable period
+// scoped to its named region instead of selecting an arbitrary "Desde".
+const periodControls = (page: Page) => page.getByRole("region", { name: "Periodo de previsión" });
 const horizons = (page: Page) => page.getByRole("region", { name: "Tu dinero en cuatro horizontes" });
 const twelveMonths = (page: Page) => horizons(page).getByRole("article").filter({ has: page.getByText("12 meses", { exact: true }) });
 
@@ -104,7 +107,8 @@ test("REC-HORIZON-002 · a changed start date replaces annual balances and their
   });
   await page.goto(`/forecast?dateFrom=${from}&dateTo=${monthlyTo}&accountId=${accountId}`);
   await expect(twelveMonths(page)).toContainText(/800,00\s?€/);
-  await page.getByLabel("Desde", { exact: true }).fill("2026-10-02");
+  await expect(periodControls(page)).toHaveCount(1);
+  await periodControls(page).getByLabel("Desde", { exact: true }).fill("2026-10-02");
   await expect(twelveMonths(page)).toContainText(/1\.800,00\s?€/);
   await expect.poll(() => annualRequests).toContain("2026-10-02:2027-10-02");
   await expect(horizons(page).getByText("800,00 €", { exact: true })).toHaveCount(0);
@@ -232,8 +236,9 @@ test("REC-HORIZON-008 · changed dates survive the URL and every compatible modu
   });
   await page.goto(`/forecast?dateFrom=${from}&dateTo=${monthlyTo}&accountId=${accountId}`);
   await expect(page.getByRole("heading", { name: "Seguro del hogar", exact: true })).toBeVisible();
-  await page.getByLabel("Hasta", { exact: true }).fill("2026-11-30");
-  await page.getByLabel("Desde", { exact: true }).fill("2026-11-01");
+  await expect(periodControls(page)).toHaveCount(1);
+  await periodControls(page).getByLabel("Hasta", { exact: true }).fill("2026-11-30");
+  await periodControls(page).getByLabel("Desde", { exact: true }).fill("2026-11-01");
   await expect(page).toHaveURL(/dateFrom=2026-11-01&dateTo=2026-11-30/);
   const navigation = page.getByRole("navigation", { name: "Continuar desde Previsión" });
   await expect(navigation.getByRole("link", { name: /^Cash Flow/ })).toHaveAttribute("href", "/cash-flow?month=2026-11");
@@ -242,6 +247,6 @@ test("REC-HORIZON-008 · changed dates survive the URL and every compatible modu
   const recurrent = navigation.getByRole("link", { name: /^Recurrentes/ });
   await expect(recurrent).toHaveAttribute("href", new RegExp(`forecastDateFrom=2026-11-01&forecastDateTo=2026-11-30&forecastAccountId=${accountId}`));
   await page.reload();
-  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("2026-11-01");
-  await expect(page.getByLabel("Hasta", { exact: true })).toHaveValue("2026-11-30");
+  await expect(periodControls(page).getByLabel("Desde", { exact: true })).toHaveValue("2026-11-01");
+  await expect(periodControls(page).getByLabel("Hasta", { exact: true })).toHaveValue("2026-11-30");
 });
