@@ -22,12 +22,13 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout exact main commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Setup Node.js 24
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24
           cache: npm
@@ -40,7 +41,7 @@ jobs:
           PRODUCTION_URL: ${{ inputs.production_url }}
         shell: bash
         run: |
-          node -e "const u=new URL(process.env.PRODUCTION_URL);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash)throw new Error('invalid_production_url')"
+          node -e "const u=new URL(process.env.PRODUCTION_URL);if(!['https://finanzas-3-0.vercel.app','https://financialapp-home.vercel.app'].includes(u.origin)||u.username||u.password||u.search||u.hash||u.pathname!=='/')throw new Error('production_url_must_be_official_clean_origin')"
 
       - name: Read exact Production build identity
         env:
@@ -48,7 +49,7 @@ jobs:
         shell: bash
         run: |
           base="${PRODUCTION_URL%/}"
-          curl --fail --silent --show-error \
+          curl --fail --silent --show-error --max-time 20 --max-redirs 0 --proto '=https' \
             --output /tmp/financial-app-production-build.json \
             "$base/api/build"
 
@@ -63,6 +64,12 @@ jobs:
             --tag "$tag" \
             --expected-environment production
           echo "release_tag=$tag" >> "$GITHUB_ENV"
+
+      - name: Verify both official Production aliases on the exact final deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/verify-production-release-domains.mjs /tmp/release-manifest.production.json
 
       - name: Refuse an existing tag
         shell: bash
@@ -92,7 +99,7 @@ jobs:
           test "$published_sha" = "$GITHUB_SHA"
 
       - name: Preserve release manifest as workflow evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-manifest-${{ github.sha }}
           path: /tmp/release-manifest.production.json
